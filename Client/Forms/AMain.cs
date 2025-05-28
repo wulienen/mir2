@@ -59,6 +59,12 @@ namespace Launcher
         {
             try
             {
+                if (!Settings.PreloadAllResources)
+                {
+                    Completed = true;
+                    return;
+                }
+
                 GetOldFileList();
 
                 if (OldList.Count == 0)

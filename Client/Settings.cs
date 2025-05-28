@@ -197,6 +197,10 @@ namespace Client
         public static bool P_AutoStart = false;
         public static int P_Concurrency = 1;
 
+        public static string ResourceServerHost { get; set; } = "127.0.0.1";
+        public static int ResourceServerPort { get; set; } = 8000;
+        public static bool PreloadAllResources { get; set; } = true;
+
         public static void Load()
         {
             GameLanguage.LoadClientLanguage(@".\Language.ini");
@@ -310,86 +314,101 @@ namespace Client
 
             if (P_Concurrency < 1) P_Concurrency = 1;
             if (P_Concurrency > 100) P_Concurrency = 100;
+
+            ResourceServerHost = Reader.ReadString("ResourceServer", "Host", "127.0.0.1");
+            ResourceServerPort = Reader.ReadInt32("ResourceServer", "Port", 8000);
+            PreloadAllResources = Reader.ReadBoolean("ResourceServer", "PreloadAllResources", true);
         }
 
         public static void Save()
         {
-            //Graphics
-            Reader.Write("Graphics", "FullScreen", FullScreen);
-            Reader.Write("Graphics", "Borderless", Borderless);
-            Reader.Write("Graphics", "MouseClip", MouseClip);
-            Reader.Write("Graphics", "AlwaysOnTop", TopMost);
-            Reader.Write("Graphics", "FPSCap", FPSCap);
-            Reader.Write("Graphics", "Resolution", Resolution);
-            Reader.Write("Graphics", "DebugMode", DebugMode);
-            Reader.Write("Graphics", "UseMouseCursors", UseMouseCursors);
-
-            //Sound
-            Reader.Write("Sound", "Volume", Volume);
-            Reader.Write("Sound", "SoundOverLap", SoundOverLap);
-            Reader.Write("Sound", "Music", MusicVolume);
-            Reader.Write("Sound", "CleanMinutes", SoundCleanMinutes);
-
-            //Game
-            Reader.Write("Game", "AccountID", AccountID);
-            Reader.Write("Game", "Password", Password);
-            Reader.Write("Game", "SkillMode", SkillMode);
-            Reader.Write("Game", "SkillBar", SkillBar);
-            //Reader.Write("Game", "SkillSet", SkillSet);
-            Reader.Write("Game", "Effect", Effect);
-            Reader.Write("Game", "LevelEffect", LevelEffect);
-            Reader.Write("Game", "DropView", DropView);
-            Reader.Write("Game", "NameView", NameView);
-            Reader.Write("Game", "HPMPView", HPView);
-            Reader.Write("Game", "ModeView", ModeView);
-            Reader.Write("Game", "FontName", FontName);
-            Reader.Write("Game", "TransparentChat", TransparentChat);
-            Reader.Write("Game", "DisplayDamage", DisplayDamage);
-            Reader.Write("Game", "TargetDead", TargetDead);
-            Reader.Write("Game", "HighlightTarget", HighlightTarget);
-            Reader.Write("Game", "ExpandedBuffWindow", ExpandedBuffWindow);
-            Reader.Write("Game", "ExpandedHeroBuffWindow", ExpandedBuffWindow);
-            Reader.Write("Game", "DuraWindow", DuraView);
-            Reader.Write("Game", "DisplayBodyName", DisplayBodyName);
-            Reader.Write("Game", "NewMove", NewMove);
-
-            for (int i = 0; i < SkillbarLocation.Length / 2; i++)
+            try
             {
+                //Graphics
+                Reader.Write("Graphics", "FullScreen", FullScreen);
+                Reader.Write("Graphics", "Borderless", Borderless);
+                Reader.Write("Graphics", "MouseClip", MouseClip);
+                Reader.Write("Graphics", "AlwaysOnTop", TopMost);
+                Reader.Write("Graphics", "FPSCap", FPSCap);
+                Reader.Write("Graphics", "Resolution", Resolution);
+                Reader.Write("Graphics", "DebugMode", DebugMode);
+                Reader.Write("Graphics", "UseMouseCursors", UseMouseCursors);
 
-                Reader.Write("Game", "Skillbar" + i.ToString() + "X", SkillbarLocation[i, 0]);
-                Reader.Write("Game", "Skillbar" + i.ToString() + "Y", SkillbarLocation[i, 1]);
+                //Sound
+                Reader.Write("Sound", "Volume", Volume);
+                Reader.Write("Sound", "SoundOverLap", SoundOverLap);
+                Reader.Write("Sound", "Music", MusicVolume);
+                Reader.Write("Sound", "CleanMinutes", SoundCleanMinutes);
+
+                //Game
+                Reader.Write("Game", "AccountID", AccountID);
+                Reader.Write("Game", "Password", Password);
+                Reader.Write("Game", "SkillMode", SkillMode);
+                Reader.Write("Game", "SkillBar", SkillBar);
+                //Reader.Write("Game", "SkillSet", SkillSet);
+                Reader.Write("Game", "Effect", Effect);
+                Reader.Write("Game", "LevelEffect", LevelEffect);
+                Reader.Write("Game", "DropView", DropView);
+                Reader.Write("Game", "NameView", NameView);
+                Reader.Write("Game", "HPMPView", HPView);
+                Reader.Write("Game", "ModeView", ModeView);
+                Reader.Write("Game", "FontName", FontName);
+                Reader.Write("Game", "TransparentChat", TransparentChat);
+                Reader.Write("Game", "DisplayDamage", DisplayDamage);
+                Reader.Write("Game", "TargetDead", TargetDead);
+                Reader.Write("Game", "HighlightTarget", HighlightTarget);
+                Reader.Write("Game", "ExpandedBuffWindow", ExpandedBuffWindow);
+                Reader.Write("Game", "ExpandedHeroBuffWindow", ExpandedBuffWindow);
+                Reader.Write("Game", "DuraWindow", DuraView);
+                Reader.Write("Game", "DisplayBodyName", DisplayBodyName);
+                Reader.Write("Game", "NewMove", NewMove);
+
+                for (int i = 0; i < SkillbarLocation.Length / 2; i++)
+                {
+
+                    Reader.Write("Game", "Skillbar" + i.ToString() + "X", SkillbarLocation[i, 0]);
+                    Reader.Write("Game", "Skillbar" + i.ToString() + "Y", SkillbarLocation[i, 1]);
+                }
+
+                //Chat
+                Reader.Write("Chat", "ShowNormalChat", ShowNormalChat);
+                Reader.Write("Chat", "ShowYellChat", ShowYellChat);
+                Reader.Write("Chat", "ShowWhisperChat", ShowWhisperChat);
+                Reader.Write("Chat", "ShowLoverChat", ShowLoverChat);
+                Reader.Write("Chat", "ShowMentorChat", ShowMentorChat);
+                Reader.Write("Chat", "ShowGroupChat", ShowGroupChat);
+                Reader.Write("Chat", "ShowGuildChat", ShowGuildChat);
+
+                //Filters
+                Reader.Write("Filter", "FilterNormalChat", FilterNormalChat);
+                Reader.Write("Filter", "FilterWhisperChat", FilterWhisperChat);
+                Reader.Write("Filter", "FilterShoutChat", FilterShoutChat);
+                Reader.Write("Filter", "FilterSystemChat", FilterSystemChat);
+                Reader.Write("Filter", "FilterLoverChat", FilterLoverChat);
+                Reader.Write("Filter", "FilterMentorChat", FilterMentorChat);
+                Reader.Write("Filter", "FilterGroupChat", FilterGroupChat);
+                Reader.Write("Filter", "FilterGuildChat", FilterGuildChat);
+
+                //AutoPatcher
+                Reader.Write("Launcher", "Enabled", P_Patcher);
+                Reader.Write("Launcher", "Host", P_Host);
+                Reader.Write("Launcher", "PatchFile", P_PatchFileName);
+                Reader.Write("Launcher", "NeedLogin", P_NeedLogin);
+                Reader.Write("Launcher", "Login", P_Login);
+                Reader.Write("Launcher", "Password", P_Password);
+                Reader.Write("Launcher", "ServerName", P_ServerName);
+                Reader.Write("Launcher", "Browser", P_BrowserAddress);
+                Reader.Write("Launcher", "AutoStart", P_AutoStart);
+                Reader.Write("Launcher", "ConcurrentDownloads", P_Concurrency);
+
+                Reader.Write("ResourceServer", "Host", ResourceServerHost);
+                Reader.Write("ResourceServer", "Port", ResourceServerPort);
+                Reader.Write("ResourceServer", "PreloadAllResources", PreloadAllResources);
             }
-
-            //Chat
-            Reader.Write("Chat", "ShowNormalChat", ShowNormalChat);
-            Reader.Write("Chat", "ShowYellChat", ShowYellChat);
-            Reader.Write("Chat", "ShowWhisperChat", ShowWhisperChat);
-            Reader.Write("Chat", "ShowLoverChat", ShowLoverChat);
-            Reader.Write("Chat", "ShowMentorChat", ShowMentorChat);
-            Reader.Write("Chat", "ShowGroupChat", ShowGroupChat);
-            Reader.Write("Chat", "ShowGuildChat", ShowGuildChat);
-
-            //Filters
-            Reader.Write("Filter", "FilterNormalChat", FilterNormalChat);
-            Reader.Write("Filter", "FilterWhisperChat", FilterWhisperChat);
-            Reader.Write("Filter", "FilterShoutChat", FilterShoutChat);
-            Reader.Write("Filter", "FilterSystemChat", FilterSystemChat);
-            Reader.Write("Filter", "FilterLoverChat", FilterLoverChat);
-            Reader.Write("Filter", "FilterMentorChat", FilterMentorChat);
-            Reader.Write("Filter", "FilterGroupChat", FilterGroupChat);
-            Reader.Write("Filter", "FilterGuildChat", FilterGuildChat);
-
-            //AutoPatcher
-            Reader.Write("Launcher", "Enabled", P_Patcher);
-            Reader.Write("Launcher", "Host", P_Host);
-            Reader.Write("Launcher", "PatchFile", P_PatchFileName);
-            Reader.Write("Launcher", "NeedLogin", P_NeedLogin);
-            Reader.Write("Launcher", "Login", P_Login);
-            Reader.Write("Launcher", "Password", P_Password);
-            Reader.Write("Launcher", "ServerName", P_ServerName);
-            Reader.Write("Launcher", "Browser", P_BrowserAddress);
-            Reader.Write("Launcher", "AutoStart", P_AutoStart);
-            Reader.Write("Launcher", "ConcurrentDownloads", P_Concurrency);
+            catch (Exception ex)
+            {
+                CMain.SaveError(ex.ToString());
+            }
         }
 
         public static void LoadTrackedQuests(string charName)

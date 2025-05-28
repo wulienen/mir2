@@ -89,6 +89,8 @@ namespace Client
 
                 SlimDX.Configuration.EnableObjectTracking = true;
 
+                InitializeResourceManager();
+
                 DXManager.Create();
                 SoundManager.Create();
                 CenterToScreen();
@@ -96,6 +98,25 @@ namespace Client
             catch (Exception ex)
             {
                 SaveError(ex.ToString());
+            }
+        }
+
+        private async void InitializeResourceManager()
+        {
+            try
+            {
+                var connected = await ResourceManager.Instance.ConnectToResourceServer(
+                    Settings.ResourceServerHost ?? "127.0.0.1",
+                    Settings.ResourceServerPort);
+
+                if (!connected)
+                {
+                    SaveError("Failed to connect to resource server");
+                }
+            }
+            catch (Exception ex)
+            {
+                SaveError($"Resource manager initialization failed: {ex}");
             }
         }
 
@@ -706,6 +727,8 @@ namespace Client
             else
             {
                 Settings.Save();
+
+                ResourceManager.Instance.Dispose();
 
                 DXManager.Dispose();
                 SoundManager.Dispose();
