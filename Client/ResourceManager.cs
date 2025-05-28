@@ -27,9 +27,7 @@ namespace Client
         private ResourceManager()
         {
             _resourceCache = new ConcurrentDictionary<string, byte[]>();
-            _resourcePath = Path.Combine(Application.StartupPath, "Resources");
-            if (!Directory.Exists(_resourcePath))
-                Directory.CreateDirectory(_resourcePath);
+            _resourcePath = Application.StartupPath;
         }
 
         public async Task<bool> ConnectToResourceServer(string host, int port)
@@ -58,73 +56,93 @@ namespace Client
 
         public async Task<byte[]> LoadResource(string resourceName, bool forceReload = false)
         {
-            // 检查缓存
-            if (!forceReload && _resourceCache.TryGetValue(resourceName, out var cachedData))
-                return cachedData;
-
-            // 检查是否正在加载
-            if (_loadingTasks.TryGetValue(resourceName, out var loadingTask))
-                return await loadingTask;
-
-            // 创建新的加载任务
-            var task = Task.Run(async () =>
+            try
             {
-                try
+                // 检查缓存
+                if (!forceReload && _resourceCache.TryGetValue(resourceName, out var cachedData))
+                    return cachedData;
+
+                // 检查是否正在加载
+                if (_loadingTasks.TryGetValue(resourceName, out var loadingTask))
+                    return await loadingTask;
+
+                // 创建新的加载任务
+                var task = Task.Run(async () =>
                 {
-                    // 检查本地文件
-                    string localPath = Path.Combine(_resourcePath, resourceName);
-                    if (File.Exists(localPath))
+                    try
                     {
-                        var data = await File.ReadAllBytesAsync(localPath);
-                        _resourceCache[resourceName] = data;
-                        OnResourceLoaded?.Invoke(this, resourceName);
-                        return data;
+                        // 检查本地文件
+                        string localPath = Path.Combine(_resourcePath, resourceName);
+                        if (File.Exists(localPath))
+                        {
+                            var data = await File.ReadAllBytesAsync(localPath);
+                            _resourceCache[resourceName] = data;
+                            OnResourceLoaded?.Invoke(this, resourceName);
+                            return data;
+                        }
+
+                        // 从服务器加载
+                        if (!_isConnected)
+                        {
+                            CMain.SaveError($"[ResourceManager] 未连接资源服务器，无法加载: {resourceName}");
+                            OnResourceLoadFailed?.Invoke(this, resourceName);
+                            return null;
+                        }
+
+                        // 发送资源请求
+                        var request = new ResourceRequest
+                        {
+                            ResourceName = resourceName,
+                            RequestType = ResourceRequestType.Load
+                        };
+
+                        await SendRequest(request);
+
+                        // 接收资源数据
+                        var response = await ReceiveResponse();
+                        if (response.Success)
+                        {
+                            // 保存到本地
+                            var directory = Path.GetDirectoryName(localPath);
+                            if (!Directory.Exists(directory))
+                                Directory.CreateDirectory(directory);
+                            try
+                            {
+                                await File.WriteAllBytesAsync(localPath, response.Data);
+                            }
+                            catch (Exception ex)
+                            {
+                                CMain.SaveError($"[ResourceManager] 写入本地缓存失败: {localPath}, 错误: {ex}");
+                            }
+                            _resourceCache[resourceName] = response.Data;
+                            OnResourceLoaded?.Invoke(this, resourceName);
+                            return response.Data;
+                        }
+                        else
+                        {
+                            CMain.SaveError($"[ResourceManager] 资源服务器返回失败: {resourceName}, 错误: {response.ErrorMessage}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        CMain.SaveError($"[ResourceManager] 加载资源异常: {resourceName}, 错误: {ex}");
                     }
 
-                    // 从服务器加载
-                    if (!_isConnected)
-                    {
-                        OnResourceLoadFailed?.Invoke(this, resourceName);
-                        return null;
-                    }
+                    OnResourceLoadFailed?.Invoke(this, resourceName);
+                    return null;
+                });
 
-                    // 发送资源请求
-                    var request = new ResourceRequest
-                    {
-                        ResourceName = resourceName,
-                        RequestType = ResourceRequestType.Load
-                    };
-
-                    await SendRequest(request);
-
-                    // 接收资源数据
-                    var response = await ReceiveResponse();
-                    if (response.Success)
-                    {
-                        // 保存到本地
-                        var directory = Path.GetDirectoryName(localPath);
-                        if (!Directory.Exists(directory))
-                            Directory.CreateDirectory(directory);
-
-                        await File.WriteAllBytesAsync(localPath, response.Data);
-                        _resourceCache[resourceName] = response.Data;
-                        OnResourceLoaded?.Invoke(this, resourceName);
-                        return response.Data;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    CMain.SaveError($"Failed to load resource {resourceName}: {ex}");
-                }
-
+                _loadingTasks[resourceName] = task;
+                var result = await task;
+                _loadingTasks.TryRemove(resourceName, out _);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"[ResourceManager] LoadResource方法异常: {resourceName}, 错误: {ex}");
                 OnResourceLoadFailed?.Invoke(this, resourceName);
                 return null;
-            });
-
-            _loadingTasks[resourceName] = task;
-            var result = await task;
-            _loadingTasks.TryRemove(resourceName, out _);
-            return result;
+            }
         }
 
         private async Task SendRequest(ResourceRequest request)
@@ -151,6 +169,7 @@ namespace Client
             _connectionSemaphore?.Dispose();
             _isConnected = false;
         }
+ 
     }
 
     public enum ResourceRequestType

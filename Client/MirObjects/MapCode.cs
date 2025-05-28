@@ -136,16 +136,21 @@
         private string FileName;
         private byte[] Bytes;
         
+        public MapReader(byte[] data)
+        {
+            Bytes = data;
+            initiate();
+        }
+
         public MapReader(string FileName)
         {
             this.FileName = FileName;
-
             initiate();
         }
 
         private void initiate()
         {
-            if (File.Exists(FileName))
+            if (Bytes == null && File.Exists(FileName))
             {
                 Bytes = File.ReadAllBytes(FileName);
             }

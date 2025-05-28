@@ -480,7 +480,7 @@ namespace Client.MirGraphics
         private bool _initialized;
 
         private BinaryReader _reader;
-        private FileStream _fStream;
+        private Stream _fStream;
 
         public FrameSet Frames
         {
@@ -492,16 +492,20 @@ namespace Client.MirGraphics
             _fileName = Path.ChangeExtension(filename, Extention);
         }
 
-        public void Initialize()
+        public async void Initialize()
         {
             _initialized = true;
 
-            if (!File.Exists(_fileName))
-                return;
-
             try
             {
-                _fStream = new FileStream(_fileName, FileMode.Open, FileAccess.Read);
+                var data = await Client.ResourceManager.Instance.LoadResource(_fileName.Replace("/", "\\"));
+                if (data == null)
+                {
+                    System.Windows.Forms.MessageBox.Show($"资源加载失败: {_fileName}", "资源错误", System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error);
+                    _initialized = false;
+                    return;
+                }
+                _fStream = new MemoryStream(data);
                 _reader = new BinaryReader(_fStream);
                 int currentVersion = _reader.ReadInt32();
                 if (currentVersion < 2)
@@ -540,9 +544,10 @@ namespace Client.MirGraphics
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 _initialized = false;
+                Client.CMain.SaveError($"[MLibrary] 初始化异常: {_fileName}, 错误: {ex}");
                 throw;
             }
         }
@@ -557,7 +562,7 @@ namespace Client.MirGraphics
 
             if (_images[index] == null)
             {
-                _fStream.Position = _indexList[index];
+                _fStream.Seek(_indexList[index], SeekOrigin.Begin);
                 _images[index] = new MImage(_reader);
             }
             MImage mi = _images[index];
@@ -611,7 +616,7 @@ namespace Client.MirGraphics
 
             if (_images[index] == null)
             {
-                _fStream.Position = _indexList[index];
+                _fStream.Seek(_indexList[index], SeekOrigin.Begin);
                 _images[index] = new MImage(_reader);
             }
             MImage mi = _images[index];

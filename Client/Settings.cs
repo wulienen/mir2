@@ -39,8 +39,8 @@ namespace Client
                             NPCPath = @".\Data\NPC\",
                             CArmourPath = @".\Data\CArmour\",
                             CWeaponPath = @".\Data\CWeapon\",
-							CWeaponEffectPath = @".\Data\CWeaponEffect\",
-							CHairPath = @".\Data\CHair\",
+                            CWeaponEffectPath = @".\Data\CWeaponEffect\",
+                            CHairPath = @".\Data\CHair\",
                             AArmourPath = @".\Data\AArmour\",
                             AWeaponPath = @".\Data\AWeapon\",
                             AHairPath = @".\Data\AHair\",
@@ -59,7 +59,9 @@ namespace Client
                             TransformWeaponEffectPath = @".\Data\TransformWeaponEffect\",
                             MouseCursorPath = @".\Data\Cursors\",
                             ResourcePath = @".\DirectX\",
-                            UserDataPath = @".\Data\UserData\";
+                            UserDataPath = @".\Data\UserData\",
+                            CachePath = @".\Cache\",
+                            EffectPath = @".\Data\Effect\";
 
         //Logs
         public static bool LogErrors = true;
@@ -208,6 +210,8 @@ namespace Client
             if (!Directory.Exists(DataPath)) Directory.CreateDirectory(DataPath);
             if (!Directory.Exists(MapPath)) Directory.CreateDirectory(MapPath);
             if (!Directory.Exists(SoundPath)) Directory.CreateDirectory(SoundPath);
+            if (!Directory.Exists(CachePath)) Directory.CreateDirectory(CachePath);
+            if (!Directory.Exists(EffectPath)) Directory.CreateDirectory(EffectPath);
            
             //Graphics
             FullScreen = Reader.ReadBoolean("Graphics", "FullScreen", FullScreen);
