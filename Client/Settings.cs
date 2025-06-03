@@ -201,7 +201,7 @@ namespace Client
 
         public static string ResourceServerHost { get; set; } = "127.0.0.1";
         public static int ResourceServerPort { get; set; } = 8000;
-        public static bool PreloadAllResources { get; set; } = true;
+        public static bool PreloadAllResources { get; set; } = false;
 
         public static void Load()
         {
@@ -321,7 +321,7 @@ namespace Client
 
             ResourceServerHost = Reader.ReadString("ResourceServer", "Host", "127.0.0.1");
             ResourceServerPort = Reader.ReadInt32("ResourceServer", "Port", 8000);
-            PreloadAllResources = Reader.ReadBoolean("ResourceServer", "PreloadAllResources", true);
+            PreloadAllResources = Reader.ReadBoolean("ResourceServer", "PreloadAllResources", false);
         }
 
         public static void Save()

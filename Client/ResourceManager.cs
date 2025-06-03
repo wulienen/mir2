@@ -58,6 +58,9 @@ namespace Client
         {
             try
             {
+                // 处理资源路径
+                resourceName = resourceName.TrimStart('.', '\\', '/');
+                
                 // 检查缓存
                 if (!forceReload && _resourceCache.TryGetValue(resourceName, out var cachedData))
                     return cachedData;
