@@ -200,6 +200,11 @@ namespace Client
         public static bool P_AutoStart = false;
         public static int P_Concurrency = 1;
 
+        //MicroClient (Streaming Resource Loader)
+        public static bool MicroClientEnabled = false;
+        public static string MicroClientIP = "127.0.0.1";
+        public static int MicroClientPort = 8080;
+
         public static void Load()
         {
 
@@ -315,6 +320,11 @@ namespace Client
             if (P_Concurrency < 1) P_Concurrency = 1;
             if (P_Concurrency > 100) P_Concurrency = 100;
 
+            //MicroClient (Streaming Resource Loader)
+            MicroClientEnabled = Reader.ReadBoolean("MicroClient", "Enabled", MicroClientEnabled);
+            MicroClientIP = Reader.ReadString("MicroClient", "IPAddress", MicroClientIP);
+            MicroClientPort = Reader.ReadInt32("MicroClient", "Port", MicroClientPort);
+
             try
             {
                 string languageDirectory = @".\Localization\";
@@ -411,6 +421,11 @@ namespace Client
             Reader.Write("Launcher", "Browser", P_BrowserAddress);
             Reader.Write("Launcher", "AutoStart", P_AutoStart);
             Reader.Write("Launcher", "ConcurrentDownloads", P_Concurrency);
+
+            //MicroClient (Streaming Resource Loader)
+            Reader.Write("MicroClient", "Enabled", MicroClientEnabled);
+            Reader.Write("MicroClient", "IPAddress", MicroClientIP);
+            Reader.Write("MicroClient", "Port", MicroClientPort);
         }
 
         public static void LoadTrackedQuests(string charName)

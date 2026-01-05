@@ -22,6 +22,9 @@ namespace Client
         public static MirLabel DebugTextLabel, HintTextLabel, ScreenshotTextLabel;
         public static Graphics Graphics;
         public static Point MPoint;
+        
+        // 流式资源加载警告消息框
+        private static MirMessageBox _microClientWarningBox;
 
         public readonly static Stopwatch Timer = Stopwatch.StartNew();
         public readonly static DateTime StartTime = DateTime.UtcNow;
@@ -82,6 +85,12 @@ namespace Client
             this.Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GameName);
             try
             {
+                // 尽早初始化微端服务器连接（在加载资源库之前）
+                if (Settings.MicroClientEnabled)
+                {
+                    ResourceHelper.CheckServerOnline();
+                }
+                
                 ClientSize = new Size(Settings.ScreenWidth, Settings.ScreenHeight);
 
                 LoadMouseCursors();
@@ -365,6 +374,18 @@ namespace Client
 
             Network.Process();
 
+            // 处理流式资源加载的待写入队列
+            if (Settings.MicroClientEnabled)
+            {
+                ResourceHelper.ProcessPendingWrites();
+                
+                // 检查服务器状态并处理重试逻辑
+                ResourceHelper.CheckAndRetryConnection();
+                
+                // 根据服务器状态显示或隐藏警告消息
+                UpdateMicroClientWarning();
+            }
+
             if (MirScene.ActiveScene != null)
                 MirScene.ActiveScene.Process();
 
@@ -415,6 +436,37 @@ namespace Client
                 SaveError(ex.ToString());
 
                 DXManager.AttemptRecovery();
+            }
+        }
+
+        /// <summary>
+        /// 更新流式资源加载警告消息显示状态
+        /// </summary>
+        private static void UpdateMicroClientWarning()
+        {
+            if (!ResourceHelper.ServerActive)
+            {
+                // 服务器不可用时显示警告
+                if (_microClientWarningBox == null || _microClientWarningBox.IsDisposed)
+                {
+                    _microClientWarningBox = new MirMessageBox(
+                        "资源服务器连接失败，将影响游戏体验。\n15秒后将重新连接！",
+                        MirMessageBoxButtons.OK);
+                    _microClientWarningBox.OKButton.Click += (o, e) =>
+                    {
+                        _microClientWarningBox = null;
+                    };
+                    _microClientWarningBox.Show();
+                }
+            }
+            else
+            {
+                // 服务器可用时关闭警告
+                if (_microClientWarningBox != null && !_microClientWarningBox.IsDisposed)
+                {
+                    _microClientWarningBox.Dispose();
+                    _microClientWarningBox = null;
+                }
             }
         }
 

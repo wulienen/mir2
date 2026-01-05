@@ -10691,8 +10691,8 @@ namespace Client.MirScenes
                         if (cell.BackImage != 0 && cell.BackIndex != -1)
                         {
                             int index = (cell.BackImage & 0x1FFFFFFF) - 1;
-                            var lib = Libraries.MapLibs[cell.BackIndex];
-                            lib.Draw(index, drawX, drawY);
+                            var lib = Libraries.GetMapLib(cell.BackIndex);
+                            if (lib != null) lib.Draw(index, drawX, drawY);
                         }
                     }
 
@@ -10700,12 +10700,15 @@ namespace Client.MirScenes
                     int midIndex = cell.MiddleImage - 1;
                     if (midIndex >= 0 && cell.MiddleIndex != -1)
                     {
-                        var lib = Libraries.MapLibs[cell.MiddleIndex];
-                        Size s = lib.GetSize(midIndex);
-                        if ((s.Width == CellWidth && s.Height == CellHeight) ||
-                            (s.Width == CellWidth * 2 && s.Height == CellHeight * 2))
+                        var lib = Libraries.GetMapLib(cell.MiddleIndex);
+                        if (lib != null)
                         {
-                            lib.Draw(midIndex, drawX, drawY);
+                            Size s = lib.GetSize(midIndex);
+                            if ((s.Width == CellWidth && s.Height == CellHeight) ||
+                                (s.Width == CellWidth * 2 && s.Height == CellHeight * 2))
+                            {
+                                lib.Draw(midIndex, drawX, drawY);
+                            }
                         }
                     }
 
@@ -10716,29 +10719,32 @@ namespace Client.MirScenes
                         int fileIndex = cell.FrontIndex;
                         if (fileIndex != -1 && fileIndex != 200)
                         {
-                            var lib = Libraries.MapLibs[fileIndex];
-                            Size s = lib.GetSize(frontIndex);
-
-                            // door
-                            if (cell.DoorIndex > 0)
+                            var lib = Libraries.GetMapLib(fileIndex);
+                            if (lib != null)
                             {
-                                Door doorInfo = GetDoor(cell.DoorIndex);
-                                if (doorInfo == null)
-                                {
-                                    doorInfo = new Door() { index = cell.DoorIndex, DoorState = 0, ImageIndex = 0, LastTick = CMain.Time };
-                                    Doors.Add(doorInfo);
-                                }
-                                else if (doorInfo.DoorState != 0)
-                                {
-                                    frontIndex += (doorInfo.ImageIndex + 1) * cell.DoorOffset;
-                                }
-                            }
+                                Size s = lib.GetSize(frontIndex);
 
-                            if (frontIndex >= 0 &&
-                                ((s.Width == CellWidth && s.Height == CellHeight) ||
-                                 (s.Width == CellWidth * 2 && s.Height == CellHeight * 2)))
-                            {
-                                lib.Draw(frontIndex, drawX, drawY);
+                                // door
+                                if (cell.DoorIndex > 0)
+                                {
+                                    Door doorInfo = GetDoor(cell.DoorIndex);
+                                    if (doorInfo == null)
+                                    {
+                                        doorInfo = new Door() { index = cell.DoorIndex, DoorState = 0, ImageIndex = 0, LastTick = CMain.Time };
+                                        Doors.Add(doorInfo);
+                                    }
+                                    else if (doorInfo.DoorState != 0)
+                                    {
+                                        frontIndex += (doorInfo.ImageIndex + 1) * cell.DoorOffset;
+                                    }
+                                }
+
+                                if (frontIndex >= 0 &&
+                                    ((s.Width == CellWidth && s.Height == CellHeight) ||
+                                     (s.Width == CellWidth * 2 && s.Height == CellHeight * 2)))
+                                {
+                                    lib.Draw(frontIndex, drawX, drawY);
+                                }
                             }
                         }
                     }
@@ -10816,7 +10822,7 @@ namespace Client.MirScenes
                         index--;
                         int animationoffset = M2CellInfo[x, y].TileAnimationOffset ^ 0x2000;
                         index += animationoffset * (AnimationCount % animation);
-                        Libraries.MapLibs[190].DrawUp(index, drawX, drawY);
+                        Libraries.GetMapLib(190)?.DrawUp(index, drawX, drawY);
                     }
 
                     #endregion
@@ -10843,18 +10849,22 @@ namespace Client.MirScenes
 
                                     if (blend && (animation == 10 || animation == 8)) //diamond mines, abyss blends
                                     {
-                                        Libraries.MapLibs[M2CellInfo[x, y].MiddleIndex].DrawUpBlend(index, new Point(drawX, drawY));
+                                        Libraries.GetMapLib(M2CellInfo[x, y].MiddleIndex)?.DrawUpBlend(index, new Point(drawX, drawY));
                                     }
                                     else
                                     {
-                                        Libraries.MapLibs[M2CellInfo[x, y].MiddleIndex].DrawUp(index, drawX, drawY);
+                                        Libraries.GetMapLib(M2CellInfo[x, y].MiddleIndex)?.DrawUp(index, drawX, drawY);
                                     }
                                 }
                             }
-                            s = Libraries.MapLibs[M2CellInfo[x, y].MiddleIndex].GetSize(index);
-                            if ((s.Width != CellWidth || s.Height != CellHeight) && (s.Width != (CellWidth * 2) || s.Height != (CellHeight * 2)) && !blend)
+                            var middleLib = Libraries.GetMapLib(M2CellInfo[x, y].MiddleIndex);
+                            if (middleLib != null)
                             {
-                                Libraries.MapLibs[M2CellInfo[x, y].MiddleIndex].DrawUp(index, drawX, drawY);
+                                s = middleLib.GetSize(index);
+                                if ((s.Width != CellWidth || s.Height != CellHeight) && (s.Width != (CellWidth * 2) || s.Height != (CellHeight * 2)) && !blend)
+                                {
+                                    middleLib.DrawUp(index, drawX, drawY);
+                                }
                             }
                         }
                     }
@@ -10902,23 +10912,26 @@ namespace Client.MirScenes
                         }
                     }
 
-                    s = Libraries.MapLibs[fileIndex].GetSize(index);
+                    var frontLib = Libraries.GetMapLib(fileIndex);
+                    if (frontLib == null) continue;
+                    
+                    s = frontLib.GetSize(index);
                     if (s.Width == CellWidth && s.Height == CellHeight && animation == 0) continue;
                     if ((s.Width == CellWidth * 2) && (s.Height == CellHeight * 2) && (animation == 0)) continue;
 
                     if (blend)
                     {
                         if (fileIndex == 14 || fileIndex == 27 || (fileIndex > 99 & fileIndex < 199))
-                            Libraries.MapLibs[fileIndex].DrawBlend(index, new Point(drawX, drawY - (3 * CellHeight)), Color.White, true);
+                            frontLib.DrawBlend(index, new Point(drawX, drawY - (3 * CellHeight)), Color.White, true);
                         else
-                            Libraries.MapLibs[fileIndex].DrawBlend(index, new Point(drawX, drawY - s.Height), Color.White, (index >= 2723 && index <= 2732));
+                            frontLib.DrawBlend(index, new Point(drawX, drawY - s.Height), Color.White, (index >= 2723 && index <= 2732));
                     }
                     else
                     {
-                        if (fileIndex == 28 && Libraries.MapLibs[fileIndex].GetOffSet(index) != Point.Empty)
-                            Libraries.MapLibs[fileIndex].Draw(index, new Point(drawX, drawY - CellHeight), Color.White, true);
+                        if (fileIndex == 28 && frontLib.GetOffSet(index) != Point.Empty)
+                            frontLib.Draw(index, new Point(drawX, drawY - CellHeight), Color.White, true);
                         else
-                            Libraries.MapLibs[fileIndex].Draw(index, drawX, drawY - s.Height);
+                            frontLib.Draw(index, drawX, drawY - s.Height);
                     }
                     #endregion
                 }
@@ -11233,7 +11246,11 @@ namespace Client.MirScenes
 
 
                     if (M2CellInfo[x, y].FrontAnimationFrame > 0)
-                        p.Offset(Libraries.MapLibs[fileIndex].GetOffSet(imageIndex));
+                    {
+                        var lightLib = Libraries.GetMapLib(fileIndex);
+                        if (lightLib != null)
+                            p.Offset(lightLib.GetOffSet(imageIndex));
+                    }
 
                     if (light >= DXManager.Lights.Count)
                         light = DXManager.Lights.Count - 1;

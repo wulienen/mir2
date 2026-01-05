@@ -189,6 +189,12 @@ namespace Launcher
             FileInformation info = GetFileInformation(Settings.P_Client + old.FileName);
             _currentCount++;
 
+            // 微端模式：跳过 .Lib 资源文件，这些文件会在游戏运行时按需下载
+            if (Settings.MicroClientEnabled && old.FileName.EndsWith(".Lib", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
             if (info == null || old.Length != info.Length || old.Creation != info.Creation)
             {
                 DownloadList.Enqueue(old);

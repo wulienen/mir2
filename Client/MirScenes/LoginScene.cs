@@ -26,6 +26,9 @@ namespace Client.MirScenes
 
         public LoginScene()
         {
+            // 初始化登录场景所需的库
+            Libraries.InitializeForLogin();
+            
             SoundManager.PlayMusic(SoundList.IntroMusic, true);
             Disposing += (o, e) => SoundManager.StopMusic();
 

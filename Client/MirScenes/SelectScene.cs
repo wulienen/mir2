@@ -487,6 +487,9 @@ namespace Client.MirScenes
                             break;
                     }
 
+                    // 初始化游戏场景所需的库
+                    Libraries.InitializeForGame();
+                    
                     ActiveScene = new GameScene();
                     Dispose();
                     break;

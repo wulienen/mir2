@@ -38,6 +38,12 @@ namespace Client
                 Packet.IsServer = false;
                 Settings.Load();
 
+                // 尽早初始化微端服务器连接（在加载资源库之前）
+                if (Settings.MicroClientEnabled)
+                {
+                    MirGraphics.ResourceHelper.CheckServerOnline();
+                }
+
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);
 
