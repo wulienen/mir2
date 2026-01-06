@@ -3,6 +3,7 @@ using SlimDX.Direct3D9;
 using System.IO.Compression;
 using Frame = Client.MirObjects.Frame;
 using Client.MirObjects;
+using Client.MirScenes;
 using System.Text.RegularExpressions;
 
 namespace Client.MirGraphics
@@ -97,6 +98,66 @@ namespace Client.MirGraphics
                                           TransformMounts,
                                           TransformEffect,
                                           TransformWeaponEffect;
+
+        /// <summary>
+        /// 安全获取 Monster 库，如果索引超出范围返回 null
+        /// </summary>
+        public static MLibrary GetMonster(int index)
+        {
+            if (Monsters == null || index < 0 || index >= Monsters.Length)
+                return null;
+            return Monsters[index];
+        }
+
+        /// <summary>
+        /// 安全获取 NPC 库，如果索引超出范围返回 null
+        /// </summary>
+        public static MLibrary GetNPC(int index)
+        {
+            if (NPCs == null || index < 0 || index >= NPCs.Length)
+                return null;
+            return NPCs[index];
+        }
+
+        /// <summary>
+        /// 安全获取 Pet 库，如果索引超出范围返回 null
+        /// </summary>
+        public static MLibrary GetPet(int index)
+        {
+            if (Pets == null || index < 0 || index >= Pets.Length)
+                return null;
+            return Pets[index];
+        }
+
+        /// <summary>
+        /// 安全获取 Gate 库，如果索引超出范围返回 null
+        /// </summary>
+        public static MLibrary GetGate(int index)
+        {
+            if (Gates == null || index < 0 || index >= Gates.Length)
+                return null;
+            return Gates[index];
+        }
+
+        /// <summary>
+        /// 安全获取 Siege 库，如果索引超出范围返回 null
+        /// </summary>
+        public static MLibrary GetSiege(int index)
+        {
+            if (Siege == null || index < 0 || index >= Siege.Length)
+                return null;
+            return Siege[index];
+        }
+
+        /// <summary>
+        /// 安全获取 Flag 库，如果索引超出范围返回 null
+        /// </summary>
+        public static MLibrary GetFlag(int index)
+        {
+            if (Flags == null || index < 0 || index >= Flags.Length)
+                return null;
+            return Flags[index];
+        }
 
         /// <summary>
         /// 静态构造函数 - 只设置MapLib路径，不进行初始化
@@ -352,11 +413,38 @@ namespace Client.MirGraphics
                 Directory.CreateDirectory(path);
             }
 
-            var allFiles = Directory.GetFiles(path, "*" + suffix + MLibrary.Extention, SearchOption.TopDirectoryOnly).OrderBy(x => int.Parse(Regex.Match(x, @"\d+").Value));
+            var allFiles = Directory.GetFiles(path, "*" + suffix + MLibrary.Extention, SearchOption.TopDirectoryOnly);
+            
+            // 流式加载模式下，目录可能为空
+            if (allFiles.Length == 0)
+            {
+                // 根据路径类型创建合适大小的数组
+                // 这些默认值应该足够容纳大多数游戏的资源
+                int defaultCount = 1;
+                if (path.Contains("Monster")) defaultCount = 1000;
+                else if (path.Contains("NPC")) defaultCount = 200;
+                else if (path.Contains("Armour") || path.Contains("Weapon") || path.Contains("Hair")) defaultCount = 100;
+                else if (path.Contains("Mount") || path.Contains("Pet") || path.Contains("Transform")) defaultCount = 50;
+                else if (path.Contains("Gate") || path.Contains("Flag") || path.Contains("Siege")) defaultCount = 20;
+                else if (path.Contains("Fishing")) defaultCount = 10;
+                else if (path.Contains("Effect")) defaultCount = 50;
+                
+                library = new MLibrary[defaultCount];
+                for (int i = 0; i < defaultCount; i++)
+                {
+                    library[i] = new MLibrary(path + i.ToString(toStringValue) + suffix);
+                }
+                return;
+            }
+            
+            var orderedFiles = allFiles.OrderBy(x => {
+                var match = Regex.Match(Path.GetFileName(x), @"\d+");
+                return match.Success ? int.Parse(match.Value) : 0;
+            });
 
-            var lastFile = allFiles.Count() > 0 ? Path.GetFileName(allFiles.Last()) : "0";
-
-            var count = int.Parse(Regex.Match(lastFile, @"\d+").Value) + 1;
+            var lastFile = Path.GetFileName(orderedFiles.Last());
+            var match = Regex.Match(lastFile, @"\d+");
+            var count = match.Success ? int.Parse(match.Value) + 1 : 1;
 
             library = new MLibrary[count];
 
@@ -378,8 +466,10 @@ namespace Client.MirGraphics
 
         private static void LoadGameLibraries()
         {
-            // 确保角色库数组已创建
-            EnsureCharacterLibrariesCreated();
+            try
+            {
+                // 确保角色库数组已创建
+                EnsureCharacterLibrariesCreated();
             
             // 计算总数时不包含MapLibs（延迟加载）
             Count = Monsters.Length + Gates.Length + Flags.Length + Siege.Length + NPCs.Length + CArmours.Length +
@@ -608,6 +698,14 @@ namespace Client.MirGraphics
             }
             
             Loaded = true;
+            }
+            catch (Exception ex)
+            {
+                // 记录异常但仍然设置 Loaded = true，允许游戏继续
+                // 在流式加载模式下，某些库可能不存在，这是正常的
+                System.Diagnostics.Debug.WriteLine($"LoadGameLibraries exception: {ex.Message}");
+                Loaded = true;
+            }
         }
 
     }
@@ -643,6 +741,14 @@ namespace Client.MirGraphics
         /// 加载锁，防止并发初始化
         /// </summary>
         private readonly object _loadLock = new object();
+
+        /// <summary>
+        /// 是否为地图库（路径包含 Map\）
+        /// </summary>
+        public bool IsMapLibrary
+        {
+            get { return _fileName != null && _fileName.Contains("Map\\"); }
+        }
 
         public FrameSet Frames
         {
@@ -901,7 +1007,7 @@ namespace Client.MirGraphics
             }
         }
 
-        private bool CheckImage(int index)
+        public bool CheckImage(int index)
         {
             // 如果未初始化且服务器可用，尝试初始化
             if (!_initialized)
@@ -947,6 +1053,9 @@ namespace Client.MirGraphics
                     // 文件中没有图片头数据，需要从服务器下载
                     if (ResourceHelper.ServerActive)
                     {
+                        // 创建空的 MImage 对象来跟踪下载状态，防止重复触发下载
+                        _images[index] = new MImage();
+                        _images[index].DownloadStatus = 1; // 标记为下载中
                         // 触发下载完整图片数据（包含17字节头）
                         DownloadFullImageAsync(index, imagePosition);
                     }
@@ -961,10 +1070,16 @@ namespace Client.MirGraphics
                 catch (EndOfStreamException)
                 {
                     // 文件不完整，无法读取图片头
-                    _images[index] = null;
                     if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
                     {
+                        // 创建空的 MImage 对象来跟踪下载状态
+                        _images[index] = new MImage();
+                        _images[index].DownloadStatus = 1;
                         DownloadFullImageAsync(index, imagePosition);
+                    }
+                    else
+                    {
+                        _images[index] = null;
                     }
                     return false;
                 }
@@ -1108,6 +1223,12 @@ namespace Client.MirGraphics
                     // 下载成功，创建纹理
                     mi.CreateTextureFromData(downloadResult.CompressedData);
                     mi.DownloadStatus = 2; // 标记为完成
+                    
+                    // 如果是地图库，通知MapControl重绘
+                    if (IsMapLibrary)
+                    {
+                        MapControl.InvalidateFloor();
+                    }
                 }
                 else
                 {
@@ -1132,6 +1253,22 @@ namespace Client.MirGraphics
         /// <param name="position">图片在文件中的位置</param>
         private async void DownloadFullImageAsync(int index, int position)
         {
+            // 注意：调用此方法前，调用方应该已经创建了 _images[index] 并设置 DownloadStatus = 1
+            // 这里只是做一个安全检查
+            if (_images == null || index < 0 || index >= _images.Length)
+                return;
+            
+            // 如果 _images[index] 不存在，创建一个（安全检查）
+            if (_images[index] == null)
+            {
+                _images[index] = new MImage();
+                _images[index].DownloadStatus = 1;
+            }
+            
+            // 如果已经下载完成，不需要再下载
+            if (_images[index].DownloadStatus == 2)
+                return;
+            
             try
             {
                 // 使用 GetImageAsync 下载完整图片数据
@@ -1142,31 +1279,31 @@ namespace Client.MirGraphics
                 if (downloadResult != null && downloadResult.CompressedData != null && downloadResult.CompressedData.Length > 0)
                 {
                     // 创建 MImage 对象并设置头信息
-                    if (_images != null && index >= 0 && index < _images.Length)
+                    MImage mi = new MImage(downloadResult);
+                    _images[index] = mi;
+                    
+                    // 创建纹理
+                    mi.CreateTextureFromData(downloadResult.CompressedData);
+                    mi.DownloadStatus = 2; // 标记为完成
+                    
+                    // 如果是地图库，通知MapControl重绘
+                    if (IsMapLibrary)
                     {
-                        MImage mi = new MImage(downloadResult);
-                        _images[index] = mi;
-                        
-                        // 创建纹理
-                        mi.CreateTextureFromData(downloadResult.CompressedData);
-                        mi.DownloadStatus = 2; // 标记为完成
+                        MapControl.InvalidateFloor();
                     }
                 }
                 else
                 {
                     // 下载失败，重置状态以便重试
-                    if (_images != null && index >= 0 && index < _images.Length && _images[index] != null)
-                    {
-                        _images[index].DownloadStatus = 0;
-                        _images[index].NextRetryTime = DateTime.Now.AddSeconds(1);
-                    }
+                    _images[index].DownloadStatus = 0;
+                    _images[index].NextRetryTime = DateTime.Now.AddSeconds(1);
                 }
                 // 下载完成后，ProcessPendingWrites 会将数据写入文件
             }
             catch
             {
                 // 异常，重置状态以便重试
-                if (_images != null && index >= 0 && index < _images.Length && _images[index] != null)
+                if (_images[index] != null)
                 {
                     _images[index].DownloadStatus = 0;
                     _images[index].NextRetryTime = DateTime.Now.AddSeconds(1);
@@ -1426,69 +1563,84 @@ namespace Client.MirGraphics
             return mi.TrueSize;
         }
 
-        public void Draw(int index, int x, int y)
+        public bool Draw(int index, int x, int y)
         {
             if (x >= Settings.ScreenWidth || y >= Settings.ScreenHeight)
-                return;
+                return false;
 
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
 
+            if (mi == null || !mi.TextureValid)
+                return false;
+
             if (x + mi.Width < 0 || y + mi.Height < 0)
-                return;
+                return false;
 
 
             DXManager.Draw(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3((float)x, (float)y, 0.0F), Color.White);
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
-        public void Draw(int index, Point point, Color colour, bool offSet = false)
+        public bool Draw(int index, Point point, Color colour, bool offSet = false)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             if (offSet) point.Offset(mi.X, mi.Y);
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             DXManager.Draw(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3((float)point.X, (float)point.Y, 0.0F), colour);
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
 
-        public void Draw(int index, Point point, Color colour, bool offSet, float opacity)
+        public bool Draw(int index, Point point, Color colour, bool offSet, float opacity)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             if (offSet) point.Offset(mi.X, mi.Y);
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             DXManager.DrawOpaque(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3((float)point.X, (float)point.Y, 0.0F), colour, opacity); 
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
 
-        public void DrawBlend(int index, Point point, Color colour, bool offSet = false, float rate = 1)
+        public bool DrawBlend(int index, Point point, Color colour, bool offSet = false, float rate = 1)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             if (offSet) point.Offset(mi.X, mi.Y);
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             bool oldBlend = DXManager.Blending;
             DXManager.SetBlend(true, rate);
@@ -1497,19 +1649,23 @@ namespace Client.MirGraphics
 
             DXManager.SetBlend(oldBlend);
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
-        public void Draw(int index, Rectangle section, Point point, Color colour, bool offSet)
+        public bool Draw(int index, Rectangle section, Point point, Color colour, bool offSet)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             if (offSet) point.Offset(mi.X, mi.Y);
 
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             if (section.Right > mi.Width)
                 section.Width -= section.Right - mi.Width;
@@ -1520,17 +1676,20 @@ namespace Client.MirGraphics
             DXManager.Draw(mi.Image, section, new Vector3((float)point.X, (float)point.Y, 0.0F), colour);
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
-        public void Draw(int index, Rectangle section, Point point, Color colour, float opacity)
+        public bool Draw(int index, Rectangle section, Point point, Color colour, float opacity)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
 
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             if (section.Right > mi.Width)
                 section.Width -= section.Right - mi.Width;
@@ -1541,16 +1700,20 @@ namespace Client.MirGraphics
             DXManager.DrawOpaque(mi.Image, section, new Vector3((float)point.X, (float)point.Y, 0.0F), colour, opacity); 
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
-        public void Draw(int index, Point point, Size size, Color colour)
+        public bool Draw(int index, Point point, Size size, Color colour)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
 
+            if (mi == null || !mi.TextureValid)
+                return false;
+
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + size.Width < 0 || point.Y + size.Height < 0)
-                return;
+                return false;
 
             float scaleX = (float)size.Width / mi.Width;
             float scaleY = (float)size.Height / mi.Height;
@@ -1562,19 +1725,23 @@ namespace Client.MirGraphics
             DXManager.Sprite.Transform = Matrix.Identity;
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
 
-        public void DrawTinted(int index, Point point, Color colour, Color Tint, bool offSet = false)
+        public bool DrawTinted(int index, Point point, Color colour, Color Tint, bool offSet = false)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             if (offSet) point.Offset(mi.X, mi.Y);
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             DXManager.Draw(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3((float)point.X, (float)point.Y, 0.0F), colour);
 
@@ -1584,39 +1751,48 @@ namespace Client.MirGraphics
             }
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
 
-        public void DrawUp(int index, int x, int y)
+        public bool DrawUp(int index, int x, int y)
         {
             if (x >= Settings.ScreenWidth)
-                return;
+                return false;
 
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
+
             y -= mi.Height;
             if (y >= Settings.ScreenHeight)
-                return;
+                return false;
             if (x + mi.Width < 0 || y + mi.Height < 0)
-                return;
+                return false;
 
             DXManager.Draw(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), new Vector3(x, y, 0.0F), Color.White);
 
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
-        public void DrawUpBlend(int index, Point point)
+        public bool DrawUpBlend(int index, Point point)
         {
             if (!CheckImage(index))
-                return;
+                return false;
 
             MImage mi = _images[index];
+
+            if (mi == null || !mi.TextureValid)
+                return false;
 
             point.Y -= mi.Height;
 
 
             if (point.X >= Settings.ScreenWidth || point.Y >= Settings.ScreenHeight || point.X + mi.Width < 0 || point.Y + mi.Height < 0)
-                return;
+                return false;
 
             bool oldBlend = DXManager.Blending;
             DXManager.SetBlend(true, 1);
@@ -1625,6 +1801,7 @@ namespace Client.MirGraphics
 
             DXManager.SetBlend(oldBlend);
             mi.CleanTime = CMain.Time + Settings.CleanDelay;
+            return true;
         }
 
         public bool VisiblePixel(int index, Point point, bool accuate)

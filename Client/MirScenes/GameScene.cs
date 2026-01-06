@@ -10344,6 +10344,18 @@ namespace Client.MirScenes
         public WeatherSetting Weather = WeatherSetting.None;
         public bool FloorValid, LightsValid;
 
+        /// <summary>
+        /// 使地板缓存失效，触发重绘
+        /// 当地图资源下载完成时调用此方法
+        /// </summary>
+        public static void InvalidateFloor()
+        {
+            if (GameScene.Scene?.MapControl != null)
+            {
+                GameScene.Scene.MapControl.FloorValid = false;
+            }
+        }
+
         public long OutputDelay;
 
         private static bool _awakeningAction;
@@ -10423,6 +10435,9 @@ namespace Client.MirScenes
         public void LoadMap()
         {
             ResetMap();
+
+            // 清除之前地图的瓦片下载请求
+            ResourceHelper.ClearMapTileRequests();
 
             MapObject.MouseObjectID = 0;
             MapObject.TargetObjectID = 0;
@@ -10557,7 +10572,7 @@ namespace Client.MirScenes
 
             DrawBackground();
 
-            if (FloorValid)
+            if (FloorValid && DXManager.FloorTexture != null && !DXManager.FloorTexture.Disposed)
             {
                 DXManager.Draw(DXManager.FloorTexture, new Rectangle(0, 0, Settings.ScreenWidth, Settings.ScreenHeight), Vector3.Zero, Color.White);
             }
@@ -10692,7 +10707,15 @@ namespace Client.MirScenes
                         {
                             int index = (cell.BackImage & 0x1FFFFFFF) - 1;
                             var lib = Libraries.GetMapLib(cell.BackIndex);
-                            if (lib != null) lib.Draw(index, drawX, drawY);
+                            if (lib != null)
+                            {
+                                if (!lib.Draw(index, drawX, drawY))
+                                {
+                                    // 绘制失败，请求下载（计算优先级：距离玩家越近优先级越高）
+                                    int priority = Math.Abs(x - User.Movement.X) + Math.Abs(y - User.Movement.Y);
+                                    ResourceHelper.RequestMapTile(cell.BackIndex, index, priority);
+                                }
+                            }
                         }
                     }
 
@@ -10707,7 +10730,12 @@ namespace Client.MirScenes
                             if ((s.Width == CellWidth && s.Height == CellHeight) ||
                                 (s.Width == CellWidth * 2 && s.Height == CellHeight * 2))
                             {
-                                lib.Draw(midIndex, drawX, drawY);
+                                if (!lib.Draw(midIndex, drawX, drawY))
+                                {
+                                    // 绘制失败，请求下载
+                                    int priority = Math.Abs(x - User.Movement.X) + Math.Abs(y - User.Movement.Y);
+                                    ResourceHelper.RequestMapTile(cell.MiddleIndex, midIndex, priority);
+                                }
                             }
                         }
                     }
@@ -10743,7 +10771,12 @@ namespace Client.MirScenes
                                     ((s.Width == CellWidth && s.Height == CellHeight) ||
                                      (s.Width == CellWidth * 2 && s.Height == CellHeight * 2)))
                                 {
-                                    lib.Draw(frontIndex, drawX, drawY);
+                                    if (!lib.Draw(frontIndex, drawX, drawY))
+                                    {
+                                        // 绘制失败，请求下载
+                                        int priority = Math.Abs(x - User.Movement.X) + Math.Abs(y - User.Movement.Y);
+                                        ResourceHelper.RequestMapTile(fileIndex, frontIndex, priority);
+                                    }
                                 }
                             }
                         }

@@ -1,4 +1,5 @@
-﻿using Client.MirControls;
+﻿using System.Threading.Tasks;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirScenes.Dialogs;
@@ -254,28 +255,8 @@ namespace Client.MirScenes
 
         public void StartGame()
         {
-            if (!Libraries.Loaded)
-            {
-                MirAnimatedControl loadProgress = new MirAnimatedControl
-                {
-                    Library = Libraries.Prguse,
-                    Index = 940,
-                    Visible = true,
-                    Parent = this,
-                    Location = new Point(470, 680),
-                    Animated = true,
-                    AnimationCount = 9,
-                    AnimationDelay = 100,
-                    Loop = true,
-                };
-                loadProgress.AfterDraw += (o, e) =>
-                {
-                    if (!Libraries.Loaded) return;
-                    loadProgress.Dispose();
-                    StartGame();
-                };
-                return;
-            }
+            // 非阻塞场景切换：直接发送StartGame请求，不等待资源加载
+            // Requirements: 17.1, 17.4
             StartGameButton.Enabled = false;
 
             Network.Enqueue(new C.StartGame
@@ -487,9 +468,12 @@ namespace Client.MirScenes
                             break;
                     }
 
-                    // 初始化游戏场景所需的库
-                    Libraries.InitializeForGame();
+                    // 非阻塞场景切换：异步初始化游戏库，立即切换到GameScene
+                    // Requirements: 17.1, 17.2, 17.3
+                    // 异步调用InitializeForGame，不阻塞场景切换
+                    Task.Run(() => Libraries.InitializeForGame());
                     
+                    // 立即创建GameScene并切换，不等待初始化完成
                     ActiveScene = new GameScene();
                     Dispose();
                     break;

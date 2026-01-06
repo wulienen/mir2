@@ -160,7 +160,7 @@ namespace Client.MirObjects
                 case Monster.Ballista:
                 case Monster.Trebuchet:
                 case Monster.CanonTrebuchet:
-                    BodyLibrary = Libraries.Siege[((ushort)BaseImage) - 940];
+                    BodyLibrary = Libraries.GetSiege(((ushort)BaseImage) - 940);
                     break;
                 case Monster.SabukGate:
                 case Monster.PalaceWallLeft:
@@ -177,7 +177,7 @@ namespace Client.MirObjects
                 case Monster.SabukWallSection:
                 case Monster.NammandWallSection:
                 case Monster.FrozenDoor:
-                    BodyLibrary = Libraries.Gates[((ushort)BaseImage) - 950];
+                    BodyLibrary = Libraries.GetGate(((ushort)BaseImage) - 950);
                     break;
                 case Monster.BabyPig:
                 case Monster.Chick:
@@ -194,18 +194,18 @@ namespace Client.MirObjects
                 case Monster.AngryBird:
                 case Monster.Foxey:
                 case Monster.MedicalRat:
-                    BodyLibrary = Libraries.Pets[((ushort)BaseImage) - 10000];
+                    BodyLibrary = Libraries.GetPet(((ushort)BaseImage) - 10000);
                     break;
                 case Monster.HellBomb1:
                 case Monster.HellBomb2:
                 case Monster.HellBomb3:
-                    BodyLibrary = Libraries.Monsters[(ushort)Monster.HellLord];
+                    BodyLibrary = Libraries.GetMonster((ushort)Monster.HellLord);
                     break;
                 case Monster.CaveStatue:
-                    BodyLibrary = Libraries.Monsters[(ushort)Monster.CaveStatue];
+                    BodyLibrary = Libraries.GetMonster((ushort)Monster.CaveStatue);
                     break;
                 default:
-                    BodyLibrary = Libraries.Monsters[(ushort)BaseImage];
+                    BodyLibrary = Libraries.GetMonster((ushort)BaseImage);
                     break;
             }
 

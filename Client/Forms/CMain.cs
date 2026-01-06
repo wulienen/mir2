@@ -379,6 +379,9 @@ namespace Client
             {
                 ResourceHelper.ProcessPendingWrites();
                 
+                // 处理待下载的地图瓦片请求
+                ResourceHelper.ProcessPendingMapTileRequests();
+                
                 // 检查服务器状态并处理重试逻辑
                 ResourceHelper.CheckAndRetryConnection();
                 

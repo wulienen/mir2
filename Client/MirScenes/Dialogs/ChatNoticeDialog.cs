@@ -16,6 +16,9 @@ namespace Client.MirScenes.Dialogs
             Library = Libraries.Prguse;
             Movable = false;
             Sort = false;
+            
+            // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+            DefaultSize = new Size(660, 40);
             Location = new Point(Settings.ScreenWidth / 2 - Size.Width / 2, Settings.ScreenHeight / 6 - Size.Height / 2);
             Opacity = 0.7F;
 

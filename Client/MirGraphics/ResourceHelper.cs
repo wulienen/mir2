@@ -6,6 +6,16 @@ using System.Web;
 namespace Client.MirGraphics
 {
     /// <summary>
+    /// 地图瓦片请求，用于优先级下载
+    /// </summary>
+    public struct MapTileRequest
+    {
+        public int LibIndex;
+        public int ImageIndex;
+        public int Priority; // 距离玩家越近，优先级越高（值越小）
+    }
+
+    /// <summary>
     /// 流式资源加载助手类
     /// 负责与资源服务器通信，管理下载队列和本地缓存合并
     /// </summary>
@@ -63,10 +73,68 @@ namespace Client.MirGraphics
         /// </summary>
         private static bool _httpClientInitialized;
 
+        /// <summary>
+        /// 待下载的地图瓦片请求队列
+        /// </summary>
+        private static readonly ConcurrentQueue<MapTileRequest> PendingMapTileRequests = new ConcurrentQueue<MapTileRequest>();
+
+        /// <summary>
+        /// 已请求的地图瓦片集合（避免重复请求）
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, bool> RequestedMapTiles = new ConcurrentDictionary<string, bool>();
+
         static ResourceHelper()
         {
             Semaphore = new SemaphoreSlim(MaxConcurrentDownloads);
             PendingWrites = new ConcurrentDictionary<string, List<PendingImageWrite>>();
+        }
+
+        /// <summary>
+        /// 添加地图瓦片下载请求
+        /// </summary>
+        /// <param name="libIndex">库索引</param>
+        /// <param name="imageIndex">图片索引</param>
+        /// <param name="priority">优先级（距离玩家越近值越小）</param>
+        public static void RequestMapTile(int libIndex, int imageIndex, int priority)
+        {
+            string key = $"{libIndex}_{imageIndex}";
+            if (RequestedMapTiles.TryAdd(key, true))
+            {
+                PendingMapTileRequests.Enqueue(new MapTileRequest
+                {
+                    LibIndex = libIndex,
+                    ImageIndex = imageIndex,
+                    Priority = priority
+                });
+            }
+        }
+
+        /// <summary>
+        /// 清除已请求的地图瓦片记录（地图切换时调用）
+        /// </summary>
+        public static void ClearMapTileRequests()
+        {
+            RequestedMapTiles.Clear();
+            while (PendingMapTileRequests.TryDequeue(out _)) { }
+        }
+
+        /// <summary>
+        /// 处理待下载的地图瓦片请求
+        /// </summary>
+        public static void ProcessPendingMapTileRequests()
+        {
+            // 每次处理最多10个请求
+            int processed = 0;
+            while (processed < 10 && PendingMapTileRequests.TryDequeue(out MapTileRequest request))
+            {
+                var lib = Libraries.GetMapLib(request.LibIndex);
+                if (lib != null)
+                {
+                    // 触发图片加载（CheckImage会自动触发下载）
+                    lib.CheckImage(request.ImageIndex);
+                }
+                processed++;
+            }
         }
         
         /// <summary>
@@ -294,93 +362,86 @@ namespace Client.MirGraphics
             
             var api = $"libimage/{path}/{name}/{index}";
             
+            // 使用信号量控制并发
+            await Semaphore.WaitAsync();
+            
             try
             {
-                // 使用信号量控制并发
-                await Semaphore.WaitAsync();
-                
-                try
+                var result = await HttpClientGetAsync(api);
+                if (result != null && result.Length > 0)
                 {
-                    var result = await HttpClientGetAsync(api);
-                    if (result != null && result.Length > 0)
+                    using (result)
+                    using (BinaryReader br = new BinaryReader(result))
                     {
-                        using (result)
-                        using (BinaryReader br = new BinaryReader(result))
+                        // 读取位置（服务端返回的占位符，不使用）
+                        int imagePosition = br.ReadInt32();
+                        // 读取数据长度（服务端返回的完整图片数据长度：17字节头 + 压缩数据）
+                        int dataLength = br.ReadInt32();
+                        // 读取完整图片数据（17字节头 + 压缩数据）
+                        byte[] fullImageData = br.ReadBytes(dataLength);
+                        
+                        if (fullImageData == null || fullImageData.Length < 17)
                         {
-                            // 读取位置（服务端返回的占位符，不使用）
-                            int imagePosition = br.ReadInt32();
-                            // 读取数据长度（服务端返回的完整图片数据长度：17字节头 + 压缩数据）
-                            int dataLength = br.ReadInt32();
-                            // 读取完整图片数据（17字节头 + 压缩数据）
-                            byte[] fullImageData = br.ReadBytes(dataLength);
-                            
-                            if (fullImageData == null || fullImageData.Length < 17)
-                            {
-                                LogError($"素材：{api},下载资源失败,原因：服务端返回数据长度异常 {fullImageData?.Length ?? 0}");
-                                return null;
-                            }
-                            
-                            // 解析17字节头信息
-                            short width = BitConverter.ToInt16(fullImageData, 0);
-                            short height = BitConverter.ToInt16(fullImageData, 2);
-                            short x = BitConverter.ToInt16(fullImageData, 4);
-                            short y = BitConverter.ToInt16(fullImageData, 6);
-                            short shadowX = BitConverter.ToInt16(fullImageData, 8);
-                            short shadowY = BitConverter.ToInt16(fullImageData, 10);
-                            byte shadow = fullImageData[12];
-                            int length = BitConverter.ToInt32(fullImageData, 13);
-                            
-                            // 将完整数据添加到待写入队列（写入到索引位置，包含17字节头）
-                            var pendingWrite = new PendingImageWrite
-                            {
-                                Position = position,  // 索引位置（图片头开始位置）
-                                Data = fullImageData  // 完整数据（17字节头 + 压缩数据）
-                            };
-                            
-                            if (!PendingWrites.TryGetValue(realName, out var list))
-                            {
-                                list = new List<PendingImageWrite> { pendingWrite };
-                                PendingWrites[realName] = list;
-                            }
-                            else
-                            {
-                                lock (list)
-                                {
-                                    list.Add(pendingWrite);
-                                }
-                            }
-                            
-                            // 返回包含头信息和压缩数据的结果
-                            if (fullImageData.Length > 17)
-                            {
-                                byte[] compressedData = new byte[fullImageData.Length - 17];
-                                Array.Copy(fullImageData, 17, compressedData, 0, compressedData.Length);
-                                
-                                return new ImageDownloadResult
-                                {
-                                    Width = width,
-                                    Height = height,
-                                    X = x,
-                                    Y = y,
-                                    ShadowX = shadowX,
-                                    ShadowY = shadowY,
-                                    Shadow = shadow,
-                                    Length = length,
-                                    CompressedData = compressedData
-                                };
-                            }
-                            
+                            LogError($"素材：{api},下载资源失败,原因：服务端返回数据长度异常 {fullImageData?.Length ?? 0}");
                             return null;
                         }
-                    }
-                    else
-                    {
-                        LogError($"素材：{api},下载资源失败,原因：服务端返回字节数为0");
+                        
+                        // 解析17字节头信息
+                        short width = BitConverter.ToInt16(fullImageData, 0);
+                        short height = BitConverter.ToInt16(fullImageData, 2);
+                        short x = BitConverter.ToInt16(fullImageData, 4);
+                        short y = BitConverter.ToInt16(fullImageData, 6);
+                        short shadowX = BitConverter.ToInt16(fullImageData, 8);
+                        short shadowY = BitConverter.ToInt16(fullImageData, 10);
+                        byte shadow = fullImageData[12];
+                        int length = BitConverter.ToInt32(fullImageData, 13);
+                        
+                        // 将完整数据添加到待写入队列（写入到索引位置，包含17字节头）
+                        var pendingWrite = new PendingImageWrite
+                        {
+                            Position = position,  // 索引位置（图片头开始位置）
+                            Data = fullImageData  // 完整数据（17字节头 + 压缩数据）
+                        };
+                        
+                        if (!PendingWrites.TryGetValue(realName, out var list))
+                        {
+                            list = new List<PendingImageWrite> { pendingWrite };
+                            PendingWrites[realName] = list;
+                        }
+                        else
+                        {
+                            lock (list)
+                            {
+                                list.Add(pendingWrite);
+                            }
+                        }
+                        
+                        // 返回包含头信息和压缩数据的结果
+                        if (fullImageData.Length > 17)
+                        {
+                            byte[] compressedData = new byte[fullImageData.Length - 17];
+                            Array.Copy(fullImageData, 17, compressedData, 0, compressedData.Length);
+                            
+                            return new ImageDownloadResult
+                            {
+                                Width = width,
+                                Height = height,
+                                X = x,
+                                Y = y,
+                                ShadowX = shadowX,
+                                ShadowY = shadowY,
+                                Shadow = shadow,
+                                Length = length,
+                                CompressedData = compressedData
+                            };
+                        }
+                        
+                        return null;
                     }
                 }
-                finally
+                else
                 {
-                    Semaphore.Release();
+                    LogError($"素材：{api},下载资源失败,原因：服务端返回字节数为0");
                 }
             }
             catch (Exception ex)
@@ -393,6 +454,10 @@ namespace Client.MirGraphics
                 {
                     ServerActive = false;
                 }
+            }
+            finally
+            {
+                Semaphore.Release();
             }
             
             return null;

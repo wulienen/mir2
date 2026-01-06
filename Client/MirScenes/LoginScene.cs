@@ -334,9 +334,10 @@ namespace Client.MirScenes
             {
                 Index = 1084;
                 Library = Libraries.Prguse;
-                Location = new Point((Settings.ScreenWidth - Size.Width)/2, (Settings.ScreenHeight - Size.Height)/2);
                 PixelDetect = false;
-                Size = new Size(328, 220);
+                // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+                DefaultSize = new Size(328, 220);
+                Location = new Point((Settings.ScreenWidth - Size.Width)/2, (Settings.ScreenHeight - Size.Height)/2);
 
                 TitleLabel = new MirImageControl
                     {
@@ -570,6 +571,8 @@ namespace Client.MirScenes
 
                 Index = 1080;
                 Library = Libraries.Prguse;
+                // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+                DefaultSize = new Size(204, 268);
                 Location = new Point((Client.Settings.ScreenWidth - Size.Width) / 2 + 285, (Client.Settings.ScreenHeight - Size.Height) / 2 + 150);
                 Visible = true;
 
@@ -775,7 +778,8 @@ namespace Client.MirScenes
             {
                 Index = 63;
                 Library = Libraries.Prguse;
-                Size = new Size();
+                // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+                DefaultSize = new Size(568, 467);
                 Location = new Point((Settings.ScreenWidth - Size.Width) / 2, (Settings.ScreenHeight - Size.Height) / 2);
 
                 CancelButton = new MirButton
@@ -1181,6 +1185,8 @@ namespace Client.MirScenes
             {
                 Index = 50;
                 Library = Libraries.Prguse;
+                // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+                DefaultSize = new Size(370, 280);
                 Location = new Point((Settings.ScreenWidth - Size.Width) / 2, (Settings.ScreenHeight - Size.Height) / 2);
 
                 CancelButton = new MirButton

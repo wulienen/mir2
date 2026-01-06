@@ -182,3 +182,62 @@
 3. THE Resource_Server SHALL read only the requested image data without loading the entire file into memory
 4. WHEN parsing library header, THE Resource_Server SHALL extract the first N bytes containing version, image count, and index array
 5. THE Resource_Server SHALL correctly map client request paths to actual file system paths regardless of ResourcePath configuration
+
+### Requirement 15: UI对话框居中定位修复
+
+**User Story:** As a player using streaming mode, I want UI dialogs (login box, registration box, character creation dialog, etc.) to be centered on screen, so that the game looks correct even when resources are still downloading.
+
+#### Acceptance Criteria
+
+1. WHEN a UI dialog calculates its Location in the constructor, THE dialog SHALL explicitly set its Size before calculating the centered position
+2. IF the image resource has not been downloaded yet (Size returns 0,0), THEN THE dialog SHALL use a predefined default size for positioning
+3. THE default sizes SHALL match the actual image dimensions to ensure correct positioning once resources load
+4. THE fix SHALL be applied to all dialogs that use centered positioning: LoginDialog, InputKeyDialog, NewAccountDialog, ChangePasswordDialog, NewCharacterDialog, NoticeDialog, RankingDialog, OptionDialog, and any other dialogs using `Location = new Point((Settings.ScreenWidth - Size.Width)/2, (Settings.ScreenHeight - Size.Height)/2)` pattern
+5. WHEN resources are loaded locally (non-streaming mode), THE dialogs SHALL continue to work correctly without requiring default sizes
+
+### Requirement 16: 基础控件居中定位增强（可选优化）
+
+**User Story:** As a developer, I want a centralized solution for centering UI controls, so that I don't need to fix each dialog individually.
+
+#### Acceptance Criteria
+
+1. THE MirImageControl base class MAY provide a CenterOnScreen property that automatically recalculates Location when Size becomes valid
+2. WHEN CenterOnScreen is true and Size changes from (0,0) to a valid size, THE control SHALL recalculate its Location to center on screen
+3. THE CenterOnScreen property SHALL be optional and default to false for backward compatibility
+4. THIS requirement is an optional optimization that can replace the per-dialog fixes in Requirement 15
+
+### Requirement 17: 非阻塞场景切换
+
+**User Story:** As a player, I want to immediately enter the game scene after clicking StartGame, so that I don't have to wait for all resources to download before playing.
+
+#### Acceptance Criteria
+
+1. WHEN the player clicks StartGame, THE game SHALL immediately transition to the GameScene without waiting for resource downloads
+2. WHILE resources are being downloaded in the background, THE GameScene SHALL display placeholder textures for unavailable resources
+3. THE GameScene SHALL progressively render resources as they become available
+4. THE Libraries.Loaded check SHALL NOT block scene transition
+5. WHEN entering GameScene, THE system SHALL prioritize downloading resources needed for the current map and UI
+
+### Requirement 18: 系统性UI组件定位修复
+
+**User Story:** As a player, I want all UI components to be correctly positioned, so that the game interface displays properly regardless of resource loading state.
+
+#### Acceptance Criteria
+
+1. THE MirImageControl base class SHALL provide a DefaultSize property that can be set for controls that need centered positioning
+2. WHEN Size returns (0,0) due to unloaded resources, THE control SHALL use DefaultSize for positioning calculations
+3. THE fix SHALL be applied at the base control level to automatically handle all derived dialogs
+4. WHEN resources are loaded, THE control SHALL use the actual image size instead of DefaultSize
+5. THE solution SHALL NOT require individual fixes for each dialog class
+
+### Requirement 19: 地图资源流式加载
+
+**User Story:** As a player, I want the map to display progressively as resources load, so that I can see the game world even when some tiles are still downloading.
+
+#### Acceptance Criteria
+
+1. WHEN a map tile resource is not yet downloaded, THE MapControl SHALL skip drawing that tile instead of showing a black block
+2. WHEN a map tile download completes, THE MapControl SHALL invalidate the floor cache to trigger a redraw
+3. THE MapControl SHALL prioritize downloading tiles within the player's visible range
+4. WHEN drawing map objects (trees, buildings), THE system SHALL use placeholder textures for unavailable resources
+5. THE map background layer SHALL be drawn even when foreground objects are still loading

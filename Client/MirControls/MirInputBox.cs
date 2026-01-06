@@ -17,6 +17,8 @@ namespace Client.MirControls
             Index = 660;
             Library = Libraries.Prguse;
 
+            // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+            DefaultSize = new Size(286, 157);
             Location = new Point((Settings.ScreenWidth - Size.Width) / 2, (Settings.ScreenHeight - Size.Height) / 2);
 
             CaptionLabel = new MirLabel

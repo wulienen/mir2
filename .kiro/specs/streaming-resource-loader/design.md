@@ -405,6 +405,235 @@ public class ServerSettings
 3. **数据校验错误**: 验证下载数据长度与预期是否匹配，不匹配时记录错误并重试
 4. **服务器不可用**: 显示警告消息，每15秒重试连接
 
+## 新增设计：非阻塞场景切换
+
+### 问题分析
+
+当前StartGame流程会等待Libraries.Loaded变为true才进入GameScene，这在流式加载模式下会导致长时间等待。
+
+### 解决方案
+
+1. **移除阻塞检查**: 删除SelectScene.StartGame中的Libraries.Loaded检查
+2. **异步初始化**: GameScene构造函数中的库初始化改为非阻塞
+3. **渐进式渲染**: 所有UI组件和地图渲染都支持资源未加载时的优雅降级
+
+```csharp
+// SelectScene.cs - 修改后的StartGame方法
+public void StartGame()
+{
+    // 不再等待Libraries.Loaded
+    // 直接发送StartGame请求，让服务器响应后切换场景
+    StartGameButton.Enabled = false;
+    Network.Enqueue(new C.StartGame
+    {
+        CharacterIndex = Characters[_selected].Index
+    });
+}
+
+// 在收到服务器StartGame响应后
+public void StartGame(S.StartGame p)
+{
+    if (p.Result == 4)
+    {
+        // 异步初始化游戏库（不阻塞）
+        Libraries.InitializeForGame();
+        
+        // 立即切换到GameScene
+        ActiveScene = new GameScene();
+        Dispose();
+    }
+}
+```
+
+## 新增设计：系统性UI组件定位修复
+
+### 问题分析
+
+当前问题：
+1. MirImageControl.Size属性依赖Library.GetTrueSize(Index)
+2. 当资源未加载时，GetTrueSize返回Size.Empty (0,0)
+3. 对话框在构造函数中计算居中位置时，Size为(0,0)导致位置计算错误
+4. 逐个修复对话框不可行，需要系统性解决方案
+
+### 解决方案
+
+在MirImageControl基类中添加DefaultSize属性，当实际Size为(0,0)时使用DefaultSize进行定位计算。
+
+```csharp
+// MirImageControl.cs - 新增属性
+public class MirImageControl : MirControl
+{
+    // 新增：默认大小，用于资源未加载时的定位计算
+    private Size _defaultSize = Size.Empty;
+    public Size DefaultSize
+    {
+        get { return _defaultSize; }
+        set { _defaultSize = value; }
+    }
+    
+    // 修改Size属性
+    public override Size Size
+    {
+        set { base.Size = value; }
+        get
+        {
+            if (AutoSize && Library != null && Index >= 0)
+            {
+                Size actualSize = Library.GetTrueSize(Index);
+                // 如果实际大小为空且有默认大小，使用默认大小
+                if (actualSize.IsEmpty && !_defaultSize.IsEmpty)
+                    return _defaultSize;
+                return actualSize;
+            }
+            // 如果base.Size为空且有默认大小，使用默认大小
+            if (base.Size.IsEmpty && !_defaultSize.IsEmpty)
+                return _defaultSize;
+            return base.Size;
+        }
+    }
+}
+```
+
+### 使用方式
+
+对话框只需设置DefaultSize即可自动处理定位：
+
+```csharp
+// 示例：LoginDialog
+public LoginDialog()
+{
+    Index = 1084;
+    Library = Libraries.Prguse;
+    DefaultSize = new Size(328, 220);  // 设置默认大小
+    Location = new Point((Settings.ScreenWidth - Size.Width) / 2,
+                         (Settings.ScreenHeight - Size.Height) / 2);
+    // ...
+}
+```
+
+### 需要设置DefaultSize的对话框列表
+
+| 对话框 | DefaultSize |
+|--------|-------------|
+| LoginDialog | (328, 220) |
+| InputKeyDialog | (204, 268) |
+| NewAccountDialog | (568, 467) |
+| ChangePasswordDialog | (370, 280) |
+| NewCharacterDialog | (568, 467) |
+| NoticeDialog | (320, 470) |
+| RankingDialog | (288, 324) |
+| OptionDialog | (352, 412) |
+| ChatOptionDialog | (270, 180) |
+| ChatNoticeDialog | (260, 100) |
+| MirInputBox | (360, 110) |
+| MirMessageBox | (360, 150) |
+| MirAmountBox | (238, 175) |
+
+## 新增设计：地图资源流式加载
+
+### 问题分析
+
+地图显示黑块的原因：
+1. MapLib资源未加载时，Draw方法可能绘制空白或黑色
+2. 地图瓦片的BackImage、MiddleImage、FrontImage都依赖MapLib资源
+3. 当资源下载中时，没有正确跳过绘制
+
+### 解决方案
+
+1. **修改MLibrary.Draw方法**: 当资源未加载时返回false，不进行绘制
+2. **修改DrawFloor方法**: 检查Draw返回值，未绘制时跳过该瓦片
+3. **添加FloorValid失效机制**: 当资源下载完成时，设置FloorValid=false触发重绘
+
+```csharp
+// MLibrary.cs - 修改Draw方法
+public bool Draw(int index, int x, int y)
+{
+    if (x >= Settings.ScreenWidth || y >= Settings.ScreenHeight)
+        return false;
+
+    if (!CheckImage(index))
+        return false;  // 资源未加载，返回false
+
+    MImage mi = _images[index];
+    if (mi == null || !mi.TextureValid)
+        return false;  // 纹理无效，返回false
+
+    if (x + mi.Width < 0 || y + mi.Height < 0)
+        return false;
+
+    DXManager.Draw(mi.Image, new Rectangle(0, 0, mi.Width, mi.Height), 
+                   new Vector3((float)x, (float)y, 0.0F), Color.White);
+    return true;  // 绘制成功
+}
+
+// GameScene.MapControl - 修改DrawFloor
+private void DrawFloor()
+{
+    // ... 现有代码 ...
+    
+    // Back
+    if (cell.BackImage != 0 && cell.BackIndex != -1)
+    {
+        int index = (cell.BackImage & 0x1FFFFFFF) - 1;
+        var lib = Libraries.GetMapLib(cell.BackIndex);
+        if (lib != null)
+        {
+            // 如果绘制失败（资源未加载），不影响其他瓦片
+            lib.Draw(index, drawX, drawY);
+        }
+    }
+    // ... 其他层同理 ...
+}
+```
+
+### 资源下载完成后的重绘机制
+
+```csharp
+// MLibrary.cs - 在图片下载完成后
+private async void DownloadImageAsync(int index, MImage mi)
+{
+    // ... 下载逻辑 ...
+    
+    if (downloadSuccess)
+    {
+        mi.CreateTextureFromData(data);
+        mi.DownloadStatus = 2;
+        
+        // 如果是地图库，通知MapControl重绘
+        if (IsMapLibrary)
+        {
+            MapControl.InvalidateFloor();
+        }
+    }
+}
+
+// GameScene.MapControl - 添加失效方法
+public static void InvalidateFloor()
+{
+    FloorValid = false;
+}
+```
+
+## Correctness Properties (新增)
+
+### Property 16: Non-Blocking Scene Transition
+
+*For any* StartGame request in streaming mode, the scene transition to GameScene SHALL occur immediately without waiting for resource downloads.
+
+**Validates: Requirements 17.1, 17.4**
+
+### Property 17: DefaultSize Fallback
+
+*For any* MirImageControl with DefaultSize set, when the actual image Size is (0,0), the Size property SHALL return DefaultSize.
+
+**Validates: Requirements 18.1, 18.2, 18.4**
+
+### Property 18: Map Tile Graceful Degradation
+
+*For any* map tile whose resource is not yet loaded, the DrawFloor method SHALL skip drawing that tile without causing visual artifacts (black blocks).
+
+**Validates: Requirements 19.1, 19.4**
+
 ## Testing Strategy
 
 ### 单元测试

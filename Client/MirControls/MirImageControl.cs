@@ -138,6 +138,15 @@ namespace Client.MirControls
         }
         #endregion
 
+        #region DefaultSize
+        private Size _defaultSize = Size.Empty;
+        public Size DefaultSize
+        {
+            get { return _defaultSize; }
+            set { _defaultSize = value; }
+        }
+        #endregion
+
         #region Size
         public override Size Size
         {
@@ -145,7 +154,16 @@ namespace Client.MirControls
             get
             {
                 if (AutoSize && Library != null && Index >= 0)
-                    return Library.GetTrueSize(Index);
+                {
+                    Size actualSize = Library.GetTrueSize(Index);
+                    // 如果实际大小为空且有默认大小，使用默认大小
+                    if (actualSize.IsEmpty && !_defaultSize.IsEmpty)
+                        return _defaultSize;
+                    return actualSize;
+                }
+                // 如果base.Size为空且有默认大小，使用默认大小
+                if (base.Size.IsEmpty && !_defaultSize.IsEmpty)
+                    return _defaultSize;
                 return base.Size;
             }
         }

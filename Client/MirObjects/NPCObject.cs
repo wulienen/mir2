@@ -64,7 +64,8 @@ namespace Client.MirObjects
 
             LoadLibrary();
 
-            Frames = BodyLibrary.Frames ?? FrameSet.DefaultNPC;
+            // 流式加载模式下，BodyLibrary 可能为 null
+            Frames = BodyLibrary?.Frames ?? FrameSet.DefaultNPC;
 
             Light = 10;
             BaseIndex = 0;
@@ -75,9 +76,9 @@ namespace Client.MirObjects
         public void LoadLibrary()
         {
             if (Image < Libraries.NPCs.Length)
-                BodyLibrary = Libraries.NPCs[Image];
+                BodyLibrary = Libraries.GetNPC(Image);
             else if (Image >= 1000 && Image < 1100)
-                BodyLibrary = Libraries.Flags[Image - 1000];
+                BodyLibrary = Libraries.GetFlag(Image - 1000);
         }
 
         public override void Process()

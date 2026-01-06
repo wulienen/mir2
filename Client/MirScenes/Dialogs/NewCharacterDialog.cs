@@ -47,6 +47,8 @@ namespace Client.MirScenes.Dialogs
         {
             Index = 73;
             Library = Libraries.Prguse;
+            // 设置 DefaultSize，当资源未加载时使用默认大小进行定位计算
+            DefaultSize = new Size(568, 467);
             Location = new Point((Settings.ScreenWidth - Size.Width) / 2, (Settings.ScreenHeight - Size.Height) / 2);
             Modal = true;
 

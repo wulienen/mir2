@@ -235,6 +235,118 @@
   - 验证下载失败时不会崩溃
   - 询问用户是否有问题
 
+- [ ] 17. 修复UI对话框居中定位问题
+  - [x] 17.1 修复登录场景对话框
+    - 修复LoginDialog：在构造函数中显式设置Size为(328, 220)后再计算Location
+    - 修复InputKeyDialog：获取Size，如果为(0,0)则使用默认大小(204, 268)
+    - 修复NewAccountDialog：获取Size，如果为(0,0)则使用默认大小(568, 467)
+    - 修复ChangePasswordDialog：获取Size，如果为(0,0)则使用默认大小(370, 280)
+    - _Requirements: 15.1, 15.2, 15.3, 15.5_
+
+  - [x] 17.2 修复角色选择场景对话框
+    - 修复NewCharacterDialog：获取Size，如果为(0,0)则使用默认大小(568, 467)
+    - _Requirements: 15.1, 15.2, 15.3, 15.5_
+
+  - [x] 17.3 修复游戏场景对话框（部分完成）
+    - 修复NoticeDialog：获取Size，如果为(0,0)则使用默认大小(320, 470)
+    - 修复RankingDialog：获取Size，如果为(0,0)则使用默认大小
+    - 修复OptionDialog：获取Size，如果为(0,0)则使用默认大小
+    - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
+
+  - [x] 17.4 修复其他居中定位对话框
+    - 修复ChatOptionDialog：获取Size，如果为(0,0)则使用默认大小
+    - 修复ItemRentalDialog：已设置Size，无需修复
+    - 修复ChatNoticeDialog：获取Size，如果为(0,0)则使用默认大小
+    - 修复MirInputBox：获取Size，如果为(0,0)则使用默认大小
+    - 修复MirMessageBox：获取Size，如果为(0,0)则使用默认大小
+    - 修复MirAmountBox：获取Size，如果为(0,0)则使用默认大小
+    - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
+
+- [ ]* 18. 可选优化：实现基础控件居中定位增强
+  - [ ]* 18.1 在MirImageControl中添加CenterOnScreen属性
+    - 添加_centerOnScreen私有字段和CenterOnScreen公共属性
+    - 默认值为false以保持向后兼容
+    - _Requirements: 16.1, 16.3_
+
+  - [ ]* 18.2 实现自动居中逻辑
+    - 在DrawControl或OnSizeChanged中检测Size从(0,0)变为有效值
+    - 当CenterOnScreen为true时自动重新计算Location
+    - _Requirements: 16.2_
+
+  - [ ]* 18.3 重构现有对话框使用CenterOnScreen
+    - 将已修复的对话框改为使用CenterOnScreen属性
+    - 移除手动设置Size和默认大小的代码
+    - _Requirements: 16.4_
+
+- [ ] 19. Final Checkpoint - 验证UI定位修复
+  - 启动微端模式，验证登录框居中显示
+  - 验证注册框、修改密码框居中显示
+  - 验证创建角色对话框居中显示
+  - 验证非微端模式下对话框仍然正常工作
+  - 询问用户是否有问题
+
+- [x] 20. 实现非阻塞场景切换
+  - [x] 20.1 修改SelectScene.StartGame方法
+    - 移除Libraries.Loaded检查和等待逻辑
+    - 直接发送StartGame请求到服务器
+    - _Requirements: 17.1, 17.4_
+
+  - [x] 20.2 修改StartGame服务器响应处理
+    - 在收到成功响应后异步调用Libraries.InitializeForGame()
+    - 立即创建GameScene并切换，不等待初始化完成
+    - _Requirements: 17.1, 17.2, 17.3_
+
+- [x] 21. 实现系统性UI组件定位修复
+  - [x] 21.1 在MirImageControl中添加DefaultSize属性
+    - 添加_defaultSize私有字段
+    - 添加DefaultSize公共属性
+    - _Requirements: 18.1_
+
+  - [x] 21.2 修改MirImageControl.Size属性getter
+    - 当AutoSize为true且实际大小为(0,0)时，返回DefaultSize
+    - 当base.Size为(0,0)时，返回DefaultSize
+    - _Requirements: 18.2, 18.4_
+
+  - [x] 21.3 为所有居中定位对话框设置DefaultSize
+    - LoginDialog: DefaultSize = (328, 220)
+    - InputKeyDialog: DefaultSize = (204, 268)
+    - NewAccountDialog: DefaultSize = (568, 467)
+    - ChangePasswordDialog: DefaultSize = (370, 280)
+    - NewCharacterDialog: DefaultSize = (568, 467)
+    - NoticeDialog: DefaultSize = (320, 470)
+    - RankingDialog: DefaultSize = (288, 324)
+    - OptionDialog: DefaultSize = (352, 412)
+    - ChatOptionDialog: DefaultSize = (270, 180)
+    - ChatNoticeDialog: DefaultSize = (260, 100)
+    - MirInputBox: DefaultSize = (360, 110)
+    - MirMessageBox: DefaultSize = (360, 150)
+    - MirAmountBox: DefaultSize = (238, 175)
+    - _Requirements: 18.3, 18.5_
+
+- [x] 22. 修复地图黑块问题
+  - [x] 22.1 修改MLibrary.Draw方法返回值
+    - 将Draw方法返回类型改为bool
+    - 当资源未加载或纹理无效时返回false
+    - 绘制成功时返回true
+    - _Requirements: 19.1_
+
+  - [x] 22.2 添加地图重绘失效机制
+    - 在MapControl中添加静态InvalidateFloor方法
+    - 在MLibrary图片下载完成后调用InvalidateFloor
+    - _Requirements: 19.2_
+
+  - [x] 22.3 优化地图资源下载优先级
+    - 在DrawFloor中记录需要但未加载的瓦片索引
+    - 优先下载玩家可视范围内的地图资源
+    - _Requirements: 19.3, 19.5_
+
+- [ ] 23. Final Checkpoint - 验证所有修复
+  - 启动微端模式，点击开始游戏后立即进入主场景
+  - 验证所有UI组件位置正确
+  - 验证地图无黑块，资源渐进加载
+  - 验证非微端模式下游戏正常运行
+  - 询问用户是否有问题
+
 ## Notes
 
 - 任务标记 `*` 的为可选测试任务，可跳过以加快MVP开发
