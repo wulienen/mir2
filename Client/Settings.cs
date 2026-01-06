@@ -201,7 +201,7 @@ namespace Client
         public static int P_Concurrency = 1;
 
         //MicroClient (Streaming Resource Loader)
-        public static bool MicroClientEnabled = false;
+        public static bool MicroClientEnabled = true;
         public static string MicroClientIP = "127.0.0.1";
         public static int MicroClientPort = 8080;
 

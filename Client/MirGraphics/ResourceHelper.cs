@@ -273,14 +273,14 @@ namespace Client.MirGraphics
         }
 
         /// <summary>
-        /// 获取图片数据（仅压缩数据部分，不含17字节头）
+        /// 获取图片数据（包含17字节头信息和压缩数据）
         /// </summary>
         /// <param name="fileName">库文件路径</param>
         /// <param name="index">图片索引</param>
         /// <param name="position">图片在文件中的位置（索引位置，不是数据位置）</param>
         /// <param name="compressedLength">压缩数据长度（不含17字节头）</param>
-        /// <returns>压缩数据字节数组</returns>
-        public static async Task<byte[]> GetImageAsync(string fileName, int index, int position, int compressedLength)
+        /// <returns>ImageDownloadResult 包含图片头信息和压缩数据</returns>
+        public static async Task<ImageDownloadResult> GetImageAsync(string fileName, int index, int position, int compressedLength)
         {
             var realName = fileName;
             fileName = fileName.Replace("./", "");
@@ -320,6 +320,16 @@ namespace Client.MirGraphics
                                 return null;
                             }
                             
+                            // 解析17字节头信息
+                            short width = BitConverter.ToInt16(fullImageData, 0);
+                            short height = BitConverter.ToInt16(fullImageData, 2);
+                            short x = BitConverter.ToInt16(fullImageData, 4);
+                            short y = BitConverter.ToInt16(fullImageData, 6);
+                            short shadowX = BitConverter.ToInt16(fullImageData, 8);
+                            short shadowY = BitConverter.ToInt16(fullImageData, 10);
+                            byte shadow = fullImageData[12];
+                            int length = BitConverter.ToInt32(fullImageData, 13);
+                            
                             // 将完整数据添加到待写入队列（写入到索引位置，包含17字节头）
                             var pendingWrite = new PendingImageWrite
                             {
@@ -340,12 +350,24 @@ namespace Client.MirGraphics
                                 }
                             }
                             
-                            // 返回压缩数据部分（跳过17字节头），用于创建纹理
+                            // 返回包含头信息和压缩数据的结果
                             if (fullImageData.Length > 17)
                             {
                                 byte[] compressedData = new byte[fullImageData.Length - 17];
                                 Array.Copy(fullImageData, 17, compressedData, 0, compressedData.Length);
-                                return compressedData;
+                                
+                                return new ImageDownloadResult
+                                {
+                                    Width = width,
+                                    Height = height,
+                                    X = x,
+                                    Y = y,
+                                    ShadowX = shadowX,
+                                    ShadowY = shadowY,
+                                    Shadow = shadow,
+                                    Length = length,
+                                    CompressedData = compressedData
+                                };
                             }
                             
                             return null;
@@ -526,5 +548,56 @@ namespace Client.MirGraphics
         /// 图片数据
         /// </summary>
         public byte[] Data { get; set; }
+    }
+
+    /// <summary>
+    /// 图片下载结果，包含头信息和压缩数据
+    /// </summary>
+    public class ImageDownloadResult
+    {
+        /// <summary>
+        /// 图片宽度
+        /// </summary>
+        public short Width { get; set; }
+        
+        /// <summary>
+        /// 图片高度
+        /// </summary>
+        public short Height { get; set; }
+        
+        /// <summary>
+        /// X偏移量
+        /// </summary>
+        public short X { get; set; }
+        
+        /// <summary>
+        /// Y偏移量
+        /// </summary>
+        public short Y { get; set; }
+        
+        /// <summary>
+        /// 阴影X偏移量
+        /// </summary>
+        public short ShadowX { get; set; }
+        
+        /// <summary>
+        /// 阴影Y偏移量
+        /// </summary>
+        public short ShadowY { get; set; }
+        
+        /// <summary>
+        /// 阴影标志（高位表示是否有Mask层）
+        /// </summary>
+        public byte Shadow { get; set; }
+        
+        /// <summary>
+        /// 压缩数据长度
+        /// </summary>
+        public int Length { get; set; }
+        
+        /// <summary>
+        /// 压缩数据
+        /// </summary>
+        public byte[] CompressedData { get; set; }
     }
 }

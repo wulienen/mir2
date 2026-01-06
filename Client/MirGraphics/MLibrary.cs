@@ -987,14 +987,29 @@ namespace Client.MirGraphics
                 
             if (!mi.TextureValid)
             {
+                // 流式加载：检查图片头数据是否有效（Width/Height 为 0 表示头数据为空）
                 if ((mi.Width == 0) || (mi.Height == 0))
+                {
+                    // 如果启用流式加载且服务器可用，触发下载
+                    if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+                    {
+                        // 检查是否可以重试
+                        if (mi.DownloadStatus == 0 && DateTime.Now >= mi.NextRetryTime)
+                        {
+                            int imagePosition = _indexList[index];
+                            // 标记为下载中，防止重复触发
+                            mi.DownloadStatus = 1;
+                            DownloadFullImageAsync(index, imagePosition);
+                        }
+                    }
                     return false;
+                }
                 
                 // 流式加载：检查图片数据是否为空
                 if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
                 {
                     // 检查是否需要下载
-                    if (mi.DownloadStatus == 0 && IsImageDataEmpty(index))
+                    if (mi.DownloadStatus == 0 && DateTime.Now >= mi.NextRetryTime && IsImageDataEmpty(index))
                     {
                         // 触发异步下载
                         DownloadImageAsync(index, mi);
@@ -1075,13 +1090,23 @@ namespace Client.MirGraphics
                 // length 是压缩数据长度（不含17字节头）
                 int length = mi.Length;
                 
-                // GetImageAsync 返回的是压缩数据（不含17字节头），用于创建纹理
-                byte[] compressedData = await ResourceHelper.GetImageAsync(_fileName, index, position, length);
+                // GetImageAsync 返回包含头信息和压缩数据的结果
+                ImageDownloadResult downloadResult = await ResourceHelper.GetImageAsync(_fileName, index, position, length);
                 
-                if (compressedData != null && compressedData.Length > 0)
+                if (downloadResult != null && downloadResult.CompressedData != null && downloadResult.CompressedData.Length > 0)
                 {
+                    // 更新 MImage 的头信息（包括偏移量）
+                    mi.Width = downloadResult.Width;
+                    mi.Height = downloadResult.Height;
+                    mi.X = downloadResult.X;
+                    mi.Y = downloadResult.Y;
+                    mi.ShadowX = downloadResult.ShadowX;
+                    mi.ShadowY = downloadResult.ShadowY;
+                    mi.Shadow = downloadResult.Shadow;
+                    mi.Length = downloadResult.Length;
+                    
                     // 下载成功，创建纹理
-                    mi.CreateTextureFromData(compressedData);
+                    mi.CreateTextureFromData(downloadResult.CompressedData);
                     mi.DownloadStatus = 2; // 标记为完成
                 }
                 else
@@ -1101,7 +1126,7 @@ namespace Client.MirGraphics
 
         /// <summary>
         /// 下载完整图片数据（当本地文件没有图片头时使用）
-        /// 下载完成后会写入文件并在下次CheckImage时创建MImage对象
+        /// 下载完成后会创建 MImage 对象并创建纹理
         /// </summary>
         /// <param name="index">图片索引</param>
         /// <param name="position">图片在文件中的位置</param>
@@ -1111,15 +1136,41 @@ namespace Client.MirGraphics
             {
                 // 使用 GetImageAsync 下载完整图片数据
                 // 传入 0 作为 compressedLength，因为我们不知道实际长度
-                // GetImageAsync 会返回压缩数据，但也会将完整数据写入待写入队列
-                byte[] compressedData = await ResourceHelper.GetImageAsync(_fileName, index, position, 0);
+                // GetImageAsync 会返回包含头信息和压缩数据的结果，同时将完整数据写入待写入队列
+                ImageDownloadResult downloadResult = await ResourceHelper.GetImageAsync(_fileName, index, position, 0);
                 
+                if (downloadResult != null && downloadResult.CompressedData != null && downloadResult.CompressedData.Length > 0)
+                {
+                    // 创建 MImage 对象并设置头信息
+                    if (_images != null && index >= 0 && index < _images.Length)
+                    {
+                        MImage mi = new MImage(downloadResult);
+                        _images[index] = mi;
+                        
+                        // 创建纹理
+                        mi.CreateTextureFromData(downloadResult.CompressedData);
+                        mi.DownloadStatus = 2; // 标记为完成
+                    }
+                }
+                else
+                {
+                    // 下载失败，重置状态以便重试
+                    if (_images != null && index >= 0 && index < _images.Length && _images[index] != null)
+                    {
+                        _images[index].DownloadStatus = 0;
+                        _images[index].NextRetryTime = DateTime.Now.AddSeconds(1);
+                    }
+                }
                 // 下载完成后，ProcessPendingWrites 会将数据写入文件
-                // 下次 CheckImage 调用时会重新读取图片头
             }
             catch
             {
-                // 忽略异常，下次调用时会重试
+                // 异常，重置状态以便重试
+                if (_images != null && index >= 0 && index < _images.Length && _images[index] != null)
+                {
+                    _images[index].DownloadStatus = 0;
+                    _images[index].NextRetryTime = DateTime.Now.AddSeconds(1);
+                }
             }
         }
 
@@ -1188,7 +1239,17 @@ namespace Client.MirGraphics
                 {
                     int imagePosition = _indexList[index];
                     if (imagePosition <= 0 || imagePosition + 17 > _fStream.Length)
+                    {
+                        // 流式加载：触发下载
+                        if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+                        {
+                            // 创建一个临时的空 MImage 对象来跟踪下载状态
+                            _images[index] = new MImage();
+                            _images[index].DownloadStatus = 1;
+                            DownloadFullImageAsync(index, imagePosition);
+                        }
                         return Point.Empty;
+                    }
                     
                     _fStream.Seek(imagePosition, SeekOrigin.Begin);
                     _images[index] = new MImage(_reader);
@@ -1202,6 +1263,19 @@ namespace Client.MirGraphics
             
             if (_images[index] == null)
                 return Point.Empty;
+
+            // 流式加载：如果图片头数据为空（Width/Height 为 0），返回空并触发下载
+            MImage mi = _images[index];
+            if ((mi.Width == 0 || mi.Height == 0) && Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+            {
+                if (mi.DownloadStatus == 0 && DateTime.Now >= mi.NextRetryTime)
+                {
+                    int imagePosition = _indexList[index];
+                    mi.DownloadStatus = 1;
+                    DownloadFullImageAsync(index, imagePosition);
+                }
+                return Point.Empty;
+            }
 
             return new Point(_images[index].X, _images[index].Y);
         }
@@ -1221,7 +1295,16 @@ namespace Client.MirGraphics
                 {
                     int imagePosition = _indexList[index];
                     if (imagePosition <= 0 || imagePosition + 17 > _fStream.Length)
+                    {
+                        // 流式加载：触发下载
+                        if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+                        {
+                            _images[index] = new MImage();
+                            _images[index].DownloadStatus = 1;
+                            DownloadFullImageAsync(index, imagePosition);
+                        }
                         return Size.Empty;
+                    }
                     
                     _fStream.Seek(imagePosition, SeekOrigin.Begin);
                     _images[index] = new MImage(_reader);
@@ -1235,6 +1318,19 @@ namespace Client.MirGraphics
             
             if (_images[index] == null)
                 return Size.Empty;
+
+            // 流式加载：如果图片头数据为空（Width/Height 为 0），返回空并触发下载
+            MImage mi = _images[index];
+            if ((mi.Width == 0 || mi.Height == 0) && Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+            {
+                if (mi.DownloadStatus == 0 && DateTime.Now >= mi.NextRetryTime)
+                {
+                    int imagePosition = _indexList[index];
+                    mi.DownloadStatus = 1;
+                    DownloadFullImageAsync(index, imagePosition);
+                }
+                return Size.Empty;
+            }
 
             return new Size(_images[index].Width, _images[index].Height);
         }
@@ -1256,7 +1352,16 @@ namespace Client.MirGraphics
                 {
                     int imagePosition = _indexList[index];
                     if (imagePosition <= 0 || imagePosition + 17 > _fStream.Length)
+                    {
+                        // 流式加载：触发下载
+                        if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+                        {
+                            _images[index] = new MImage();
+                            _images[index].DownloadStatus = 1;
+                            DownloadFullImageAsync(index, imagePosition);
+                        }
                         return Size.Empty;
+                    }
                     
                     _fStream.Position = imagePosition;
                     _images[index] = new MImage(_reader);
@@ -1270,6 +1375,18 @@ namespace Client.MirGraphics
             MImage mi = _images[index];
             if (mi == null)
                 return Size.Empty;
+            
+            // 流式加载：如果图片头数据为空（Width/Height 为 0），返回空并触发下载
+            if ((mi.Width == 0 || mi.Height == 0) && Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+            {
+                if (mi.DownloadStatus == 0 && DateTime.Now >= mi.NextRetryTime)
+                {
+                    int imagePosition = _indexList[index];
+                    mi.DownloadStatus = 1;
+                    DownloadFullImageAsync(index, imagePosition);
+                }
+                return Size.Empty;
+            }
                 
             if (mi.TrueSize.IsEmpty)
             {
@@ -1282,15 +1399,26 @@ namespace Client.MirGraphics
                     {
                         int dataPosition = _indexList[index] + 17;
                         if (dataPosition + mi.Length > _fStream.Length)
-                            return Size.Empty;
+                        {
+                            // 流式加载：数据不完整，触发下载
+                            if (Settings.MicroClientEnabled && ResourceHelper.ServerActive)
+                            {
+                                if (mi.DownloadStatus == 0 && DateTime.Now >= mi.NextRetryTime)
+                                {
+                                    mi.DownloadStatus = 1;
+                                    DownloadImageAsync(index, mi);
+                                }
+                            }
+                            return new Size(mi.Width, mi.Height); // 返回头信息中的大小
+                        }
                         
                         _fStream.Seek(dataPosition, SeekOrigin.Begin);
                         mi.CreateTexture(_reader);
                     }
                     catch
                     {
-                        // 文件读取失败，返回空
-                        return Size.Empty;
+                        // 文件读取失败，返回头信息中的大小
+                        return new Size(mi.Width, mi.Height);
                     }
                 }
                 return mi.GetTrueSize();
@@ -1572,6 +1700,22 @@ namespace Client.MirGraphics
             set => _nextRetryTime = value;
         }
 
+        /// <summary>
+        /// 无参构造函数，用于创建空的 MImage 对象（流式加载时使用）
+        /// </summary>
+        public MImage()
+        {
+            Width = 0;
+            Height = 0;
+            X = 0;
+            Y = 0;
+            ShadowX = 0;
+            ShadowY = 0;
+            Shadow = 0;
+            Length = 0;
+            HasMask = false;
+        }
+
         public MImage(BinaryReader reader)
         {
             //read layer 1
@@ -1595,6 +1739,26 @@ namespace Client.MirGraphics
                 MaskY = reader.ReadInt16();
                 MaskLength = reader.ReadInt32();
             }
+        }
+
+        /// <summary>
+        /// 从下载结果创建 MImage 对象
+        /// </summary>
+        /// <param name="downloadResult">下载结果</param>
+        public MImage(ImageDownloadResult downloadResult)
+        {
+            Width = downloadResult.Width;
+            Height = downloadResult.Height;
+            X = downloadResult.X;
+            Y = downloadResult.Y;
+            ShadowX = downloadResult.ShadowX;
+            ShadowY = downloadResult.ShadowY;
+            Shadow = downloadResult.Shadow;
+            Length = downloadResult.Length;
+            
+            // 检查是否有 Mask 层（高位为1）
+            HasMask = ((Shadow >> 7) == 1);
+            // 注意：流式加载暂不支持 Mask 层的完整处理
         }
 
         /// <summary>
@@ -1690,7 +1854,6 @@ namespace Client.MirGraphics
 
             DXManager.TextureList.Add(this);
             TextureValid = true;
-            _downloadStatus = 2; // 标记为完成
 
             CleanTime = CMain.Time + Settings.CleanDelay;
         }
