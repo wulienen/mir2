@@ -39,11 +39,14 @@ internal static class Program
 
     private static void BuildLibraries(string source, string output, AssetManifest manifest)
     {
-        string dataPath = Path.Combine(source, "Data");
-        if (!Directory.Exists(dataPath))
+        string dataPath = ResolveLibraryDataPath(source);
+        if (dataPath == null)
         {
+            Console.Error.WriteLine($"No Data or Data_Full library directory found under: {source}");
             return;
         }
+
+        Console.WriteLine($"Library source: {dataPath}");
 
         foreach (string file in Directory.GetFiles(dataPath, "*.Lib", SearchOption.AllDirectories))
         {
@@ -68,6 +71,23 @@ internal static class Program
         }
     }
 
+    private static string ResolveLibraryDataPath(string source)
+    {
+        string fullDataPath = Path.Combine(source, "Data_Full");
+        if (Directory.Exists(fullDataPath) && Directory.EnumerateFiles(fullDataPath, "*.Lib", SearchOption.AllDirectories).Any())
+        {
+            return fullDataPath;
+        }
+
+        string dataPath = Path.Combine(source, "Data");
+        if (Directory.Exists(dataPath) && Directory.EnumerateFiles(dataPath, "*.Lib", SearchOption.AllDirectories).Any())
+        {
+            return dataPath;
+        }
+
+        return null;
+    }
+
     private static void BuildMaps(string source, string output, AssetManifest manifest)
     {
         string mapPath = Path.Combine(source, "Map");
@@ -83,20 +103,28 @@ internal static class Program
             string chunkRoot = Path.Combine(mapRoot, StreamingAssetConstants.MapChunksDirectory);
             Directory.CreateDirectory(chunkRoot);
 
-            MapManifest mapManifest = StreamingMapReader.ReadMap(file, id, chunkRoot, StreamingAssetConstants.DefaultMapChunkSize);
-            string manifestPath = Path.Combine(mapRoot, StreamingAssetConstants.ManifestFileName);
-            StreamingAssetIO.WriteJson(manifestPath, mapManifest);
-
-            using FileStream stream = File.OpenRead(file);
-            manifest.Maps.Add(new AssetMapRecord
+            try
             {
-                Id = id,
-                ManifestPath = ToWebPath(Path.GetRelativePath(output, manifestPath)),
-                Width = mapManifest.Width,
-                Height = mapManifest.Height,
-                Length = stream.Length,
-                Hash = StreamingAssetIO.ComputeSha256(stream)
-            });
+                MapManifest mapManifest = StreamingMapReader.ReadMap(file, id, chunkRoot, StreamingAssetConstants.DefaultMapChunkSize);
+                string manifestPath = Path.Combine(mapRoot, StreamingAssetConstants.ManifestFileName);
+                StreamingAssetIO.WriteJson(manifestPath, mapManifest);
+
+                using FileStream stream = File.OpenRead(file);
+                manifest.Maps.Add(new AssetMapRecord
+                {
+                    Id = id,
+                    ManifestPath = ToWebPath(Path.GetRelativePath(output, manifestPath)),
+                    Width = mapManifest.Width,
+                    Height = mapManifest.Height,
+                    Length = stream.Length,
+                    Hash = StreamingAssetIO.ComputeSha256(stream)
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Failed to build map asset: {file}");
+                Console.Error.WriteLine(ex.Message);
+            }
         }
     }
 
@@ -473,7 +501,6 @@ internal sealed class MapData
             Cells[x, y].FrontIndex = (short)(_bytes[offset++] + 2);
             Cells[x, y].Light = _bytes[offset++];
             Cells[x, y].Unknown = _bytes[offset++];
-            offset++;
 
             if (Cells[x, y].FrontIndex == 102) Cells[x, y].FrontIndex = 90;
             if (Cells[x, y].FrontIndex >= 255) Cells[x, y].FrontIndex = -1;
@@ -717,7 +744,6 @@ internal sealed class MapData
                 Cells[x, y].BackImage = (Cells[x, y].BackImage & 0x7FFF) | 0x20000000;
             }
 
-            offset++;
             SetFishing(x, y);
         }
     }
