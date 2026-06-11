@@ -1,4 +1,5 @@
 ﻿using Client.MirSounds.Libraries;
+using Client.Streaming;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 
@@ -14,6 +15,8 @@ namespace Client.MirSounds
         private static LoopProvider _music;
         private static WaveOutEvent _OneShots;
         private static MixingSampleProvider mixer;
+        private static bool _retryMusic;
+        private static bool _clearEmptySoundCache;
 
         private static int _vol;
         private static int _musicVol;
@@ -57,6 +60,7 @@ namespace Client.MirSounds
             };
 
             SoundList.LoadSoundList();
+            AssetManager.AssetsUpdated += OnAssetsUpdated;
         }
 
         public static void Create()
@@ -93,10 +97,10 @@ namespace Client.MirSounds
 
             if (!loop)
             {
-                if (!_cachedOneShots.TryGetValue(index, out CachedSound cachedSound))
+                if (!_cachedOneShots.TryGetValue(index, out CachedSound cachedSound) || cachedSound.AudioData == null)
                 {
                     cachedSound = new CachedSound(index, _indexList[index]);
-                    _cachedOneShots.Add(index, cachedSound);
+                    _cachedOneShots[index] = cachedSound;
                 }
 
                 if (cachedSound.AudioData?.Length > 0)
@@ -129,7 +133,16 @@ namespace Client.MirSounds
         {
             StopMusic();
 
-            if (_indexList.TryGetValue(index, out string value))
+            if (!_indexList.TryGetValue(index, out string value))
+            {
+                value = index > 20000 ?
+                    string.Format("M{0:0}-{1:0}", (index - 20000) / 10, index % 10) :
+                    string.Format("{0:000}-{1:0}", index / 10, index % 10);
+
+                _indexList[index] = value;
+            }
+
+            if (!string.IsNullOrEmpty(value))
             {
                 _music = LoopProvider.TryCreate(index, value, MusicVol, loop);
             }
@@ -139,10 +152,23 @@ namespace Client.MirSounds
         {
             _music?.Stop();
             _music?.Dispose();
+            _music = null;
         }
 
         public static void ProcessDelayedSounds()
         {
+            if (_retryMusic)
+            {
+                _retryMusic = false;
+                RetryMusic();
+            }
+
+            if (_clearEmptySoundCache)
+            {
+                _clearEmptySoundCache = false;
+                ClearEmptySoundCache();
+            }
+
             if (_delayList.Count == 0) return;
 
             var sounds = _delayList.Where(x => x.Key <= CMain.Time).ToList();
@@ -153,6 +179,29 @@ namespace Client.MirSounds
 
                 PlaySound(sound.Value);
             }
+        }
+
+        private static void OnAssetsUpdated()
+        {
+            _retryMusic = true;
+            _clearEmptySoundCache = true;
+        }
+
+        private static void ClearEmptySoundCache()
+        {
+            List<int> emptySounds = _cachedOneShots
+                .Where(x => x.Value.AudioData == null)
+                .Select(x => x.Key)
+                .ToList();
+
+            emptySounds.ForEach(key => _cachedOneShots.Remove(key));
+        }
+
+        private static void RetryMusic()
+        {
+            if (_music != null || SoundList.Music <= 0) return;
+
+            PlayMusic(SoundList.Music, true);
         }
 
         private static void AdjustAllVolumes()

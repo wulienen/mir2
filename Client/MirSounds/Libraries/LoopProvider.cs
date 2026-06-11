@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Client.Streaming;
 using NAudio.Wave;
 
 namespace Client.MirSounds.Libraries
@@ -45,10 +46,14 @@ namespace Client.MirSounds.Libraries
             {
                 return new LoopProvider(index, fileName, volume, loop);
             }
-            else
+
+            if (AssetManager.TryGetCachedSoundPath(fileName, SoundManager.SupportedFileTypes, out string cachedFileName))
             {
-                return null;
+                return new LoopProvider(index, cachedFileName, volume, loop);
             }
+
+            AssetManager.QueueSound(fileName, SoundManager.SupportedFileTypes);
+            return null;
         }
 
         public LoopProvider(int index, string fileName, int volume, bool loop)

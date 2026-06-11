@@ -4,6 +4,8 @@ using System.IO.Compression;
 using Frame = Client.MirObjects.Frame;
 using Client.MirObjects;
 using System.Text.RegularExpressions;
+using Client.Streaming;
+using Shared.StreamingAssets;
 
 namespace Client.MirGraphics
 {
@@ -200,11 +202,19 @@ namespace Client.MirGraphics
                 Directory.CreateDirectory(path);
             }
 
-            var allFiles = Directory.GetFiles(path, "*" + suffix + MLibrary.Extention, SearchOption.TopDirectoryOnly).OrderBy(x => int.Parse(Regex.Match(x, @"\d+").Value));
+            var allFiles = Directory.GetFiles(path, "*" + suffix + MLibrary.Extention, SearchOption.TopDirectoryOnly)
+                .OrderBy(x => int.Parse(Regex.Match(x, @"\d+").Value))
+                .ToList();
 
-            var lastFile = allFiles.Count() > 0 ? Path.GetFileName(allFiles.Last()) : "0";
+            var lastFile = allFiles.Count > 0 ? Path.GetFileName(allFiles.Last()) : "0";
 
-            var count = int.Parse(Regex.Match(lastFile, @"\d+").Value) + 1;
+            var count = allFiles.Count > 0 ? int.Parse(Regex.Match(lastFile, @"\d+").Value) + 1 : 0;
+            if (count == 0 && AssetManager.Enabled)
+            {
+                count = AssetManager.GetStreamingLibraryCount(path, suffix);
+            }
+
+            if (count <= 0) count = 1;
 
             library = new MLibrary[count];
 
@@ -485,6 +495,10 @@ namespace Client.MirGraphics
         private int[] _indexList;
         private int _count;
         private bool _initialized;
+        private bool _streaming;
+        private string _streamingId;
+        private LibraryManifest _streamingManifest;
+        private Dictionary<int, LibraryImageRecord> _streamingImages;
 
         private BinaryReader _reader;
         private FileStream _fStream;
@@ -503,8 +517,16 @@ namespace Client.MirGraphics
         {
             _initialized = true;
 
-            if (!File.Exists(_fileName))
+            if (!Settings.PreferLocalAssets && InitializeStreaming())
+            {
                 return;
+            }
+
+            if (!File.Exists(_fileName))
+            {
+                InitializeStreaming();
+                return;
+            }
 
             try
             {
@@ -554,6 +576,35 @@ namespace Client.MirGraphics
             }
         }
 
+        private bool InitializeStreaming()
+        {
+            if (!AssetManager.Enabled) return false;
+
+            _streamingId = AssetManager.ToLibraryId(_fileName);
+            _streamingManifest = AssetManager.GetLibraryManifest(_streamingId);
+            if (_streamingManifest == null) return false;
+
+            _streaming = true;
+            _count = _streamingManifest.ImageCount;
+            _images = new MImage[_count];
+            _streamingImages = _streamingManifest.Images.ToDictionary(x => x.Index, x => x);
+
+            if (_streamingManifest.Frames.Count > 0)
+            {
+                _frames = new FrameSet();
+                foreach (LibraryFrameRecord record in _streamingManifest.Frames)
+                {
+                    _frames.Add((MirAction)record.Action, new Frame(record.Start, record.Count, record.Skip, record.Interval, record.EffectStart, record.EffectCount, record.EffectSkip, record.EffectInterval)
+                    {
+                        Reverse = record.Reverse,
+                        Blend = record.Blend
+                    });
+                }
+            }
+
+            return true;
+        }
+
         private bool CheckImage(int index)
         {
             if (!_initialized)
@@ -561,6 +612,9 @@ namespace Client.MirGraphics
 
             if (_images == null || index < 0 || index >= _images.Length)
                 return false;
+
+            if (_streaming)
+                return CheckStreamingImage(index);
 
             if (_images[index] == null)
             {
@@ -579,12 +633,51 @@ namespace Client.MirGraphics
             return true;
         }
 
+        private bool CheckStreamingImage(int index)
+        {
+            if (_images[index] == null)
+            {
+                if (!_streamingImages.TryGetValue(index, out LibraryImageRecord record) || string.IsNullOrEmpty(record.Path))
+                    return false;
+
+                if (!AssetManager.TryReadCachedLibraryImage(_streamingId, record, out StreamingLibraryImageChunk chunk))
+                {
+                    AssetManager.QueueLibraryImage(_streamingId, record);
+                    return false;
+                }
+
+                _images[index] = new MImage(chunk);
+            }
+
+            MImage mi = _images[index];
+            if (!mi.TextureValid)
+            {
+                if (mi.Width == 0 || mi.Height == 0)
+                    return false;
+
+                mi.CreateTexture();
+            }
+
+            return true;
+        }
+
         public Point GetOffSet(int index)
         {
             if (!_initialized) Initialize();
 
             if (_images == null || index < 0 || index >= _images.Length)
                 return Point.Empty;
+
+            if (_streaming)
+            {
+                if (_images[index] != null)
+                    return new Point(_images[index].X, _images[index].Y);
+
+                if (_streamingImages.TryGetValue(index, out LibraryImageRecord record))
+                    return new Point(record.X, record.Y);
+
+                return Point.Empty;
+            }
 
             if (_images[index] == null)
             {
@@ -599,6 +692,17 @@ namespace Client.MirGraphics
             if (!_initialized) Initialize();
             if (_images == null || index < 0 || index >= _images.Length)
                 return Size.Empty;
+
+            if (_streaming)
+            {
+                if (_images[index] != null)
+                    return new Size(_images[index].Width, _images[index].Height);
+
+                if (_streamingImages.TryGetValue(index, out LibraryImageRecord record))
+                    return new Size(record.Width, record.Height);
+
+                return Size.Empty;
+            }
 
             if (_images[index] == null)
             {
@@ -615,6 +719,14 @@ namespace Client.MirGraphics
 
             if (_images == null || index < 0 || index >= _images.Length)
                 return Size.Empty;
+
+            if (_streaming)
+            {
+                if (!CheckImage(index))
+                    return Size.Empty;
+
+                return _images[index].TrueSize.IsEmpty ? _images[index].GetTrueSize() : _images[index].TrueSize;
+            }
 
             if (_images[index] == null)
             {
@@ -876,6 +988,8 @@ namespace Client.MirGraphics
         public Size TrueSize;
 
         public unsafe byte* Data;
+        private byte[] _streamingImageData;
+        private byte[] _streamingMaskData;
 
         public MImage(BinaryReader reader)
         {
@@ -902,6 +1016,26 @@ namespace Client.MirGraphics
             }
         }
 
+        public MImage(StreamingLibraryImageChunk chunk)
+        {
+            Width = chunk.Width;
+            Height = chunk.Height;
+            X = chunk.X;
+            Y = chunk.Y;
+            ShadowX = chunk.ShadowX;
+            ShadowY = chunk.ShadowY;
+            Shadow = chunk.Shadow;
+            Length = chunk.ImageData.Length;
+            HasMask = chunk.HasMask;
+            MaskWidth = chunk.MaskWidth;
+            MaskHeight = chunk.MaskHeight;
+            MaskX = chunk.MaskX;
+            MaskY = chunk.MaskY;
+            MaskLength = chunk.MaskData?.Length ?? 0;
+            _streamingImageData = chunk.ImageData;
+            _streamingMaskData = chunk.MaskData;
+        }
+
         public unsafe void CreateTexture(BinaryReader reader)
         {
             int w = Width;// + (4 - Width % 4) % 4;
@@ -926,6 +1060,39 @@ namespace Client.MirGraphics
                 stream = MaskImage.LockRectangle(0, LockFlags.Discard);
 
                 DecompressImage(reader.ReadBytes(Length), stream.Data);
+
+                stream.Data.Dispose();
+                MaskImage.UnlockRectangle(0);
+            }
+
+            DXManager.TextureList.Add(this);
+            TextureValid = true;
+
+            CleanTime = CMain.Time + Settings.CleanDelay;
+        }
+
+        public unsafe void CreateTexture()
+        {
+            if (_streamingImageData == null) return;
+
+            int w = Width;
+            int h = Height;
+
+            Image = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
+            DataRectangle stream = Image.LockRectangle(0, LockFlags.Discard);
+            Data = (byte*)stream.Data.DataPointer;
+
+            DecompressImage(_streamingImageData, stream.Data);
+
+            stream.Data.Dispose();
+            Image.UnlockRectangle(0);
+
+            if (HasMask && _streamingMaskData != null)
+            {
+                MaskImage = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
+                stream = MaskImage.LockRectangle(0, LockFlags.Discard);
+
+                DecompressImage(_streamingMaskData, stream.Data);
 
                 stream.Data.Dispose();
                 MaskImage.UnlockRectangle(0);

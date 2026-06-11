@@ -12,6 +12,7 @@ using Effect = Client.MirObjects.Effect;
 using Client.MirScenes.Dialogs;
 using Client.Utils;
 using Client.MirGraphics.Particles;
+using Client.Streaming;
 
 namespace Client.MirScenes
 {
@@ -10359,6 +10360,7 @@ namespace Client.MirScenes
         public bool FloorValid, LightsValid;
 
         public long OutputDelay;
+        private StreamingMapState _streamingMap;
 
         private static bool _awakeningAction;
         public static bool AwakeningAction
@@ -10442,10 +10444,22 @@ namespace Client.MirScenes
             MapObject.TargetObjectID = 0;
             MapObject.MagicObjectID = 0;
 
-            MapReader Map = new MapReader(FileName);
-            M2CellInfo = Map.MapCells;
-            Width = Map.Width;
-            Height = Map.Height;
+            _streamingMap = null;
+            bool useLocalMap = File.Exists(FileName) && Settings.PreferLocalAssets;
+            if (useLocalMap || !StreamingMapState.TryCreate(FileName, out _streamingMap))
+            {
+                MapReader Map = new MapReader(FileName);
+                M2CellInfo = Map.MapCells;
+                Width = Map.Width;
+                Height = Map.Height;
+            }
+            else
+            {
+                Width = _streamingMap.Width;
+                Height = _streamingMap.Height;
+                M2CellInfo = _streamingMap.CreatePlaceholderCells();
+                _streamingMap.EnsureVisibleChunks(this);
+            }
 
             PathFinder = new PathFinder(this);
 
@@ -10472,6 +10486,7 @@ namespace Client.MirScenes
         public void Process()
         {
             Processdoors();
+            _streamingMap?.EnsureVisibleChunks(this);
             User.Process();
             for (int i = ObjectsList.Count - 1; i >= 0; i--)
             {
@@ -12073,6 +12088,8 @@ namespace Client.MirScenes
 
         public bool EmptyCell(Point p)
         {
+            if (!IsCellLoaded(p)) return false;
+
             if ((M2CellInfo[p.X, p.Y].BackImage & 0x20000000) != 0 || (M2CellInfo[p.X, p.Y].FrontImage & 0x8000) != 0)
                 return false;
 
@@ -12116,6 +12133,8 @@ namespace Client.MirScenes
 
         private bool CheckDoorOpen(Point p)
         {
+            if (!IsCellLoaded(p)) return false;
+
             if (M2CellInfo[p.X, p.Y].DoorIndex == 0) return true;
             Door DoorInfo = GetDoor(M2CellInfo[p.X, p.Y].DoorIndex);
             if (DoorInfo == null) return false;//if the door doesnt exist then it isnt even being shown on screen (and cant be open lol)
@@ -12181,6 +12200,8 @@ namespace Client.MirScenes
 
             Point point = Functions.PointMove(User.CurrentLocation, dir, 3);
 
+            if (!IsCellLoaded(point)) return false;
+
             if (!M2CellInfo[point.X, point.Y].FishingCell) return false;
 
             return true;
@@ -12207,7 +12228,16 @@ namespace Client.MirScenes
         public bool ValidPoint(Point p)
         {
             //GameScene.Scene.ChatDialog.ReceiveChat(string.Format("cell: {0}", (M2CellInfo[p.X, p.Y].BackImage & 0x20000000)), ChatType.Hint);
+            if (!IsCellLoaded(p)) return false;
+
             return (M2CellInfo[p.X, p.Y].BackImage & 0x20000000) == 0;
+        }
+        private bool IsCellLoaded(Point p)
+        {
+            if (M2CellInfo == null || p.X < 0 || p.Y < 0 || p.X >= Width || p.Y >= Height)
+                return false;
+
+            return _streamingMap == null || _streamingMap.IsLoaded(p);
         }
         public bool HasTarget(Point p)
         {
@@ -12252,6 +12282,7 @@ namespace Client.MirScenes
                 NextAction = 0;
 
                 M2CellInfo = null;
+                _streamingMap = null;
                 Width = 0;
                 Height = 0;
 

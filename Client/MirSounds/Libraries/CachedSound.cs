@@ -1,5 +1,6 @@
 ﻿using NAudio.Wave;
 using System;
+using Client.Streaming;
 
 namespace Client.MirSounds.Libraries
 {
@@ -34,18 +35,32 @@ namespace Client.MirSounds.Libraries
             if (SoundManager.SupportedFileTypes.Contains(fileType) &&
                 File.Exists(fileName))
             {
-                using (var audioFileReader = new AudioFileReader(fileName))
+                LoadFromFile(fileName);
+                return;
+            }
+
+            if (AssetManager.TryGetCachedSoundPath(fileName, SoundManager.SupportedFileTypes, out string cachedFileName))
+            {
+                LoadFromFile(cachedFileName);
+                return;
+            }
+
+            AssetManager.QueueSound(fileName, SoundManager.SupportedFileTypes);
+        }
+
+        private void LoadFromFile(string fileName)
+        {
+            using (var audioFileReader = new AudioFileReader(fileName))
+            {
+                WaveFormat = audioFileReader.WaveFormat;
+                var wholeFile = new List<float>((int)(audioFileReader.Length / 4));
+                var readBuffer = new float[audioFileReader.WaveFormat.SampleRate * audioFileReader.WaveFormat.Channels];
+                int samplesRead;
+                while ((samplesRead = audioFileReader.Read(readBuffer, 0, readBuffer.Length)) > 0)
                 {
-                    WaveFormat = audioFileReader.WaveFormat;
-                    var wholeFile = new List<float>((int)(audioFileReader.Length / 4));
-                    var readBuffer = new float[audioFileReader.WaveFormat.SampleRate * audioFileReader.WaveFormat.Channels];
-                    int samplesRead;
-                    while ((samplesRead = audioFileReader.Read(readBuffer, 0, readBuffer.Length)) > 0)
-                    {
-                        wholeFile.AddRange(readBuffer.Take(samplesRead));
-                    }
-                    AudioData = wholeFile.ToArray();
+                    wholeFile.AddRange(readBuffer.Take(samplesRead));
                 }
+                AudioData = wholeFile.ToArray();
             }
         }
     }

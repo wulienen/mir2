@@ -1,5 +1,7 @@
 ﻿using Client.MirSounds;
 
+using Client.Streaming;
+
 namespace Client
 {
     class Settings
@@ -200,6 +202,13 @@ namespace Client
         public static bool P_AutoStart = false;
         public static int P_Concurrency = 1;
 
+        //Streaming Assets
+        public static bool StreamingEnabled = true;
+        public static string AssetBaseUrl = @"http://127.0.0.1:8088/assets/v1/";
+        public static bool PreferLocalAssets = true;
+        public static int AssetDownloadConcurrency = 4;
+        public static string AssetCachePath = @".\Cache\Assets\";
+
         public static void Load()
         {
 
@@ -301,10 +310,18 @@ namespace Client
             P_BrowserAddress = Reader.ReadString("Launcher", "Browser", P_BrowserAddress);
             P_Concurrency = Reader.ReadInt32("Launcher", "ConcurrentDownloads", P_Concurrency);
 
+            //Streaming Assets
+            StreamingEnabled = Reader.ReadBoolean("Streaming", "Enabled", StreamingEnabled);
+            AssetBaseUrl = Reader.ReadString("Streaming", "AssetBaseUrl", AssetBaseUrl);
+            PreferLocalAssets = Reader.ReadBoolean("Streaming", "PreferLocalAssets", PreferLocalAssets);
+            AssetDownloadConcurrency = Reader.ReadInt32("Streaming", "ConcurrentDownloads", AssetDownloadConcurrency);
+            AssetCachePath = Reader.ReadString("Streaming", "CachePath", AssetCachePath);
 
             if (!P_Host.EndsWith("/")) P_Host += "/";
             if (P_Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) P_Host = P_Host.Insert(0, "http://");
             if (P_BrowserAddress.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) P_BrowserAddress = P_BrowserAddress.Insert(0, "http://");
+            if (!AssetBaseUrl.EndsWith("/")) AssetBaseUrl += "/";
+            if (AssetBaseUrl.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) AssetBaseUrl = AssetBaseUrl.Insert(0, "http://");
 
             //Temp check to update everyones address
             if (P_Host.ToLower() == "http://mirfiles.co.uk/mir2/cmir/patch/")
@@ -314,6 +331,8 @@ namespace Client
 
             if (P_Concurrency < 1) P_Concurrency = 1;
             if (P_Concurrency > 100) P_Concurrency = 100;
+            if (AssetDownloadConcurrency < 1) AssetDownloadConcurrency = 1;
+            if (AssetDownloadConcurrency > 32) AssetDownloadConcurrency = 32;
 
             try
             {
@@ -329,6 +348,8 @@ namespace Client
             {
                 CMain.SaveError($"Load Client Language Error:{ex.Message}");
             }
+
+            AssetManager.Initialize();
             
         }
 
@@ -411,6 +432,13 @@ namespace Client
             Reader.Write("Launcher", "Browser", P_BrowserAddress);
             Reader.Write("Launcher", "AutoStart", P_AutoStart);
             Reader.Write("Launcher", "ConcurrentDownloads", P_Concurrency);
+
+            //Streaming Assets
+            Reader.Write("Streaming", "Enabled", StreamingEnabled);
+            Reader.Write("Streaming", "AssetBaseUrl", AssetBaseUrl);
+            Reader.Write("Streaming", "PreferLocalAssets", PreferLocalAssets);
+            Reader.Write("Streaming", "ConcurrentDownloads", AssetDownloadConcurrency);
+            Reader.Write("Streaming", "CachePath", AssetCachePath);
         }
 
         public static void LoadTrackedQuests(string charName)
