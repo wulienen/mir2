@@ -7,6 +7,13 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
+        if (args.Length > 0 && string.Equals(args[0], "fix-manifest", StringComparison.OrdinalIgnoreCase))
+        {
+            string existingOutput = Path.GetFullPath(args.Length > 1 ? args[1] : "StreamingAssets");
+            string newVersion = args.Length > 2 ? args[2] : DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            return FixManifest(existingOutput, newVersion);
+        }
+
         string source = Path.GetFullPath(args.Length > 0 ? args[0] : Path.Combine("Build", "Client", "Debug"));
         string output = Path.GetFullPath(args.Length > 1 ? args[1] : "StreamingAssets");
         string version = args.Length > 2 ? args[2] : DateTime.UtcNow.ToString("yyyyMMddHHmmss");
@@ -37,6 +44,51 @@ internal static class Program
         return 0;
     }
 
+    private static int FixManifest(string output, string version)
+    {
+        string manifestPath = Path.Combine(output, StreamingAssetConstants.ManifestFileName);
+        if (!File.Exists(manifestPath))
+        {
+            Console.Error.WriteLine($"Manifest not found: {manifestPath}");
+            return 1;
+        }
+
+        AssetManifest manifest = StreamingAssetIO.ReadJson<AssetManifest>(manifestPath);
+        manifest.Version = version;
+        manifest.CreatedUtc = DateTime.UtcNow;
+
+        foreach (AssetLibraryRecord record in manifest.Libraries)
+        {
+            RefreshRecordHash(output, record.ManifestPath, hash => record.Hash = hash, length => record.Length = length);
+        }
+
+        foreach (AssetMapRecord record in manifest.Maps)
+        {
+            RefreshRecordHash(output, record.ManifestPath, hash => record.Hash = hash, length => record.Length = length);
+        }
+
+        StreamingAssetIO.WriteJson(manifestPath, manifest);
+
+        Console.WriteLine($"Manifest fixed at {manifestPath}");
+        Console.WriteLine($"Version: {manifest.Version}");
+        Console.WriteLine($"Libraries: {manifest.Libraries.Count}, Maps: {manifest.Maps.Count}, Sounds: {manifest.Sounds.Count}");
+        return 0;
+    }
+
+    private static void RefreshRecordHash(string output, string relativePath, Action<string> setHash, Action<long> setLength)
+    {
+        string path = Path.Combine(output, relativePath.Replace('/', Path.DirectorySeparatorChar));
+        if (!File.Exists(path))
+        {
+            Console.Error.WriteLine($"Referenced manifest not found: {path}");
+            return;
+        }
+
+        using FileStream stream = File.OpenRead(path);
+        setLength(stream.Length);
+        setHash(StreamingAssetIO.ComputeSha256(stream));
+    }
+
     private static void BuildLibraries(string source, string output, AssetManifest manifest)
     {
         string dataPath = ResolveLibraryDataPath(source);
@@ -59,7 +111,7 @@ internal static class Program
             string manifestPath = Path.Combine(libraryRoot, StreamingAssetConstants.ManifestFileName);
             StreamingAssetIO.WriteJson(manifestPath, libraryManifest);
 
-            using FileStream stream = File.OpenRead(file);
+            using FileStream stream = File.OpenRead(manifestPath);
             manifest.Libraries.Add(new AssetLibraryRecord
             {
                 Id = id,
@@ -109,7 +161,7 @@ internal static class Program
                 string manifestPath = Path.Combine(mapRoot, StreamingAssetConstants.ManifestFileName);
                 StreamingAssetIO.WriteJson(manifestPath, mapManifest);
 
-                using FileStream stream = File.OpenRead(file);
+                using FileStream stream = File.OpenRead(manifestPath);
                 manifest.Maps.Add(new AssetMapRecord
                 {
                     Id = id,

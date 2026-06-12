@@ -226,22 +226,22 @@ namespace Client.MirGraphics
 
         static void LoadLibraries()
         {
-            ChrSel.Initialize();
+            ChrSel.Initialize(true, true);
             Progress++;
 
-            Prguse.Initialize();
+            Prguse.Initialize(true, true);
             Progress++;
 
-            Prguse2.Initialize();
+            Prguse2.Initialize(true, true);
             Progress++;
 
-            Prguse3.Initialize();
+            Prguse3.Initialize(true, true);
             Progress++;
 
-            UI_32bit.Initialize();
+            UI_32bit.Initialize(true, true);
             Progress++;
 
-            Title.Initialize();
+            Title.Initialize(true, true);
             Progress++;
         }
 
@@ -253,56 +253,56 @@ namespace Client.MirGraphics
                 CHumEffect.Length + AHumEffect.Length + ARHumEffect.Length + Mounts.Length + Fishing.Length + Pets.Length +
                 Transform.Length + TransformMounts.Length + TransformEffect.Length + TransformWeaponEffect.Length + 19;
 
-            Dragon.Initialize();
+            Dragon.Initialize(false);
             Progress++;
 
-            BuffIcon.Initialize();
+            BuffIcon.Initialize(false);
             Progress++;
 
-            Help.Initialize();
+            Help.Initialize(false);
             Progress++;
 
-            MiniMap.Initialize();
+            MiniMap.Initialize(false);
             Progress++;
-            MapLinkIcon.Initialize();
-            Progress++;
-
-            MagIcon.Initialize();
-            Progress++;
-            MagIcon2.Initialize();
+            MapLinkIcon.Initialize(false);
             Progress++;
 
-            Magic.Initialize();
+            MagIcon.Initialize(false);
             Progress++;
-            Magic2.Initialize();
-            Progress++;
-            Magic3.Initialize();
-            Progress++;
-            MagicC.Initialize();
+            MagIcon2.Initialize(false);
             Progress++;
 
-            Effect.Initialize();
+            Magic.Initialize(false);
+            Progress++;
+            Magic2.Initialize(false);
+            Progress++;
+            Magic3.Initialize(false);
+            Progress++;
+            MagicC.Initialize(false);
             Progress++;
 
-            Weather.Initialize();
+            Effect.Initialize(false);
             Progress++;
 
-            GuildSkill.Initialize();
+            Weather.Initialize(false);
             Progress++;
 
-            Background.Initialize();
+            GuildSkill.Initialize(false);
             Progress++;
 
-            Deco.Initialize();
+            Background.Initialize(false);
             Progress++;
 
-            Items.Initialize();
+            Deco.Initialize(false);
             Progress++;
-            StateItems.Initialize();
+
+            Items.Initialize(false);
             Progress++;
-            FloorItems.Initialize();
+            StateItems.Initialize(false);
             Progress++;
-            Items_Tooltip_32bit.Initialize();
+            FloorItems.Initialize(false);
+            Progress++;
+            Items_Tooltip_32bit.Initialize(false);
             Progress++;
 
             for (int i = 0; i < MapLibs.Length; i++)
@@ -310,171 +310,171 @@ namespace Client.MirGraphics
                 if (MapLibs[i] == null)
                     MapLibs[i] = new MLibrary("");
                 else
-                    MapLibs[i].Initialize();
+                    MapLibs[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Monsters.Length; i++)
             {
-                Monsters[i].Initialize();
+                Monsters[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Gates.Length; i++)
             {
-                Gates[i].Initialize();
+                Gates[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Flags.Length; i++)
             {
-                Flags[i].Initialize();
+                Flags[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Siege.Length; i++)
             {
-                Siege[i].Initialize();
+                Siege[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < NPCs.Length; i++)
             {
-                NPCs[i].Initialize();
+                NPCs[i].Initialize(false);
                 Progress++;
             }
 
 
             for (int i = 0; i < CArmours.Length; i++)
             {
-                CArmours[i].Initialize();
+                CArmours[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < CHair.Length; i++)
             {
-                CHair[i].Initialize();
+                CHair[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < CWeapons.Length; i++)
             {
-                CWeapons[i].Initialize();
+                CWeapons[i].Initialize(false);
                 Progress++;
             }
 
 			for (int i = 0; i < CWeaponEffect.Length; i++)
 			{
-				CWeaponEffect[i].Initialize();
+				CWeaponEffect[i].Initialize(false);
 				Progress++;
 			}
 
 			for (int i = 0; i < AArmours.Length; i++)
             {
-                AArmours[i].Initialize();
+                AArmours[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < AHair.Length; i++)
             {
-                AHair[i].Initialize();
+                AHair[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < AWeaponsL.Length; i++)
             {
-                AWeaponsL[i].Initialize();
+                AWeaponsL[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < AWeaponsR.Length; i++)
             {
-                AWeaponsR[i].Initialize();
+                AWeaponsR[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < ARArmours.Length; i++)
             {
-                ARArmours[i].Initialize();
+                ARArmours[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < ARHair.Length; i++)
             {
-                ARHair[i].Initialize();
+                ARHair[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < ARWeapons.Length; i++)
             {
-                ARWeapons[i].Initialize();
+                ARWeapons[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < ARWeaponsS.Length; i++)
             {
-                ARWeaponsS[i].Initialize();
+                ARWeaponsS[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < CHumEffect.Length; i++)
             {
-                CHumEffect[i].Initialize();
+                CHumEffect[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < AHumEffect.Length; i++)
             {
-                AHumEffect[i].Initialize();
+                AHumEffect[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < ARHumEffect.Length; i++)
             {
-                ARHumEffect[i].Initialize();
+                ARHumEffect[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Mounts.Length; i++)
             {
-                Mounts[i].Initialize();
+                Mounts[i].Initialize(false);
                 Progress++;
             }
 
 
             for (int i = 0; i < Fishing.Length; i++)
             {
-                Fishing[i].Initialize();
+                Fishing[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Pets.Length; i++)
             {
-                Pets[i].Initialize();
+                Pets[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < Transform.Length; i++)
             {
-                Transform[i].Initialize();
+                Transform[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < TransformEffect.Length; i++)
             {
-                TransformEffect[i].Initialize();
+                TransformEffect[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < TransformWeaponEffect.Length; i++)
             {
-                TransformWeaponEffect[i].Initialize();
+                TransformWeaponEffect[i].Initialize(false);
                 Progress++;
             }
 
             for (int i = 0; i < TransformMounts.Length; i++)
             {
-                TransformMounts[i].Initialize();
+                TransformMounts[i].Initialize(false);
                 Progress++;
             }
             
@@ -513,18 +513,33 @@ namespace Client.MirGraphics
             _fileName = Path.ChangeExtension(filename, Extention);
         }
 
-        public void Initialize()
+        public void Initialize(bool allowStreaming = true, bool blockingStreaming = false)
         {
+            if (_initialized) return;
+
+            bool hasLocalFile = HasUsableLocalFile();
+
+            if (!allowStreaming && !hasLocalFile)
+                return;
+
             _initialized = true;
 
-            if (!Settings.PreferLocalAssets && InitializeStreaming())
+            if (allowStreaming && !Settings.PreferLocalAssets && InitializeStreaming(blockingStreaming))
             {
                 return;
             }
 
-            if (!File.Exists(_fileName))
+            if (!hasLocalFile)
             {
-                InitializeStreaming();
+                if (allowStreaming)
+                {
+                    if (!InitializeStreaming(blockingStreaming))
+                        _initialized = false;
+                }
+                else
+                {
+                    _initialized = false;
+                }
                 return;
             }
 
@@ -535,6 +550,9 @@ namespace Client.MirGraphics
                 int currentVersion = _reader.ReadInt32();
                 if (currentVersion < 2)
                 {
+                    if (allowStreaming && TryFallbackToStreaming(blockingStreaming))
+                        return;
+
                     System.Windows.Forms.MessageBox.Show("Wrong version, expecting lib version: " + LibVersion.ToString() + " found version: " + currentVersion.ToString() + ".", _fileName, System.Windows.Forms.MessageBoxButtons.OK, System.Windows.Forms.MessageBoxIcon.Error, System.Windows.Forms.MessageBoxDefaultButton.Button1);
                     System.Windows.Forms.Application.Exit();
                     return;
@@ -569,19 +587,84 @@ namespace Client.MirGraphics
                     }
                 }
             }
-            catch (Exception)
+            catch (Exception ex)
             {
                 _initialized = false;
+
+                if (allowStreaming && TryFallbackToStreaming(blockingStreaming))
+                {
+                    CMain.SaveError($"Falling back to streaming library for {_fileName}: {ex.Message}");
+                    return;
+                }
+
                 throw;
             }
         }
 
-        private bool InitializeStreaming()
+        private bool HasUsableLocalFile()
+        {
+            try
+            {
+                FileInfo info = new FileInfo(_fileName);
+                return info.Exists && info.Length >= 8;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private bool TryFallbackToStreaming(bool blockingStreaming)
+        {
+            CloseLocalReader();
+
+            _streaming = false;
+            _streamingManifest = null;
+            _streamingImages = null;
+            _images = null;
+            _indexList = null;
+            _frames = null;
+            _count = 0;
+            _initialized = true;
+
+            if (InitializeStreaming(blockingStreaming))
+                return true;
+
+            _initialized = false;
+            return false;
+        }
+
+        private void CloseLocalReader()
+        {
+            try
+            {
+                _reader?.Close();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _fStream?.Close();
+            }
+            catch
+            {
+            }
+
+            _reader = null;
+            _fStream = null;
+        }
+
+        private bool InitializeStreaming(bool blocking)
         {
             if (!AssetManager.Enabled) return false;
 
             _streamingId = AssetManager.ToLibraryId(_fileName);
-            _streamingManifest = AssetManager.GetLibraryManifest(_streamingId);
+            _streamingManifest = blocking
+                ? AssetManager.GetLibraryManifest(_streamingId)
+                : GetCachedOrQueueStreamingManifest(_streamingId);
+
             if (_streamingManifest == null) return false;
 
             _streaming = true;
@@ -603,6 +686,15 @@ namespace Client.MirGraphics
             }
 
             return true;
+        }
+
+        private static LibraryManifest GetCachedOrQueueStreamingManifest(string streamingId)
+        {
+            if (AssetManager.TryGetCachedLibraryManifest(streamingId, out LibraryManifest manifest))
+                return manifest;
+
+            AssetManager.QueueLibraryManifest(streamingId);
+            return null;
         }
 
         private bool CheckImage(int index)

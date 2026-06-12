@@ -133,6 +133,26 @@ namespace Client.Streaming
             return GetLibraryManifestAsync(libraryId).GetAwaiter().GetResult();
         }
 
+        public static bool TryGetCachedLibraryManifest(string libraryId, out LibraryManifest manifest)
+        {
+            manifest = null;
+            if (!TryGetLibraryRecord(libraryId, out AssetLibraryRecord record)) return false;
+
+            string cachePath = Path.Combine(CacheRoot, record.ManifestPath.Replace('/', Path.DirectorySeparatorChar));
+            if (!TryReadValidCache(cachePath, record.Hash, out byte[] bytes)) return false;
+
+            manifest = JsonSerializer.Deserialize<LibraryManifest>(bytes, StreamingAssetIO.JsonOptions);
+            return manifest != null;
+        }
+
+        public static void QueueLibraryManifest(string libraryId)
+        {
+            if (!Enabled || !TryGetLibraryRecord(libraryId, out AssetLibraryRecord record)) return;
+
+            string cachePath = Path.Combine(CacheRoot, record.ManifestPath.Replace('/', Path.DirectorySeparatorChar));
+            QueueDownload(record.ManifestPath, record.Hash, cachePath);
+        }
+
         public static async Task<MapManifest> GetMapManifestAsync(string mapId)
         {
             if (!TryGetMapRecord(mapId, out AssetMapRecord record)) return null;
