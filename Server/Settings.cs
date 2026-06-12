@@ -58,7 +58,7 @@ namespace Server
         public static string StrongboxDropFilename = "00Strongbox";
         public static string BlackstoneDropFilename = "00Blackstone";
 
-        public static string Language = "English";
+        public static string Language = "Chinese";
 
         //Network
         public static string IPAddress = "127.0.0.1";

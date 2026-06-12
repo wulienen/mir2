@@ -71,7 +71,7 @@ namespace Client
 
         //Graphics
         public static bool FullScreen = true, Borderless = true, TopMost = true, MouseClip = false;
-        public static string FontName = "Arial"; //"MS Sans Serif"
+        public static string FontName = "Microsoft YaHei UI"; //"MS Sans Serif"
         public static float FontSize = 8F;
         public static bool UseMouseCursors = true;
 
@@ -160,7 +160,7 @@ namespace Client
             DisplayBodyName = false,
             NewMove = false;
 
-        public static string Language = "English";
+        public static string Language = "Chinese";
 
         public static int[,] SkillbarLocation = new int[2, 2] { { 0, 0 }, { 216, 0 } };
 

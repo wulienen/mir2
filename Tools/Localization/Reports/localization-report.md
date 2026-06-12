@@ -1,0 +1,534 @@
+# Localization Report
+
+Generated: 2026-06-12T16:14:38
+
+## Actions
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\14Wr-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Blacksmith-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Blacksmith-0103.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Blacksmith1.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet-0105.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher-0102.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher2.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\1-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\CraftsLady-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\CraftsLady.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Necklace-0105.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Necklace.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Potion-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Potion-0108.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Potion1.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Potion2.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Premium.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Ring-0105.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Ring.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Signpost-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\StableGirl-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\StableGirl.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\WiseFisher-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\WiseFisher.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Blacksmith-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\BookStore-0132.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\BookStore.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Bracelet-0141.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Bracelet.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\CraftLady-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\CraftLady.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Drapery-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Drapery.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Grocery-0.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Grocery.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Necklace-0141.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Necklace.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Pedlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Ring-0141.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\BorderVillage\Ring.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\NaturalCave\WickedTrader.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\OmaCave\Grim.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\WickedTrader-DM001.txt
+- Localized Build\Server\Debug\Envir\NPCs\BichonProvince\WickedTrader-DM011.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Armour.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Belt.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Boot.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Bracelet.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Helmet.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Manager.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Necklace.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Ring.txt
+- Localized Build\Server\Debug\Envir\NPCs\GM\GM-Weapon.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA0\GTPeddler-GA0.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA1\GTPeddler-GA1.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA2\GTPeddler-GA2.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA3\GTPeddler-GA3.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA4\GTPeddler-GA4.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA5\GTPeddler-GA5.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA6\GTPeddler-GA6.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA7\GTPeddler-GA7.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA8\GTPeddler-GA8.txt
+- Localized Build\Server\Debug\Envir\NPCs\GuildTerritory\GA9\GTPeddler-GA9.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\BugCave\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\Clothes-D608.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\11Mcft.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Blacksmith-0159.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Board.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Bracelet.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Bracelet1.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Clothes-0149.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Crafting.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Grocery-3.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Grocery.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Grocery1-3.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Grocery1.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Helmets-0149.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Helmets.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\JewelersBracelet-0149.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\JewelersBracelet-0158.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\JewelersNecklace-0158.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\JewelersRing-0158.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Necklace.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Potion-0160.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Potion-3.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Potion1.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Ring.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\MudWall\Signpost-3.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\2Are-0151.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\2Awe-0151.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\3Adr-0155.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\3Ahe-0155.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\4Adu-0153.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\7Ast-3.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\8Abr-0154.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\8Ane-0154.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\8Ari-0154.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Blacksmith1.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Bracelet.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Conquest.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Helmet.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Necklace.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Ring.txt
+- Localized Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Weaponsmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\11Pbcft.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\2Pbwe.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\3Pbdr.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\4Pbdu.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\7Pbst.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\8Pbac.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\CraftsLady.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\Jewellery.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\PastBichon\Weaponsmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\11Picft.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\2Piwe.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\3Pidr.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\4Pidu.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\7Pist.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\8Piac.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\Board.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\CraftLady.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\Jewellery.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\Prajna_Signpos.txt
+- Localized Build\Server\Debug\Envir\NPCs\PrajnaIsland\WeaponSmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\11Scft.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Blacksmith-2.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Clothes-2.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Crafting.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Grocery-2.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Grocery.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Potion-2.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Signpost-2.txt
+- Localized Build\Server\Debug\Envir\NPCs\SerpentValley\Village\Signpost.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\2Hvwe-HELL00.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\3Hvdr-HELL00.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\4Hvdu-HELL00.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\8hvac-HELL00.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\ABdu-NAMMAN.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\ABst-NAMMAN.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\Clothes.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\DeadForest\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\DeadForest\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\Grocery-HELL00.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\Jewellery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\WasteLand\Weaponsmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\Accessory.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\Book.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\Drapery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\Fisheries.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\General.txt
+- Localized Build\Server\Debug\Envir\NPCs\WhiteValley\Encampment\Signpost.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\11Gicft.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\2Gibl.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\2Giwe.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\3Gidr.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\4Gidu.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\7Gist.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\8Giac.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Butcher.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Crafting.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Drapery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Jewellery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Castle-GI\Weaponsmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Fortress\2Wwe-1.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Fortress\4Wdu-1.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Fortress\Blacksmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Fortress\Drapery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Fortress\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\Fortress\WWDr-1.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\SeokchoValley\Grocery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\SeokchoValley\Merchant.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\2Wwe.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\3Wdr.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\4Wdu.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\5Wbo.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\7Wst.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\8Wac.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Books.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Drapery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Jewellery.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Peddlar.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Potion.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Signpost.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Weaponsmith.txt
+- Localized Build\Server\Debug\Envir\NPCs\WoomyonWoods\TaoistVillage\Woomyon_Signpos.txt
+
+## Placeholder Issues
+- None
+
+## Binary Databases Requiring Dedicated Editor
+- `Build\Server\Debug\Server.MirADB`
+- `Build\Server\Debug\Server.MirDB`
+- `Build\Server\Release\Server.MirDB`
+
+## Residual English Candidates
+- `Build\Server\Debug\Configs\Setup.ini`:5: C#Mir 4.0
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\14Wr-0.txt`:52: <地下城 1/@PremDungeon1> | <地下城 2/@PremDungeon2> | <地下城 3/@PremDungeon3> - 更多地下城即将开放。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\14Wr-0.txt`:54: <远古沃玛洞穴/@AOC> | <远古沃玛寺庙/@AWT> | <远古石墓/@AST>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Administrator-0122.txt`:18: 需要 {金币/Gold}: <$GUILDWARFEE>，持续 <$GUILDWARTIME> 分钟。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Administrator.txt`:18: 需要 {金币/Gold}: <$GUILDWARFEE>，持续 <$GUILDWARTIME> 分钟。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Awakening-0.txt`:19: <降级/@Downgrade> Item <重置/@Reset> 物品。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Awakening.txt`:19: <降级/@Downgrade> Item <重置/@Reset> 物品。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:8: <<Create Hero/@CreateHero/Green>>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:9: <<ReviveHero/@ReviveHero/Red>>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:10: <<SealHero/@SealHero/Yellow>>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:14: <Weapon shop/@go-weap>   <Armour shop/@go-cloth>   <Inn/@go-inn>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:15: <Accessory shop/@go-access>   <Reagent Store/@go-pot>   <Bichon Inner Wall/@go-palace>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:16: <Book store/@go-book>  <Butcher's shop/@go-meat>   <Hairdresser/@go-hairdresser>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:87: Rebirth starts at 等级60 and grants you a Rebirth Effect
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:100: You need to be above 等级60 to rebirth.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:110: Would you like to rebirth?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:112: <Yes/@RB1APPLY>       <No/@RebirthMain>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:132: You need to be above 等级70 to rebirth.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:142: Would you like to rebirth?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:144: <Yes/@RB2APPLY>       <No/@RebirthMain>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:165: You need to be above 等级80 to rebirth.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:175: Would you like to rebirth?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Board.txt`:177: <Yes/@RB3APPLY>       <No/@RebirthMain>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:14: Welcome, How many i help you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:17: Listen to the <explanation/@helpbooks> about skills.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:18: Seeking <Information/@information>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:31: What kind of Books are you interested in?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:33: Warrior:  <Skill List/@War1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:34: Wizard:   <Skill List/@Wiz1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:35: Taoist:   <Skill List/@Tao1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:36: Assassin: <Skill List/@Assa1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:37: Archer:   <Skill List/@Arc1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:49: <More/@War2> <返回/@helpbooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:70: <More/@Wiz2> <返回/@helpbooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:82: <More/@Wiz3> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:104: <More/@Tao2> <返回/@helpbooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:115: <More/@Tao3> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:140: <More/@Assa2> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:163: <More/@Arc2> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:174: <More/@Arc3> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore-0104.txt`:195: <Thank You/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:14: Welcome, How many i help you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:17: Listen to the <explanation/@helpbooks> about skills.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:18: Seeking <Information/@information>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:31: What kind of Books are you interested in?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:33: Warrior:  <Skill List/@War1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:34: Wizard:   <Skill List/@Wiz1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:35: Taoist:   <Skill List/@Tao1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:36: Assassin: <Skill List/@Assa1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:37: Archer:   <Skill List/@Arc1>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:49: <More/@War2> <返回/@helpbooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:70: <More/@Wiz2> <返回/@helpbooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:82: <More/@Wiz3> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:104: <More/@Tao2> <返回/@helpbooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:115: <More/@Tao3> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:140: <More/@Assa2> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:163: <More/@Arc2> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:174: <More/@Arc3> <返回/@helpBooks>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BookStore.txt`:195: <Thank You/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BPotion-0109.txt`:14: What kind of Poison would you like to purchase?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BPotion-0109.txt`:16: <Purchase/@Buy> Poison.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\BPotion-0109.txt`:22: What Posion's do you wish to buy?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet-0105.txt`:14: Welcome, What can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet-0105.txt`:17: <修理/@Repair> Bracelets or Gloves.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet.txt`:14: Welcome, What can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet.txt`:15: I see you're wearing: {L: <$BRACELET_L> R: <$BRACELET_R>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Bracelet.txt`:18: <修理/@Repair> Bracelets or Gloves.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher-0.txt`:14: Welcome, what can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher-0.txt`:16: <Sell/@Sell> Meat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher-0.txt`:17: <Ask/@Meathelp> about how to gain meat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher-0102.txt`:14: Welcome, what can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher-0102.txt`:17: <Ask/@Meathelp> about how to gain meat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher1.txt`:14: Welcome, what can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher1.txt`:16: <Sell/@Sell> Meat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher1.txt`:17: <Ask/@Meathelp> about how to gain meat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher2.txt`:14: Welcome, what can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Butcher2.txt`:17: <Ask/@Meathelp> about how to gain meat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\10-0.txt`:27: Greeting's Traveler. How are you doing on this fine day?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\2-0.txt`:27: <$USERNAME>, Those rumors was correct. The Emperor has helped me.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\2-0.txt`:34: <$USERNAME>, Have you heard the rumors?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\3-0.txt`:27: Traveler. You heard the latest?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\4-0.txt`:27: <$USERNAME>, Forgive me I shouldn't of judged him based on my anger.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\4-0.txt`:34: <$USERNAME>, I'm starving... What does that Emperor do? Nothing!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\5-0.txt`:37: So you want my help spreading the good deed's of the <Emperor/@Emperor>?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\5-0.txt`:40: How about you do something for me first?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\5-0.txt`:42: <Close@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\6-0.txt`:33: Greeting's Traveler. How are you on this fine day?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\7-0.txt`:37: Have you ever heard about the Emperor?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\8-0.txt`:18: "Can you be of any assistance?"
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\8-0.txt`:19: "I'm trying to spread a good word around about the <Emperor/@emperor>."
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\8-0.txt`:27: Oh sure <$USERNAME> but please visit me again soon.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\9-0.txt`:20: Have you ever heard about the Emperor?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Civilians\Civilian List.txt`:11: Civilian 7 Removes SET [539] & [541]
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:14: Hello Traveller. What can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:17: <修理/@Repair> Drapery pieces.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:18: <Talk/@talk> about CastleBichon
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:37: Would you like to repair a drapery piece?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:99: So you want my help spreading the good deed's of the <Emperor/@Emperor>?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:102: How about you do something for me first?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing-0106.txt`:104: <Close@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:14: Hello Traveller. What can I do for you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:16: I see you're wearing: {<$ARMOUR>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:17: I see you're wearing: {<$HELMET>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:18: I see you're wearing: {<$BELT>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:19: I see you're wearing: {<$BOOTS>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:22: <修理/@Repair> Drapery pieces.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:23: <Talk/@talk> about CastleBichon
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:42: Would you like to repair a drapery piece?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:104: So you want my help spreading the good deed's of the <Emperor/@Emperor>?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:107: How about you do something for me first?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Clothing.txt`:109: <Close@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\CraftsLady-0.txt`:8: <Crafting/@Craft>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\CraftsLady.txt`:8: <Crafting/@Craft>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Downgrade-0.txt`:14: Welcome <$USERNAME>, I Purchase Awakening Items
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Downgrade-0.txt`:16: <Sell/@Sell> Awakening Items.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Downgrade.txt`:14: Welcome <$USERNAME>, I Purchase Awakening Items
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Downgrade.txt`:16: <Sell/@Sell> Awakening Items.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner-0.txt`:18: <Buy Bichon Token/@Buy>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner-0.txt`:19: <Ask about Bichon Token/@Ask>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner-0.txt`:30: <Buy Bichon Token/@Buy>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner-0.txt`:31: <Will get next time/@Exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner.txt`:18: <Buy Bichon Token/@Buy>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner.txt`:19: <Ask about Bichon Token/@Ask>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner.txt`:30: <Buy Bichon Token/@Buy>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Examiner.txt`:31: <Will get next time/@Exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Far-0122.txt`:20: Thank you <Emperor Far/@THX2>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Far-0122.txt`:33: Thank you <Emperor Far/@THX>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Far-0122.txt`:44: <Thank You/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Far.txt`:20: Thank you <Emperor Far/@THX2>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Far.txt`:33: Thank you <Emperor Far/@THX>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Far.txt`:44: <Thank You/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery-0.txt`:15: Hello traveller, How may I help you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery-0.txt`:18: <Ask/@Ask> about 物品。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery-0.txt`:24: What Item would you like to buy or sell?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery-0.txt`:25: <BuyBack/@BuyBack>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery-0.txt`:129: Have you ever heard about the Emperor?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:15: Hello traveller, How may I help you?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:17: I see you're holding: {<$TORCH>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:18: I see you're holding: {<$AMULET>/CORAL}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:20: <Ask/@Ask> about 物品。
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:26: What Item would you like to buy or sell?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:27: <BuyBack/@BuyBack>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Grocery.txt`:131: Have you ever heard about the Emperor?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:3: How are you? Mirian <$USERNAME>!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:7: <What is/@info> a guild territory?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:8: I want to <rent/@rent> a guild territory.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:9: I want to <go/@move> to my guild territory.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:10: I want to check the <list/@agitbuy> of guild territories.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:11: I want to <trade/@trade> my guild territory.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:27: You need 10,000,000 {金币/Gold} to rent a guild territory and the initial
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:30: After paying the fee of 1,000,000 {金币/Gold},
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:33: Do you still want to rent a territory? <Rent/@agitreg> <Cancel/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:48: Do you want to move to the guild territory? <Move/@agitmove> <Cancel/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant-0.txt`:69: Will you trade? <Trade/@agittrade> <Cancel/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:3: How are you? Mirian <$USERNAME>!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:7: <What is/@info> a guild territory?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:8: I want to <rent/@rent> a guild territory.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:9: I want to <go/@move> to my guild territory.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:10: I want to check the <list/@agitbuy> of guild territories.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:11: I want to <trade/@trade> my guild territory.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:27: You need 10,000,000 {金币/Gold} to rent a guild territory and the initial
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:30: After paying the fee of 1,000,000 {金币/Gold},
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:33: Do you still want to rent a territory? <Rent/@agitreg> <Cancel/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:48: Do you want to move to the guild territory? <Move/@agitmove> <Cancel/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\GTMerchant.txt`:73: Will you trade? <Trade/@agittrade> <Cancel/@exit>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:11: <Haircut/@Haircut>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:15: What haircut would you like?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:17: <Brown Hair/@Brown>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:18: <Long Blue Hair/@Blue>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:19: <Long Red Hair/@Red>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:20: <Brown Afro/@BAfro>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:21: <Red Afro/@RAfro>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:22: <Blue Afro/@BlAfro>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:35: You Dont Have enough {金币/Gold} to use my Service!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:46: You Dont Have enough {金币/Gold} to use my Service!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:57: You Dont Have enough {金币/Gold} to use my Service!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:68: You Dont Have enough {金币/Gold} to use my Service!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:79: You Dont Have enough {金币/Gold} to use my Service!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Hairdresser.txt`:90: You Dont Have enough {金币/Gold} to use my Service!
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\IcemanStatue.txt`:7: <Read/@RM> More
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:13: Your PK POINTS: <$PKPOINT>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:95: Hello, Do you want to play a game?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:97: If you guess correctly you will be gifted 100,000 {金币/GOLD}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:98: However if you guess wrongly you will lose 10,000 {金币/GOLD}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:100: Would you like to <Play/@PLAY>?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:107: that I'm thinking of. What is your guess?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:108: <[ 1 ]/@Guess(1)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:109: <[ 2 ]/@Guess(2)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:110: <[ 3 ]/@Guess(3)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:111: <[ 4 ]/@Guess(4)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:112: <[ 5 ]/@Guess(5)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:113: <[ 6 ]/@Guess(6)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:114: <[ 7 ]/@Guess(7)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:115: <[ 8 ]/@Guess(8)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:120: CHECKCALC %B3 == %ARG(0)
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:132: Congratulations, you Won! Enjoy your 100,000 {金币/GOLD} Coins.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:139: <Play again/@NPCNUMBER> - <关闭/@EXIT>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:156: <Play again/@NPCNUMBER> - <关闭/@EXIT>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery-0.txt`:161: You do not have 10,000 {金币/GOLD}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:13: Your PK POINTS: <$PKPOINT>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:95: Hello, Do you want to play a game?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:97: If you guess correctly you will be gifted 100,000 {金币/GOLD}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:98: However if you guess wrongly you will lose 10,000 {金币/GOLD}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:100: Would you like to <Play/@PLAY>?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:107: that I'm thinking of. What is your guess?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:108: <[ 1 ]/@Guess(1)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:109: <[ 2 ]/@Guess(2)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:110: <[ 3 ]/@Guess(3)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:111: <[ 4 ]/@Guess(4)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:112: <[ 5 ]/@Guess(5)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:113: <[ 6 ]/@Guess(6)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:114: <[ 7 ]/@Guess(7)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:115: <[ 8 ]/@Guess(8)>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:120: CHECKCALC %B3 == %ARG(0)
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:132: Congratulations, you Won! Enjoy your 100,000 {金币/GOLD} Coins.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:139: <Play again/@NPCNUMBER> - <关闭/@EXIT>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:156: <Play again/@NPCNUMBER> - <关闭/@EXIT>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Lottery.txt`:161: You do not have 10,000 {金币/GOLD}
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke-0.txt`:13: "I can <Offer/@Bribe> you Gold to let me past."
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke-0.txt`:14: "I need to <see/@see> the Emperor!"
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke-0.txt`:27: You do know how serious that is?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke-0.txt`:28: <Yes/@yes> I'm aware.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke-0.txt`:29: <No/@no> I'm not aware.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke.txt`:13: "I can <Offer/@Bribe> you Gold to let me past."
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke.txt`:14: "I need to <see/@see> the Emperor!"
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke.txt`:27: You do know how serious that is?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke.txt`:28: <Yes/@yes> I'm aware.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Luke.txt`:29: <No/@no> I'm not aware.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\LukeStatue.txt`:8: <Read/@RM> More
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Materials-0.txt`:14: Hello there <$USERNAME>,
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Materials-0.txt`:18: which can help on your travels?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Materials-0.txt`:22: <Sell/@Sell> Materials.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Materials.txt`:14: Hello there <$USERNAME>,
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Materials.txt`:18: which can help on your travels?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\Materials.txt`:22: <Sell/@Sell> Materials.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:16: Anything I can help with?
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:18: <Hunting info by each level/@hunting>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:19: <Combat & Skill info/@combat>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:20: <Basic information/@basic>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:27: <level 1~11/@level1-11>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:28: <level 11~21/@level11-21>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:29: <level 21~30/@level21-30>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:30: <level 31~40/@level31-40>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:31: <level 41+/@level41>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:33: <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:42: <LV1~3/@lvl1-3>      <LV3~7/@lvl3-7>      <LV7~11/@lvl7-11>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:44: <返回/@hunting>                           <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:50: In fact, you can get some fresh <meat/@slicemeat> and by trading it with a
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:53: <返回/@level1-11>                              <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:64: <返回/@basic>              <Go to Next/@slicemeatnext>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:76: <返回/@basic>                <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:83: <返回/@level1-11>            <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:87: You can learn a special skill from 等级7.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:92: <返回/@level1-11>              <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:96: Go to dungeon from 等级11. It is a dark place where Candle
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:101: <LV 11~14/@lvl11-14>      <LV 14~17/@lvl14-17>      <LV 17~22/@lvl17-22>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:103: <返回/@hunting>                    <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:112: <返回/@level11-21>         <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:123: <返回/@level11-21>                 <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:133: <返回/@level11-21>                   <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:138: MineralMine at the first half of 等级20.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:139: And go AngledStoneTomb or Treepath at 等级30 to 35.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:142: <返回/@hunting>                      <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:146: PrajnaIsland is the best hunting area at the 等级of 30 to 40.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:152: <返回/@hunting>                   <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:162: <返回/@hunting>                   <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:167: making yourself familiar with variety skills & combat.
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:170: <Skill learning & method/@skilllearning>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:171: <Warrior skill/@warrskill>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:172: <Wizard skill/@wizskill>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:173: <Taoist skill/@taoskill>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:174: <Assassin skill/@sinskill>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:175: <Archer skill/@arcskill>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:177: <Combat Technic/@combattech>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:179: <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:183: 1) Get skill book of your level. (Beginner of Mid 等级skill book is sold at the
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:192: <返回/@combat>                                    <Go to Next/@skilllearningnext>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:198: <返回/@combat>                       <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:206: <Fencing 7/@fencing>      <ShoulderDash 30/@sdash>     <LionsRoar 36/@lionsroar>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:207: <Slaying 15/@slaying>     <TwinDrakeBlade 32/@tdb>     <CrossHalfmoon 38/@chm>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:208: <Thrusting 22/@thrusting>     <Entrapment 32/@entrapment>     <BladeAvalanche 38/@BA>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:209: <Halfmoon 26/@halfmoon>     <FlamingSword 35/@fsword>     <Rage 44/@rage>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:210: <ProtectionField 39/@profield>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:212: <返回/@combat>                 <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:220: <Fireball 7/@fireball>     <Hellfire 16/@hellfire>     <FireWall 24/@fwall>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:221: <Repulsion 12/@repulse>     <Thunderbolt 17/@tbolt>     <Lightning 26/@lightning>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:222: <ElecShock 13/@eshock>     <Teleport 19/@tele>     <FrostCrunch 28/@fcrunch>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:223: <GreatFireBall 15/@gfball>     <FireBang 22/@fbang>     <Thunderstorm 30/@tstorm>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:225: <返回/@combat>              <Go to Next/@wizskill2>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:231: <MagicShield 31/@mshield>     <Mirroring 41/@mirror>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:232: <TurnUndead 32/@turnundead>     <FlameField 42/@ffield>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:233: <Vampirism 33/@vamp>     <Blizzard 44/@blizzard>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:234: <IceStorm 35/@icestorm>   <MeteorStrike 49/@meteor>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:235: <FlameDisruptor 38/@fdisrupt>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:237: <返回/@combat>                   <Go to Main/@main>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:244: <Healing 7/@healing>     <SummonSkeleton 19/@summonskel>     <Revelation 23/@rev>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:245: <SpiritSword 9/@ssword>     <Hiding 20/@hiding>     <BlessedArmour 25/@blessarm>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:246: <Poisoning 14/@poison>     <MassHiding 21/@masshide>     <EnergyRepulsor 27/@energyrep>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:247: <SoulFireBall 18/@sfb>   <SoulShield 22/@soulshield>   <TrapHexagon 28/@traphex>
+- `Build\Server\Debug\Envir\NPCs\BichonProvince\BichonWall\MirGuide-0.txt`:249: <返回/@combat>                         <Go to Next/@taoskill2>
+- `Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\4Adu-0153.txt`:1: 1[@MAIN]
+- `Build\Server\Debug\Envir\NPCs\MongchonProvince\SabukWall\Potion.txt`:1: 1[@MAIN]
