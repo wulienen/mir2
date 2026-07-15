@@ -1,10 +1,14 @@
 using Shared.StreamingAssets;
-using System.Security.Cryptography;
+using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace AssetBuilder;
 
 internal static class Program
 {
+    private const string BuildStateFileName = ".assetbuilder-state.json";
+
     private static int Main(string[] args)
     {
         if (args.Length > 0 && string.Equals(args[0], "fix-manifest", StringComparison.OrdinalIgnoreCase))
@@ -14,9 +18,9 @@ internal static class Program
             return FixManifest(existingOutput, newVersion);
         }
 
-        string source = Path.GetFullPath(args.Length > 0 ? args[0] : Path.Combine("Build", "Client", "Debug"));
-        string output = Path.GetFullPath(args.Length > 1 ? args[1] : "StreamingAssets");
-        string version = args.Length > 2 ? args[2] : DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+        BuildOptions options = BuildOptions.Parse(args);
+        string source = options.Source;
+        string output = options.Output;
 
         if (!Directory.Exists(source))
         {
@@ -26,21 +30,47 @@ internal static class Program
 
         Directory.CreateDirectory(output);
 
+        AssetManifest previousManifest = TryReadJson<AssetManifest>(Path.Combine(output, StreamingAssetConstants.ManifestFileName));
+        BuildState previousState = TryReadJson<BuildState>(Path.Combine(output, BuildStateFileName)) ?? new BuildState();
+        BuildState nextState = new();
+        BuildProgress progress = new();
+
         AssetManifest manifest = new()
         {
-            Version = version,
             CreatedUtc = DateTime.UtcNow,
             MapChunkSize = StreamingAssetConstants.DefaultMapChunkSize
         };
 
-        BuildLibraries(source, output, manifest);
-        BuildMaps(source, output, manifest);
-        BuildSounds(source, output, manifest);
+        BuildLibraries(source, output, manifest, previousManifest, previousState, nextState, options, progress);
+        BuildMaps(source, output, manifest, previousManifest, previousState, nextState, options, progress);
+        BuildSounds(source, output, manifest, previousManifest, previousState, nextState, options, progress);
 
-        StreamingAssetIO.WriteJson(Path.Combine(output, StreamingAssetConstants.ManifestFileName), manifest);
+        bool assetSetChanged = !HasSameAssetSet(previousManifest, manifest);
+        bool manifestChanged = previousManifest == null || progress.RebuiltCount > 0 || assetSetChanged ||
+            (!string.IsNullOrWhiteSpace(options.Version) && !string.Equals(previousManifest.Version, options.Version, StringComparison.Ordinal));
+
+        manifest.Version = !string.IsNullOrWhiteSpace(options.Version)
+            ? options.Version
+            : manifestChanged || string.IsNullOrWhiteSpace(previousManifest?.Version)
+                ? DateTime.UtcNow.ToString("yyyyMMddHHmmss")
+                : previousManifest.Version;
+
+        if (!manifestChanged)
+        {
+            manifest.CreatedUtc = previousManifest.CreatedUtc;
+        }
+
+        if (manifestChanged)
+        {
+            StreamingAssetIO.WriteJson(Path.Combine(output, StreamingAssetConstants.ManifestFileName), manifest);
+        }
+
+        StreamingAssetIO.WriteJson(Path.Combine(output, BuildStateFileName), nextState);
 
         Console.WriteLine($"Streaming assets built at {output}");
         Console.WriteLine($"Libraries: {manifest.Libraries.Count}, Maps: {manifest.Maps.Count}, Sounds: {manifest.Sounds.Count}");
+        Console.WriteLine($"Rebuilt: {progress.RebuiltCount}, Reused: {progress.ReusedCount}, Failed: {progress.FailedCount}");
+        Console.WriteLine($"Manifest version: {manifest.Version}");
         return 0;
     }
 
@@ -89,7 +119,8 @@ internal static class Program
         setHash(StreamingAssetIO.ComputeSha256(stream));
     }
 
-    private static void BuildLibraries(string source, string output, AssetManifest manifest)
+    private static void BuildLibraries(string source, string output, AssetManifest manifest, AssetManifest previousManifest,
+        BuildState previousState, BuildState nextState, BuildOptions options, BuildProgress progress)
     {
         string dataPath = ResolveLibraryDataPath(source);
         if (dataPath == null)
@@ -98,29 +129,56 @@ internal static class Program
             return;
         }
 
-        Console.WriteLine($"Library source: {dataPath}");
+        List<string> files = Directory.EnumerateFiles(dataPath, "*.Lib", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        progress.StartStage("Libraries", files);
+        Dictionary<string, AssetLibraryRecord> previous = previousManifest?.Libraries
+            .ToDictionary(record => record.Id, StringComparer.OrdinalIgnoreCase) ?? new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (string file in Directory.GetFiles(dataPath, "*.Lib", SearchOption.AllDirectories))
+        for (int index = 0; index < files.Count; index++)
         {
+            string file = files[index];
             string id = ToAssetId(Path.GetRelativePath(dataPath, Path.ChangeExtension(file, null)));
             string libraryRoot = Path.Combine(output, StreamingAssetConstants.LibrariesDirectory, id);
             string imagesRoot = Path.Combine(libraryRoot, StreamingAssetConstants.LibraryImagesDirectory);
-            Directory.CreateDirectory(imagesRoot);
+            SourceStateEntry sourceState = CreateSourceState("library", id, dataPath, file, previousState, options.Verify);
+            nextState.Sources.Add(sourceState);
 
-            LibraryManifest libraryManifest = StreamingLibraryReader.ReadLibrary(file, id, imagesRoot);
             string manifestPath = Path.Combine(libraryRoot, StreamingAssetConstants.ManifestFileName);
-            StreamingAssetIO.WriteJson(manifestPath, libraryManifest);
-
-            using FileStream stream = File.OpenRead(manifestPath);
-            manifest.Libraries.Add(new AssetLibraryRecord
+            if (!options.ForceRebuild && (!sourceState.Changed || options.AdoptExisting) &&
+                TryReuseLibrary(output, previous, id, out AssetLibraryRecord existing))
             {
-                Id = id,
-                ManifestPath = ToWebPath(Path.GetRelativePath(output, manifestPath)),
-                ImageCount = libraryManifest.ImageCount,
-                Length = stream.Length,
-                Hash = StreamingAssetIO.ComputeSha256(stream)
-            });
+                manifest.Libraries.Add(existing);
+                progress.CompleteItem(file, false);
+                continue;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(imagesRoot);
+                LibraryManifest libraryManifest = StreamingLibraryReader.ReadLibrary(file, id, imagesRoot,
+                    (current, total) => progress.ReportItemProgress(file, index, current, total));
+                StreamingAssetIO.WriteJson(manifestPath, libraryManifest);
+
+                using FileStream stream = File.OpenRead(manifestPath);
+                manifest.Libraries.Add(new AssetLibraryRecord
+                {
+                    Id = id,
+                    ManifestPath = ToWebPath(Path.GetRelativePath(output, manifestPath)),
+                    ImageCount = libraryManifest.ImageCount,
+                    Length = stream.Length,
+                    Hash = StreamingAssetIO.ComputeSha256(stream)
+                });
+                progress.CompleteItem(file, true);
+            }
+            catch (Exception ex)
+            {
+                progress.FailItem(file, ex);
+            }
         }
+
+        progress.FinishStage();
     }
 
     private static string ResolveLibraryDataPath(string source)
@@ -140,7 +198,8 @@ internal static class Program
         return null;
     }
 
-    private static void BuildMaps(string source, string output, AssetManifest manifest)
+    private static void BuildMaps(string source, string output, AssetManifest manifest, AssetManifest previousManifest,
+        BuildState previousState, BuildState nextState, BuildOptions options, BuildProgress progress)
     {
         string mapPath = Path.Combine(source, "Map");
         if (!Directory.Exists(mapPath))
@@ -148,15 +207,33 @@ internal static class Program
             return;
         }
 
-        foreach (string file in Directory.GetFiles(mapPath, "*.map", SearchOption.TopDirectoryOnly))
+        List<string> files = Directory.EnumerateFiles(mapPath, "*.map", SearchOption.TopDirectoryOnly)
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        progress.StartStage("Maps", files);
+        Dictionary<string, AssetMapRecord> previous = previousManifest?.Maps
+            .ToDictionary(record => record.Id, StringComparer.OrdinalIgnoreCase) ?? new(StringComparer.OrdinalIgnoreCase);
+
+        for (int index = 0; index < files.Count; index++)
         {
+            string file = files[index];
             string id = ToAssetId(Path.GetFileNameWithoutExtension(file));
             string mapRoot = Path.Combine(output, StreamingAssetConstants.MapsDirectory, id);
             string chunkRoot = Path.Combine(mapRoot, StreamingAssetConstants.MapChunksDirectory);
-            Directory.CreateDirectory(chunkRoot);
+            SourceStateEntry sourceState = CreateSourceState("map", id, mapPath, file, previousState, options.Verify);
+            nextState.Sources.Add(sourceState);
 
             try
             {
+                if (!options.ForceRebuild && (!sourceState.Changed || options.AdoptExisting) &&
+                    TryReuseMap(output, previous, id, out AssetMapRecord existing))
+                {
+                    manifest.Maps.Add(existing);
+                    progress.CompleteItem(file, false);
+                    continue;
+                }
+
+                Directory.CreateDirectory(chunkRoot);
                 MapManifest mapManifest = StreamingMapReader.ReadMap(file, id, chunkRoot, StreamingAssetConstants.DefaultMapChunkSize);
                 string manifestPath = Path.Combine(mapRoot, StreamingAssetConstants.ManifestFileName);
                 StreamingAssetIO.WriteJson(manifestPath, mapManifest);
@@ -171,16 +248,19 @@ internal static class Program
                     Length = stream.Length,
                     Hash = StreamingAssetIO.ComputeSha256(stream)
                 });
+                progress.CompleteItem(file, true);
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine($"Failed to build map asset: {file}");
-                Console.Error.WriteLine(ex.Message);
+                progress.FailItem(file, ex);
             }
         }
+
+        progress.FinishStage();
     }
 
-    private static void BuildSounds(string source, string output, AssetManifest manifest)
+    private static void BuildSounds(string source, string output, AssetManifest manifest, AssetManifest previousManifest,
+        BuildState previousState, BuildState nextState, BuildOptions options, BuildProgress progress)
     {
         string soundPath = Path.Combine(source, "Sound");
         if (!Directory.Exists(soundPath))
@@ -188,14 +268,33 @@ internal static class Program
             return;
         }
 
-        foreach (string file in Directory.GetFiles(soundPath, "*.*", SearchOption.AllDirectories)
-                     .Where(path => string.Equals(Path.GetExtension(path), ".wav", StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(Path.GetExtension(path), ".mp3", StringComparison.OrdinalIgnoreCase) ||
-                                    string.Equals(Path.GetFileName(path), "SoundList.lst", StringComparison.OrdinalIgnoreCase)))
+        List<string> files = Directory.EnumerateFiles(soundPath, "*.*", SearchOption.AllDirectories)
+            .Where(path => string.Equals(Path.GetExtension(path), ".wav", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(Path.GetExtension(path), ".mp3", StringComparison.OrdinalIgnoreCase) ||
+                           string.Equals(Path.GetFileName(path), "SoundList.lst", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        progress.StartStage("Sounds", files);
+        Dictionary<string, AssetSoundRecord> previous = previousManifest?.Sounds
+            .ToDictionary(record => record.Id, StringComparer.OrdinalIgnoreCase) ?? new(StringComparer.OrdinalIgnoreCase);
+
+        for (int index = 0; index < files.Count; index++)
         {
+            string file = files[index];
             string relative = Path.GetRelativePath(soundPath, file);
             string id = ToAssetId(relative);
             string destination = Path.Combine(output, StreamingAssetConstants.SoundsDirectory, relative);
+            SourceStateEntry sourceState = CreateSourceState("sound", id, soundPath, file, previousState, options.Verify);
+            nextState.Sources.Add(sourceState);
+
+            if (!options.ForceRebuild && (!sourceState.Changed || options.AdoptExisting) &&
+                TryReuseSound(output, previous, id, out AssetSoundRecord existing))
+            {
+                manifest.Sounds.Add(existing);
+                progress.CompleteItem(file, false);
+                continue;
+            }
+
             Directory.CreateDirectory(Path.GetDirectoryName(destination) ?? ".");
             File.Copy(file, destination, true);
 
@@ -207,7 +306,89 @@ internal static class Program
                 Length = stream.Length,
                 Hash = StreamingAssetIO.ComputeSha256(stream)
             });
+            progress.CompleteItem(file, true);
         }
+
+        progress.FinishStage();
+    }
+
+    private static T TryReadJson<T>(string path) where T : class
+    {
+        try
+        {
+            return File.Exists(path) ? StreamingAssetIO.ReadJson<T>(path) : null;
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Ignoring unreadable build metadata {path}: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static SourceStateEntry CreateSourceState(string kind, string id, string sourceRoot, string file,
+        BuildState previousState, bool verify)
+    {
+        string relativePath = ToWebPath(Path.GetRelativePath(sourceRoot, file));
+        SourceStateEntry previous = previousState.Find(kind, id);
+        FileInfo info = new(file);
+        bool metadataMatches = previous != null &&
+            previous.Length == info.Length &&
+            previous.LastWriteUtcTicks == info.LastWriteTimeUtc.Ticks &&
+            string.Equals(previous.RelativePath, relativePath, StringComparison.OrdinalIgnoreCase);
+
+        SourceStateEntry state = new()
+        {
+            Kind = kind,
+            Id = id,
+            RelativePath = relativePath,
+            Length = info.Length,
+            LastWriteUtcTicks = info.LastWriteTimeUtc.Ticks,
+            Hash = previous?.Hash ?? string.Empty,
+            Changed = !metadataMatches
+        };
+
+        if (verify || (!metadataMatches && previous != null && !string.IsNullOrEmpty(previous.Hash)))
+        {
+            using FileStream stream = File.OpenRead(file);
+            state.Hash = StreamingAssetIO.ComputeSha256(stream);
+            state.Changed = !string.Equals(state.Hash, previous?.Hash, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return state;
+    }
+
+    private static bool TryReuseLibrary(string output, Dictionary<string, AssetLibraryRecord> previous, string id,
+        out AssetLibraryRecord record)
+    {
+        if (!previous.TryGetValue(id, out record)) return false;
+        return File.Exists(Path.Combine(output, record.ManifestPath.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
+    private static bool TryReuseMap(string output, Dictionary<string, AssetMapRecord> previous, string id,
+        out AssetMapRecord record)
+    {
+        if (!previous.TryGetValue(id, out record)) return false;
+        return File.Exists(Path.Combine(output, record.ManifestPath.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
+    private static bool TryReuseSound(string output, Dictionary<string, AssetSoundRecord> previous, string id,
+        out AssetSoundRecord record)
+    {
+        if (!previous.TryGetValue(id, out record)) return false;
+        return File.Exists(Path.Combine(output, record.Path.Replace('/', Path.DirectorySeparatorChar)));
+    }
+
+    private static bool HasSameAssetSet(AssetManifest previous, AssetManifest current)
+    {
+        if (previous == null || previous.Libraries.Count != current.Libraries.Count ||
+            previous.Maps.Count != current.Maps.Count || previous.Sounds.Count != current.Sounds.Count)
+        {
+            return false;
+        }
+
+        return previous.Libraries.Select(record => record.Id).OrderBy(id => id).SequenceEqual(current.Libraries.Select(record => record.Id).OrderBy(id => id), StringComparer.OrdinalIgnoreCase) &&
+               previous.Maps.Select(record => record.Id).OrderBy(id => id).SequenceEqual(current.Maps.Select(record => record.Id).OrderBy(id => id), StringComparer.OrdinalIgnoreCase) &&
+               previous.Sounds.Select(record => record.Id).OrderBy(id => id).SequenceEqual(current.Sounds.Select(record => record.Id).OrderBy(id => id), StringComparer.OrdinalIgnoreCase);
     }
 
     internal static string ToAssetId(string value)
@@ -226,11 +407,148 @@ internal static class Program
     {
         return value.Replace('\\', '/');
     }
+
+    private sealed class BuildOptions
+    {
+        public string Source { get; private set; }
+        public string Output { get; private set; }
+        public string Version { get; private set; }
+        public bool ForceRebuild { get; private set; }
+        public bool Verify { get; private set; }
+        public bool AdoptExisting { get; private set; }
+
+        public static BuildOptions Parse(string[] args)
+        {
+            List<string> values = new();
+            BuildOptions options = new();
+            foreach (string arg in args)
+            {
+                switch (arg.ToLowerInvariant())
+                {
+                    case "--full": options.ForceRebuild = true; break;
+                    case "--verify": options.Verify = true; break;
+                    case "--adopt-existing": options.AdoptExisting = true; break;
+                    default: values.Add(arg); break;
+                }
+            }
+
+            options.Source = Path.GetFullPath(values.Count > 0 ? values[0] : Path.Combine("Build", "Client", "Debug"));
+            options.Output = Path.GetFullPath(values.Count > 1 ? values[1] : "StreamingAssets");
+            options.Version = values.Count > 2 ? values[2] : null;
+            return options;
+        }
+    }
+
+    private sealed class BuildState
+    {
+        public int FormatVersion { get; set; } = 1;
+        public List<SourceStateEntry> Sources { get; set; } = new();
+
+        public SourceStateEntry Find(string kind, string id)
+        {
+            return Sources.FirstOrDefault(entry => string.Equals(entry.Kind, kind, StringComparison.OrdinalIgnoreCase) &&
+                                                   string.Equals(entry.Id, id, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    private sealed class SourceStateEntry
+    {
+        public string Kind { get; set; } = string.Empty;
+        public string Id { get; set; } = string.Empty;
+        public string RelativePath { get; set; } = string.Empty;
+        public long Length { get; set; }
+        public long LastWriteUtcTicks { get; set; }
+        public string Hash { get; set; } = string.Empty;
+
+        [JsonIgnore]
+        public bool Changed { get; set; }
+    }
+
+    private sealed class BuildProgress
+    {
+        private string _stage = string.Empty;
+        private int _totalItems;
+        private int _completedItems;
+        private long _totalBytes;
+        private long _completedBytes;
+        private readonly Stopwatch _timer = Stopwatch.StartNew();
+
+        public int RebuiltCount { get; private set; }
+        public int ReusedCount { get; private set; }
+        public int FailedCount { get; private set; }
+
+        public void StartStage(string stage, IReadOnlyCollection<string> files)
+        {
+            FinishStage();
+            _stage = stage;
+            _totalItems = files.Count;
+            _completedItems = 0;
+            _totalBytes = files.Sum(path => new FileInfo(path).Length);
+            _completedBytes = 0;
+            Console.WriteLine($"{stage}: {_totalItems} files, {FormatBytes(_totalBytes)}");
+        }
+
+        public void ReportItemProgress(string file, int itemIndex, int current, int total)
+        {
+            double itemFraction = total <= 0 ? 0 : (double)current / total;
+            Write(file, itemIndex, itemFraction);
+        }
+
+        public void CompleteItem(string file, bool rebuilt)
+        {
+            _completedItems++;
+            _completedBytes += new FileInfo(file).Length;
+            if (rebuilt) RebuiltCount++; else ReusedCount++;
+            Write(file, _completedItems - 1, 0);
+        }
+
+        public void FailItem(string file, Exception ex)
+        {
+            _completedItems++;
+            _completedBytes += new FileInfo(file).Length;
+            FailedCount++;
+            Write(file, _completedItems - 1, 0);
+            Console.WriteLine();
+            Console.Error.WriteLine($"Failed: {file}");
+            Console.Error.WriteLine(ex.Message);
+        }
+
+        public void FinishStage()
+        {
+            if (!string.IsNullOrEmpty(_stage)) Console.WriteLine();
+            _stage = string.Empty;
+        }
+
+        private void Write(string file, int itemIndex, double itemFraction)
+        {
+            long currentFileBytes = new FileInfo(file).Length;
+            long currentBytes = _completedBytes + (long)(currentFileBytes * itemFraction);
+            double percent = _totalBytes == 0 ? 1 : (double)currentBytes / _totalBytes;
+            string name = Path.GetFileName(file);
+            string line = $"[{_stage}] {percent,7:P1} ({Math.Min(itemIndex + 1, _totalItems)}/{_totalItems}) " +
+                          $"rebuilt {RebuiltCount}, reused {ReusedCount}, elapsed {_timer.Elapsed:hh\\:mm\\:ss} | {name}";
+            Console.Write($"\r{line.PadRight(200)}");
+        }
+
+        private static string FormatBytes(long bytes)
+        {
+            string[] units = { "B", "KB", "MB", "GB", "TB" };
+            double value = bytes;
+            int unit = 0;
+            while (value >= 1024 && unit < units.Length - 1)
+            {
+                value /= 1024;
+                unit++;
+            }
+
+            return $"{value:0.##} {units[unit]}";
+        }
+    }
 }
 
 internal static class StreamingLibraryReader
 {
-    public static LibraryManifest ReadLibrary(string file, string id, string imagesRoot)
+    public static LibraryManifest ReadLibrary(string file, string id, string imagesRoot, Action<int, int> progress = null)
     {
         using FileStream stream = File.OpenRead(file);
         using BinaryReader reader = new(stream);
@@ -260,6 +578,7 @@ internal static class StreamingLibraryReader
             if (indexList[i] <= 0 || indexList[i] >= stream.Length)
             {
                 manifest.Images.Add(new LibraryImageRecord { Index = i, Path = string.Empty });
+                progress?.Invoke(i + 1, count);
                 continue;
             }
 
@@ -316,6 +635,8 @@ internal static class StreamingLibraryReader
                 FileLength = chunk.LongLength,
                 Hash = StreamingAssetIO.ComputeSha256(chunk)
             });
+
+            progress?.Invoke(i + 1, count);
         }
 
         if (version >= 3 && frameSeek > 0 && frameSeek < stream.Length)
