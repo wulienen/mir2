@@ -18,7 +18,7 @@ namespace Client.MirScenes.Dialogs
             set { MapObject.User = value; }
         }
 
-        public MirImageControl ExperienceBar, WeightBar, LeftCap, RightCap;
+        public MirImageControl ExperienceBar, WeightBar, LeftCap, RightCap, HudBackground;
         public MirButton GameShopButton, MenuButton, InventoryButton, CharacterButton, SkillButton, QuestButton, OptionButton;
         public MirControl HealthOrb;
         public MirLabel HealthLabel, ManaLabel, TopLabel, BottomLabel, LevelLabel, CharacterName, ExperienceLabel, GoldLabel, WeightLabel, SpaceLabel, AModeLabel, PModeLabel, SModeLabel;
@@ -34,10 +34,27 @@ namespace Client.MirScenes.Dialogs
 
         public MainDialog()
         {
+            bool useXiayiUi = XiayiUiTheme.UseHudTheme;
+
             Index = Settings.Resolution == 800 ? 0 : Settings.Resolution == 1024 ? 1 : 2;
             Library = Libraries.Prguse;
             Location = new Point(((Settings.ScreenWidth / 2) - (Size.Width / 2)), Settings.ScreenHeight - Size.Height);
             PixelDetect = true;
+
+            if (useXiayiUi)
+            {
+                DrawImage = false;
+                HudBackground = new MirImageControl
+                {
+                    Index = XiayiUiTheme.HudBackground,
+                    Library = Libraries.XiayiUi,
+                    Location = new Point(0, 32),
+                    Parent = this,
+                    AutoSize = false,
+                    Size = new Size(1024, 118),
+                    NotControl = true,
+                };
+            }
 
             LeftCap = new MirImageControl
             {
@@ -56,7 +73,7 @@ namespace Client.MirScenes.Dialogs
                 Visible = false
             };
 
-            if (Settings.Resolution > 1024)
+            if (Settings.Resolution > 1024 && !useXiayiUi)
             {
                 LeftCap.Visible = true;
                 RightCap.Visible = true;
@@ -195,19 +212,33 @@ namespace Client.MirScenes.Dialogs
                 else GameScene.Scene.GameShopDialog.Hide();
             };
 
+            if (useXiayiUi)
+            {
+                ConfigureXiayiHudButton(GameShopButton, 75, 76, new Point(919, 35));
+                ConfigureXiayiHudButton(MenuButton, 83, 84, new Point(969, 35));
+                ConfigureXiayiHudButton(CharacterButton, 73, 74, new Point(860, 76));
+                ConfigureXiayiHudButton(InventoryButton, 71, 72, new Point(889, 76));
+                ConfigureXiayiHudButton(SkillButton, 79, 80, new Point(918, 76));
+                ConfigureXiayiHudButton(QuestButton, 81, 82, new Point(947, 76));
+                ConfigureXiayiHudButton(OptionButton, 77, 78, new Point(976, 76));
+            }
+
             HealthOrb = new MirControl
             {
                 Parent = this,
-                Location = new Point(0, 30),
+                Location = useXiayiUi ? new Point(87, 32) : new Point(0, 30),
                 NotControl = true,
             };
+
+            if (useXiayiUi)
+                HealthOrb.Size = new Size(118, 119);
 
             HealthOrb.BeforeDraw += HealthOrb_BeforeDraw;
 
             HealthLabel = new MirLabel
             {
                 AutoSize = true,
-                Location = new Point(0, 27),
+                Location = new Point(0, useXiayiUi ? 44 : 27),
                 Parent = HealthOrb
             };
             HealthLabel.SizeChanged += Label_SizeChanged;
@@ -215,24 +246,24 @@ namespace Client.MirScenes.Dialogs
             ManaLabel = new MirLabel
             {
                 AutoSize = true,
-                Location = new Point(0, 42),
+                Location = new Point(0, useXiayiUi ? 64 : 42),
                 Parent = HealthOrb
             };
             ManaLabel.SizeChanged += Label_SizeChanged;
 
             TopLabel = new MirLabel
             {
-                Size = new Size(85, 30),
+                Size = new Size(useXiayiUi ? 118 : 85, 30),
                 DrawFormat = TextFormatFlags.HorizontalCenter,
-                Location = new Point(9, 20),
+                Location = new Point(useXiayiUi ? 0 : 9, useXiayiUi ? 40 : 20),
                 Parent = HealthOrb,
             };
 
             BottomLabel = new MirLabel
             {
-                Size = new Size(85, 30),
+                Size = new Size(useXiayiUi ? 118 : 85, 30),
                 DrawFormat = TextFormatFlags.HorizontalCenter,
-                Location = new Point(9, 50),
+                Location = new Point(useXiayiUi ? 0 : 9, useXiayiUi ? 64 : 50),
                 Parent = HealthOrb,
             };
 
@@ -240,15 +271,15 @@ namespace Client.MirScenes.Dialogs
             {
                 AutoSize = true,
                 Parent = this,
-                Location = new Point(5, 108)
+                Location = useXiayiUi ? new Point(800, 104) : new Point(5, 108)
             };
 
             CharacterName = new MirLabel
             {
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                 Parent = this,
-                Location = new Point(6, 120),
-                Size = new Size(90, 16)
+                Location = useXiayiUi ? new Point(220, 94) : new Point(6, 120),
+                Size = useXiayiUi ? new Size(200, 16) : new Size(90, 16)
             };
 
 
@@ -262,6 +293,15 @@ namespace Client.MirScenes.Dialogs
                 NotControl = true,
             };
             ExperienceBar.BeforeDraw += ExperienceBar_BeforeDraw;
+
+            if (useXiayiUi)
+            {
+                ExperienceBar.Index = XiayiUiTheme.HudExperienceFill;
+                ExperienceBar.Library = Libraries.XiayiUi;
+                ExperienceBar.Location = new Point(157, 134);
+                ExperienceBar.AutoSize = false;
+                ExperienceBar.Size = new Size(749, 16);
+            }
 
             ExperienceLabel = new MirLabel
             {
@@ -349,6 +389,13 @@ namespace Client.MirScenes.Dialogs
 
             HeroInfoPanel = new HeroInfoPanel { Parent = this, Visible = false };
 
+            if (useXiayiUi)
+            {
+                HeroMenuButton.Location = new Point(10, 65);
+                HeroSummonButton.Location = new Point(35, 65);
+                HeroInfoPanel.Location = new Point(220, 44);
+            }
+
             AModeLabel = new MirLabel
             {
                 AutoSize = true,
@@ -378,6 +425,17 @@ namespace Client.MirScenes.Dialogs
                 Location = new Point(Settings.Resolution != 800 ? 899 : 675, Settings.Resolution != 800 ? -463 : -295),
                 Visible = Settings.ModeView
             };
+        }
+
+        private static void ConfigureXiayiHudButton(MirButton button, int index, int activeIndex, Point location)
+        {
+            button.Library = Libraries.XiayiUi;
+            button.Index = index;
+            button.HoverIndex = activeIndex;
+            button.PressedIndex = activeIndex;
+            button.Location = location;
+            button.AutoSize = false;
+            button.Size = new Size(27, 27);
         }
 
         public void Process()
@@ -458,7 +516,7 @@ namespace Client.MirScenes.Dialogs
 
             LevelLabel.Text = User.Level.ToString();
             ExperienceLabel.Text = string.Format("{0:#0.##%}", User.Experience / (double)User.MaxExperience);
-            ExperienceLabel.Location = new Point((ExperienceBar.Size.Width / 2) - 20, -10);
+            ExperienceLabel.Location = new Point((ExperienceBar.Size.Width / 2) - 20, XiayiUiTheme.UseHudTheme ? 0 : -10);
             GoldLabel.Text = GameScene.Gold.ToString("###,###,##0");
             CharacterName.Text = User.Name;
             SpaceLabel.Text = User.Inventory.Count(t => t == null).ToString();
@@ -469,11 +527,18 @@ namespace Client.MirScenes.Dialogs
         {
             if (!(sender is MirLabel l)) return;
 
-            l.Location = new Point(50 - (l.Size.Width / 2), l.Location.Y);
+            int centre = XiayiUiTheme.UseHudTheme ? HealthOrb.Size.Width / 2 : 50;
+            l.Location = new Point(centre - (l.Size.Width / 2), l.Location.Y);
         }
 
         private void HealthOrb_BeforeDraw(object sender, EventArgs e)
         {
+            if (XiayiUiTheme.UseHudTheme)
+            {
+                DrawXiayiHealthOrb();
+                return;
+            }
+
             if (Libraries.Prguse == null) return;
 
             int height;
@@ -510,6 +575,41 @@ namespace Client.MirScenes.Dialogs
             r = new Rectangle(51, 80 - height, 50, height);
 
             Libraries.Prguse.Draw(4, r, new Point(((Settings.ScreenWidth / 2) - (Size.Width / 2)) + 51, HealthOrb.DisplayLocation.Y + 80 - height), Color.White, false);
+        }
+
+        private void DrawXiayiHealthOrb()
+        {
+            if (User == null) return;
+
+            const int orbHeight = 119;
+            const int orbHalfWidth = 59;
+
+            int healthHeight = GetOrbFillHeight(User.HP, User.Stats[Stat.HP], orbHeight);
+            Point healthLocation = new(HealthOrb.DisplayLocation.X, HealthOrb.DisplayLocation.Y + orbHeight - healthHeight);
+
+            if (HPOnly)
+            {
+                Libraries.XiayiUi.Draw(XiayiUiTheme.HudHealthOrb,
+                    new Rectangle(0, orbHeight - healthHeight, 118, healthHeight), healthLocation, Color.White, false);
+                return;
+            }
+
+            Libraries.XiayiUi.Draw(XiayiUiTheme.HudHealthManaOrb,
+                new Rectangle(0, orbHeight - healthHeight, orbHalfWidth, healthHeight), healthLocation, Color.White, false);
+
+            int manaHeight = GetOrbFillHeight(User.MP, User.Stats[Stat.MP], orbHeight);
+            Point manaLocation = new(HealthOrb.DisplayLocation.X + orbHalfWidth, HealthOrb.DisplayLocation.Y + orbHeight - manaHeight);
+            Libraries.XiayiUi.Draw(XiayiUiTheme.HudHealthManaOrb,
+                new Rectangle(orbHalfWidth, orbHeight - manaHeight, orbHalfWidth, manaHeight), manaLocation, Color.White, false);
+        }
+
+        private static int GetOrbFillHeight(int current, int maximum, int height)
+        {
+            if (maximum <= 0) return 0;
+
+            int result = (int)(height * current / (float)maximum);
+            if (result < 0) return 0;
+            return result > height ? height : result;
         }
 
         private void ExperienceBar_BeforeDraw(object sender, EventArgs e)
@@ -571,6 +671,7 @@ namespace Client.MirScenes.Dialogs
 
         public MirButton HomeButton, UpButton, EndButton, DownButton, PositionBar;
         public MirImageControl CountBar;
+        public MirImageControl ChatInputBackground;
         public MirTextBox ChatTextBox;
         public Font ChatFont = new Font(Settings.FontName, 8F);
         public string LastPM = string.Empty;
@@ -582,22 +683,38 @@ namespace Client.MirScenes.Dialogs
 
         public ChatDialog()
         {
-            Index = Settings.Resolution != 800 ? 2221 : 2201;
-            Library = Libraries.Prguse;
-            Location = new Point(GameScene.Scene.MainDialog.Location.X + 230, Settings.ScreenHeight - 97);
+            bool useXiayiUi = XiayiUiTheme.UseChatTheme;
+
+            Index = useXiayiUi ? XiayiUiTheme.ChatSmall : Settings.Resolution != 800 ? 2221 : 2201;
+            Library = useXiayiUi ? Libraries.XiayiUi : Libraries.Prguse;
+            Location = useXiayiUi
+                ? new Point(GameScene.Scene.MainDialog.Location.X + 230, GameScene.Scene.MainDialog.Location.Y + 32 - Size.Height)
+                : new Point(GameScene.Scene.MainDialog.Location.X + 230, Settings.ScreenHeight - 97);
             PixelDetect = true;
 
             KeyPress += ChatPanel_KeyPress;
             KeyDown += ChatPanel_KeyDown;
             MouseWheel += ChatPanel_MouseWheel;
 
+            if (useXiayiUi)
+            {
+                ChatInputBackground = new MirImageControl
+                {
+                    Index = XiayiUiTheme.ChatInput,
+                    Library = Libraries.XiayiUi,
+                    Location = new Point(-1, Size.Height - 29),
+                    Parent = this,
+                    NotControl = true,
+                };
+            }
+
             ChatTextBox = new MirTextBox
             {
-                BackColour = Color.DarkGray,
-                ForeColour = Color.Black,
+                BackColour = useXiayiUi ? Color.FromArgb(18, 18, 18) : Color.DarkGray,
+                ForeColour = useXiayiUi ? Color.Gainsboro : Color.Black,
                 Parent = this,
-                Size = new Size(Settings.Resolution != 800 ? 627 : 403, 13),
-                Location = new Point(1, 54),
+                Size = useXiayiUi ? new Size(500, 17) : new Size(Settings.Resolution != 800 ? 627 : 403, 13),
+                Location = useXiayiUi ? new Point(8, Size.Height - 23) : new Point(1, 54),
                 MaxLength = Globals.MaxChatLength,
                 Visible = false,
                 Font = ChatFont,
@@ -698,6 +815,9 @@ namespace Client.MirScenes.Dialogs
                 Sound = SoundList.None,
             };
             PositionBar.OnMoving += PositionBar_OnMoving;
+
+            if (useXiayiUi)
+                ApplyXiayiLayout();
         }
 
         public void SetChatText(string newText)
@@ -761,13 +881,21 @@ namespace Client.MirScenes.Dialogs
 
         void PositionBar_OnMoving(object sender, MouseEventArgs e)
         {
-            int x = Settings.Resolution != 800 ? 619 : 395;
+            int x = XiayiUiTheme.UseChatTheme ? Size.Width - 14 : Settings.Resolution != 800 ? 619 : 395;
+            int top = XiayiUiTheme.UseChatTheme ? CountBar.Location.Y : 16;
             int y = PositionBar.Location.Y;
-            if (y >= 16 + CountBar.Size.Height - PositionBar.Size.Height) y = 16 + CountBar.Size.Height - PositionBar.Size.Height;
-            if (y < 16) y = 16;
+            int bottom = top + CountBar.Size.Height - PositionBar.Size.Height;
+            if (y >= bottom) y = bottom;
+            if (y < top) y = top;
+
+            if (History.Count <= 1)
+            {
+                PositionBar.Location = new Point(x, y);
+                return;
+            }
 
             int h = CountBar.Size.Height - PositionBar.Size.Height;
-            h = (int)((y - 16) / (h / (float)(History.Count - 1)));
+            h = (int)((y - top) / (h / (float)(History.Count - 1)));
 
             if (h != StartIndex)
             {
@@ -853,7 +981,7 @@ namespace Client.MirScenes.Dialogs
 
             List<string> chat = new List<string>();
 
-            int chatWidth = Settings.Resolution != 800 ? 614 : 390;
+            int chatWidth = XiayiUiTheme.UseChatTheme ? 496 : Settings.Resolution != 800 ? 614 : 390;
             int index = 0;
 
             for (int i = 1; i < text.Length; i++)
@@ -946,10 +1074,11 @@ namespace Client.MirScenes.Dialogs
             {
                 int h = CountBar.Size.Height - PositionBar.Size.Height;
                 h = (int)((h / (float)(History.Count - 1)) * StartIndex);
-                PositionBar.Location = new Point(Settings.Resolution != 800 ? 619 : 395, 16 + h);
+                PositionBar.Location = new Point(XiayiUiTheme.UseChatTheme ? Size.Width - 14 : Settings.Resolution != 800 ? 619 : 395,
+                    (XiayiUiTheme.UseChatTheme ? CountBar.Location.Y : 16) + h);
             }
 
-            int y = 1;
+            int y = XiayiUiTheme.UseChatTheme ? 4 : 1;
 
             for (int i = StartIndex; i < History.Count; i++)
             {
@@ -1187,6 +1316,17 @@ namespace Client.MirScenes.Dialogs
 
         public void ChangeSize()
         {
+            if (XiayiUiTheme.UseChatTheme)
+            {
+                if (++WindowSize >= 3) WindowSize = 0;
+
+                int bottom = DisplayRectangle.Bottom;
+                ApplyXiayiLayout();
+                Location = new Point(Location.X, bottom - Size.Height);
+                Update();
+                return;
+            }
+
             if (++WindowSize >= 3) WindowSize = 0;
 
             int y = DisplayRectangle.Bottom;
@@ -1227,6 +1367,12 @@ namespace Client.MirScenes.Dialogs
 
         public void UpdateBackground()
         {
+            if (XiayiUiTheme.UseChatTheme)
+            {
+                ApplyXiayiLayout();
+                return;
+            }
+
             int offset = Transparent ? 1 : 0;
 
             switch (WindowSize)
@@ -1245,6 +1391,47 @@ namespace Client.MirScenes.Dialogs
             Index -= offset;
         }
 
+        private void ApplyXiayiLayout()
+        {
+            Library = Libraries.XiayiUi;
+
+            switch (WindowSize)
+            {
+                case 0:
+                    Index = XiayiUiTheme.ChatSmall;
+                    LineCount = 7;
+                    CountBar.Index = 2013;
+                    break;
+                case 1:
+                    Index = XiayiUiTheme.ChatMedium;
+                    LineCount = 11;
+                    CountBar.Index = 2014;
+                    break;
+                default:
+                    Index = XiayiUiTheme.ChatLarge;
+                    LineCount = 16;
+                    CountBar.Index = 2014;
+                    break;
+            }
+
+            int inputY = Size.Height - 29;
+            int buttonX = Size.Width - 14;
+            int trackX = Size.Width - 6;
+
+            if (ChatInputBackground != null)
+                ChatInputBackground.Location = new Point(-1, inputY);
+
+            ChatTextBox.Location = new Point(8, inputY + 6);
+            ChatTextBox.Size = new Size(500, 17);
+
+            HomeButton.Location = new Point(buttonX, 4);
+            UpButton.Location = new Point(buttonX, 13);
+            CountBar.Location = new Point(trackX, 20);
+            PositionBar.Location = new Point(buttonX, 20);
+            DownButton.Location = new Point(buttonX, inputY - 15);
+            EndButton.Location = new Point(buttonX, inputY - 9);
+        }
+
         public class ChatHistory
         {
             public string Text;
@@ -1258,9 +1445,18 @@ namespace Client.MirScenes.Dialogs
 
         public ChatControlBar()
         {
-            Index = Settings.Resolution != 800 ? 2034 : 2035;
-            Library = Libraries.Prguse;
-            Location = new Point(GameScene.Scene.MainDialog.Location.X + 230, Settings.ScreenHeight - 112);
+            bool useXiayiUi = XiayiUiTheme.UseChatTheme;
+
+            Index = useXiayiUi ? XiayiUiTheme.ChatInput : Settings.Resolution != 800 ? 2034 : 2035;
+            Library = useXiayiUi ? Libraries.XiayiUi : Libraries.Prguse;
+            Location = useXiayiUi
+                ? new Point(GameScene.Scene.ChatDialog.Location.X, GameScene.Scene.ChatDialog.DisplayRectangle.Top - Size.Height)
+                : new Point(GameScene.Scene.MainDialog.Location.X + 230, Settings.ScreenHeight - 112);
+
+            int buttonY = useXiayiUi ? 8 : 1;
+            int sizeButtonX = useXiayiUi ? 465 : Settings.Resolution != 800 ? 574 : 350;
+            int settingsButtonX = useXiayiUi ? 489 : Settings.Resolution != 800 ? 596 : 372;
+            int reportButtonX = useXiayiUi ? 443 : Settings.Resolution != 800 ? 552 : 328;
 
             SizeButton = new MirButton
             {
@@ -1269,7 +1465,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2059,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(Settings.Resolution != 800 ? 574 : 350, 1),
+                Location = new Point(sizeButtonX, buttonY),
                 Visible = true,
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Size)
@@ -1292,7 +1488,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2062,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(Settings.Resolution != 800 ? 596 : 372, 1),
+                Location = new Point(settingsButtonX, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.ChatSettings)
             };
@@ -1314,7 +1510,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2038,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(12, 1),
+                Location = new Point(12, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_All)
             };
@@ -1330,7 +1526,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2041,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(34, 1),
+                Location = new Point(34, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_Short)
             };
@@ -1346,7 +1542,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2044,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(56, 1),
+                Location = new Point(56, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_Whisper)
             };
@@ -1362,7 +1558,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2047,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(78, 1),
+                Location = new Point(78, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_Lover)
             };
@@ -1378,7 +1574,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2050,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(100, 1),
+                Location = new Point(100, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_Mentor)
             };
@@ -1394,7 +1590,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2053,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(122, 1),
+                Location = new Point(122, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_Group)
             };
@@ -1410,7 +1606,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2056,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(144, 1),
+                Location = new Point(144, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Chat_Guild)
             };
@@ -1426,7 +1622,7 @@ namespace Client.MirScenes.Dialogs
                 HoverIndex = 2005,
                 PressedIndex = 2006,
                 Library = Libraries.Prguse,
-                Location = new Point(166, 1),
+                Location = new Point(166, buttonY),
                 Parent = this,
                 Sound = SoundList.ButtonC,
                 Hint = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.TradeKey), CMain.InputKeys.GetKey(KeybindOptions.Trade)),
@@ -1440,7 +1636,7 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 2065,
                 Library = Libraries.Prguse,
                 Parent = this,
-                Location = new Point(Settings.Resolution != 800 ? 552 : 328, 1),
+                Location = new Point(reportButtonX, buttonY),
                 Sound = SoundList.ButtonA,
                 Hint = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Report),
                 Visible = false

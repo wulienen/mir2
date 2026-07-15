@@ -76,6 +76,17 @@
     <None Update="MIR2.ICO">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
+    <None Update="Assets\XiayiUi.Lib">
+      <TargetPath>Data\XiayiUi.Lib</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
   </ItemGroup>
+
+  <Target Name="StageXiayiUiForStreaming" AfterTargets="Build" Condition="Exists('$(OutputPath)Data_Full\Prguse.Lib')">
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Assets\XiayiUi.Lib"
+          DestinationFiles="$(OutputPath)Data_Full\XiayiUi.Lib"
+          SkipUnchangedFiles="true" />
+  </Target>
 
 </Project>

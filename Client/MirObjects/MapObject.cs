@@ -475,6 +475,12 @@ namespace Client.MirObjects
                 if (!ShouldDrawHealth()) return;
             }
 
+            if (XiayiUiTheme.UseOverheadHealthTheme)
+            {
+                DrawXiayiHealth(name);
+                return;
+            }
+
             Libraries.Prguse2.Draw(0, DisplayRectangle.X + 8, DisplayRectangle.Y - 64);
             int index = 1;
 
@@ -504,6 +510,55 @@ namespace Client.MirObjects
             }
 
             Libraries.Prguse2.Draw(index, new Rectangle(0, 0, (int)(32 * PercentHealth / 100F), 4), new Point(DisplayRectangle.X + 8, DisplayRectangle.Y - 64), Color.White, false);
+        }
+
+        private void DrawXiayiHealth(string name)
+        {
+            Point location = new(DisplayRectangle.X + 5, DisplayRectangle.Y - 64);
+            int healthImage = XiayiUiTheme.HealthHostile;
+            bool drawMana = false;
+
+            switch (Race)
+            {
+                case ObjectType.Player:
+                    if (GroupDialog.GroupList.Contains(name) && name != User.Name)
+                        healthImage = XiayiUiTheme.HealthGroup;
+                    break;
+                case ObjectType.Monster:
+                    if (GroupDialog.GroupList.Contains(name) || name == User.Name)
+                        healthImage = XiayiUiTheme.HealthFriendly;
+                    break;
+                case ObjectType.Hero:
+                    if (GroupDialog.GroupList.Contains(MapObject.HeroObject?.OwnerName))
+                        healthImage = XiayiUiTheme.HealthFriendly;
+
+                    if (HeroObject.HeroObject?.OwnerName == User.Name)
+                    {
+                        healthImage = XiayiUiTheme.HealthHostile;
+                        drawMana = (MapObject.HeroObject.Class != MirClass.Warrior && HeroObject.Level > 7) ||
+                                   (MapObject.HeroObject.Class == MirClass.Warrior && HeroObject.Level > 25);
+                    }
+                    break;
+            }
+
+            if (drawMana)
+            {
+                Libraries.XiayiUi.Draw(XiayiUiTheme.HealthDualBackground, location.X, location.Y);
+                DrawXiayiHealthFill(healthImage, PercentHealth, location);
+                DrawXiayiHealthFill(XiayiUiTheme.Mana, PercentMana, location);
+                return;
+            }
+
+            Libraries.XiayiUi.Draw(XiayiUiTheme.HealthSingleBackground, location.X, location.Y);
+            DrawXiayiHealthFill(healthImage, PercentHealth, location);
+        }
+
+        private static void DrawXiayiHealthFill(int image, byte percent, Point location)
+        {
+            int width = (int)(38 * percent / 100F);
+            if (width <= 0) return;
+
+            Libraries.XiayiUi.Draw(image, new Rectangle(0, 0, width, 9), location, Color.White, false);
         }
 
         public void DrawPoison()
