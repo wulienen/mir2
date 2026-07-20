@@ -610,8 +610,9 @@ namespace Client.MirScenes.Dialogs
             Movable = true;
             Sort = true;
             Visible = true;
-            Location = XiayiUiTheme.UseChatTheme
-                ? new Point(GameScene.Scene.ChatControl.Location.X, GameScene.Scene.ChatControl.Location.Y - Size.Height)
+            Location = XiayiUiTheme.UseHudTheme
+                ? new Point((Settings.ScreenWidth - Size.Width) / 2,
+                    GameScene.Scene.MainDialog.Location.Y - Size.Height)
                 : new Point(GameScene.Scene.MainDialog.Location.X + 230, Settings.ScreenHeight - 150);
 
             BeforeDraw += BeltPanel_BeforeDraw;
@@ -703,8 +704,9 @@ namespace Client.MirScenes.Dialogs
             else
             {
                 Index = 1932;
-                Location = XiayiUiTheme.UseChatTheme
-                    ? new Point(GameScene.Scene.ChatControl.Location.X, GameScene.Scene.ChatControl.Location.Y - Size.Height)
+                Location = XiayiUiTheme.UseHudTheme
+                    ? new Point((Settings.ScreenWidth - Size.Width) / 2,
+                        GameScene.Scene.MainDialog.Location.Y - Size.Height)
                     : new Point(GameScene.Scene.MainDialog.Location.X + 230, Settings.ScreenHeight - 150);
 
                 for (int x = 0; x < 6; x++)
