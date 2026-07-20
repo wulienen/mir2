@@ -819,7 +819,16 @@ namespace Client.MirGraphics
             if (_streaming)
             {
                 if (!CheckImage(index))
+                {
+                    // Layout is calculated while controls are constructed. On a cold
+                    // streaming cache the pixels are not available yet, but the
+                    // library manifest already contains the canvas dimensions.
+                    // Returning them prevents one-time Size.Empty based misalignment.
+                    if (_streamingImages.TryGetValue(index, out LibraryImageRecord record))
+                        return new Size(record.Width, record.Height);
+
                     return Size.Empty;
+                }
 
                 return _images[index].TrueSize.IsEmpty ? _images[index].GetTrueSize() : _images[index].TrueSize;
             }
