@@ -64,39 +64,87 @@ namespace Client.Streaming
         {
             if (MapControl.User == null || map.M2CellInfo == null) return;
 
-            int startX = Math.Max(0, MapControl.User.Movement.X - MapControl.ViewRangeX - _manifest.ChunkSize);
-            int endX = Math.Min(Width - 1, MapControl.User.Movement.X + MapControl.ViewRangeX + _manifest.ChunkSize);
-            int startY = Math.Max(0, MapControl.User.Movement.Y - MapControl.ViewRangeY - _manifest.ChunkSize);
-            int endY = Math.Min(Height - 1, MapControl.User.Movement.Y + MapControl.ViewRangeY + _manifest.ChunkSize + 25);
+            Point user = MapControl.User.Movement;
+            int startX = Math.Max(0, user.X - MapControl.ViewRangeX);
+            int endX = Math.Min(Width - 1, user.X + MapControl.ViewRangeX);
+            int startY = Math.Max(0, user.Y - MapControl.ViewRangeY);
+            int endY = Math.Min(Height - 1, user.Y + MapControl.ViewRangeY + 25);
 
-            bool changed = false;
-
-            for (int chunkX = startX / _manifest.ChunkSize * _manifest.ChunkSize; chunkX <= endX; chunkX += _manifest.ChunkSize)
+            bool visibleChanged = ApplyCachedChunks(map, GetChunks(startX, endX, startY, endY, user), out List<MapChunkRecord> missingVisible);
+            if (missingVisible.Count > 0)
             {
-                for (int chunkY = startY / _manifest.ChunkSize * _manifest.ChunkSize; chunkY <= endY; chunkY += _manifest.ChunkSize)
-                {
-                    string key = $"{chunkX}_{chunkY}";
-                    if (_loadedChunks.Contains(key)) continue;
-                    if (!_chunks.TryGetValue(key, out MapChunkRecord record)) continue;
+                AssetManager.QueueMapChunks(_mapId, missingVisible);
+            }
+            else
+            {
+                int prefetchStartX = Math.Max(0, startX - _manifest.ChunkSize);
+                int prefetchEndX = Math.Min(Width - 1, endX + _manifest.ChunkSize);
+                int prefetchStartY = Math.Max(0, startY - _manifest.ChunkSize);
+                int prefetchEndY = Math.Min(Height - 1, endY + _manifest.ChunkSize);
 
-                    if (!AssetManager.TryReadCachedMapChunk(_mapId, record, out StreamingMapChunk chunk))
-                    {
-                        AssetManager.QueueMapChunk(_mapId, record);
-                        continue;
-                    }
+                List<MapChunkRecord> visible = GetChunks(startX, endX, startY, endY, user);
+                HashSet<string> visibleKeys = visible.Select(record => record.Key).ToHashSet();
+                List<MapChunkRecord> prefetch = GetChunks(prefetchStartX, prefetchEndX, prefetchStartY, prefetchEndY, user)
+                    .Where(record => !visibleKeys.Contains(record.Key))
+                    .ToList();
 
-                    ApplyChunk(map, chunk);
-                    _loadedChunks.Add(key);
-                    changed = true;
-                }
+                visibleChanged |= ApplyCachedChunks(map, prefetch, out List<MapChunkRecord> missingPrefetch);
+                if (missingPrefetch.Count > 0)
+                    AssetManager.QueueMapChunks(_mapId, missingPrefetch);
             }
 
-            if (changed)
+            if (visibleChanged)
             {
                 map.FloorValid = false;
                 map.LightsValid = false;
                 map.Redraw();
             }
+        }
+
+        private List<MapChunkRecord> GetChunks(int startX, int endX, int startY, int endY, Point user)
+        {
+            List<MapChunkRecord> records = new();
+            for (int chunkX = startX / _manifest.ChunkSize * _manifest.ChunkSize; chunkX <= endX; chunkX += _manifest.ChunkSize)
+            {
+                for (int chunkY = startY / _manifest.ChunkSize * _manifest.ChunkSize; chunkY <= endY; chunkY += _manifest.ChunkSize)
+                {
+                    if (_chunks.TryGetValue($"{chunkX}_{chunkY}", out MapChunkRecord record))
+                        records.Add(record);
+                }
+            }
+
+            return records.OrderBy(record => DistanceSquared(record, user)).ToList();
+        }
+
+        private bool ApplyCachedChunks(MapControl map, List<MapChunkRecord> records, out List<MapChunkRecord> missing)
+        {
+            bool changed = false;
+            missing = new List<MapChunkRecord>();
+
+            foreach (MapChunkRecord record in records)
+            {
+                if (_loadedChunks.Contains(record.Key)) continue;
+                if (!AssetManager.TryReadCachedMapChunk(_mapId, record, out StreamingMapChunk chunk))
+                {
+                    missing.Add(record);
+                    continue;
+                }
+
+                ApplyChunk(map, chunk);
+                _loadedChunks.Add(record.Key);
+                changed = true;
+            }
+
+            return changed;
+        }
+
+        private int DistanceSquared(MapChunkRecord record, Point user)
+        {
+            int centerX = record.X + record.Width / 2;
+            int centerY = record.Y + record.Height / 2;
+            int dx = centerX - user.X;
+            int dy = centerY - user.Y;
+            return dx * dx + dy * dy;
         }
 
         private static void ApplyChunk(MapControl map, StreamingMapChunk chunk)

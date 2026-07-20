@@ -2,16 +2,23 @@ using Client.MirControls;
 using Client.MirScenes;
 using Shared.StreamingAssets;
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text.Json;
 
 namespace Client.Streaming
 {
     public static class AssetManager
     {
-        private static readonly HttpClient Client = new HttpClient { Timeout = TimeSpan.FromSeconds(3) };
+        private static readonly HttpClient Client = new HttpClient(new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5)
+        });
         private static readonly ConcurrentDictionary<string, Task> Downloads = new ConcurrentDictionary<string, Task>();
+        private static readonly ConcurrentDictionary<string, byte> PendingMapDownloads = new ConcurrentDictionary<string, byte>();
         private static readonly object ManifestLock = new object();
-        private static SemaphoreSlim DownloadSemaphore = new SemaphoreSlim(4);
+        private static SemaphoreSlim DownloadSemaphore = new SemaphoreSlim(3);
+        private static SemaphoreSlim MapDownloadSemaphore = new SemaphoreSlim(1);
 
         private static AssetManifest _manifest;
         private static Dictionary<string, AssetLibraryRecord> _libraries;
@@ -35,7 +42,11 @@ namespace Client.Streaming
         {
             if (!Enabled) return;
 
-            DownloadSemaphore = new SemaphoreSlim(Math.Max(1, Settings.AssetDownloadConcurrency));
+            Client.Timeout = TimeSpan.FromSeconds(Math.Max(5, Settings.AssetRequestTimeoutSeconds));
+
+            int concurrency = Math.Max(1, Settings.AssetDownloadConcurrency);
+            DownloadSemaphore = new SemaphoreSlim(Math.Max(1, concurrency - 1));
+            MapDownloadSemaphore = new SemaphoreSlim(1);
         }
 
         public static AssetManifest Manifest
@@ -204,11 +215,70 @@ namespace Client.Streaming
 
         public static void QueueMapChunk(string mapId, MapChunkRecord record)
         {
-            if (!Enabled || record == null || string.IsNullOrEmpty(record.Path)) return;
+            QueueMapChunks(mapId, new[] { record });
+        }
 
-            string relative = GetMapChunkRelativePath(mapId, record);
-            string cachePath = GetMapChunkCachePath(mapId, record);
-            QueueDownload(relative, record.Hash, cachePath);
+        public static void QueueMapChunks(string mapId, IEnumerable<MapChunkRecord> records)
+        {
+            if (!Enabled || string.IsNullOrWhiteSpace(mapId) || records == null) return;
+
+            List<MapChunkDownload> pending = records
+                .Where(record => record != null && !string.IsNullOrEmpty(record.Path))
+                .Select(record => new MapChunkDownload(
+                    record,
+                    GetMapChunkRelativePath(mapId, record),
+                    GetMapChunkCachePath(mapId, record)))
+                .Where(download => !TryReadValidCache(download.CachePath, download.Record.Hash, out _) &&
+                                   PendingMapDownloads.TryAdd(download.CachePath, 0))
+                .ToList();
+
+            if (pending.Count == 0) return;
+
+            _ = Task.Run(async () =>
+            {
+                bool updated = false;
+                try
+                {
+                    await MapDownloadSemaphore.WaitAsync().ConfigureAwait(false);
+                    try
+                    {
+                        byte[] batch = await DownloadAssetAsync(
+                            $"{StreamingAssetConstants.MapsDirectory}/{NormalizeId(mapId)}/{StreamingAssetConstants.MapChunksDirectory}/batch?keys=" +
+                            Uri.EscapeDataString(string.Join(',', pending.Select(download => download.Record.Key)))).ConfigureAwait(false);
+
+                        if (batch != null && TrySaveMapBatch(mapId, pending, batch))
+                        {
+                            updated = true;
+                        }
+                        else
+                        {
+                            foreach (MapChunkDownload download in pending)
+                            {
+                                byte[] bytes = await DownloadAssetAsync(download.RelativePath, download.Record.Hash).ConfigureAwait(false);
+                                if (bytes == null) continue;
+                                if (await SaveVerifiedAssetAsync(bytes, download.Record.Hash, download.CachePath, download.RelativePath).ConfigureAwait(false))
+                                    updated = true;
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        MapDownloadSemaphore.Release();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    CMain.SaveError(ex.ToString());
+                }
+                finally
+                {
+                    foreach (MapChunkDownload download in pending)
+                        PendingMapDownloads.TryRemove(download.CachePath, out _);
+
+                    if (updated)
+                        NotifyAssetsUpdated();
+                }
+            });
         }
 
         public static bool TryGetCachedSoundPath(string soundId, out string path)
@@ -421,7 +491,7 @@ namespace Client.Streaming
                     {
                         if (TryReadValidCache(cachePath, hash, out _)) return;
 
-                        byte[] bytes = await DownloadAssetAsync(relativePath).ConfigureAwait(false);
+                        byte[] bytes = await DownloadAssetAsync(relativePath, hash).ConfigureAwait(false);
                         if (bytes == null) return;
 
                         if (!string.IsNullOrEmpty(hash) && StreamingAssetIO.ComputeSha256(bytes) != hash)
@@ -459,7 +529,7 @@ namespace Client.Streaming
         {
             if (TryReadValidCache(cachePath, hash, out byte[] cached)) return cached;
 
-            byte[] bytes = await DownloadAssetAsync(relativePath).ConfigureAwait(false);
+            byte[] bytes = await DownloadAssetAsync(relativePath, hash).ConfigureAwait(false);
             if (bytes == null) return null;
 
             if (!string.IsNullOrEmpty(hash) && StreamingAssetIO.ComputeSha256(bytes) != hash)
@@ -473,11 +543,11 @@ namespace Client.Streaming
             return bytes;
         }
 
-        private static async Task<byte[]> DownloadAssetAsync(string relativePath)
+        private static async Task<byte[]> DownloadAssetAsync(string relativePath, string hash = null)
         {
             try
             {
-                using HttpResponseMessage response = await Client.GetAsync(MakeUrl(relativePath)).ConfigureAwait(false);
+                using HttpResponseMessage response = await Client.GetAsync(MakeUrl(relativePath, hash)).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode) return null;
                 return await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
             }
@@ -511,10 +581,78 @@ namespace Client.Streaming
             }
         }
 
-        private static string MakeUrl(string relativePath)
+        private static string MakeUrl(string relativePath, string hash = null)
         {
-            return Settings.AssetBaseUrl.TrimEnd('/') + "/" + relativePath.Replace('\\', '/').TrimStart('/');
+            string url = Settings.AssetBaseUrl.TrimEnd('/') + "/" + relativePath.Replace('\\', '/').TrimStart('/');
+            if (!string.IsNullOrWhiteSpace(hash))
+                url += (url.Contains('?') ? "&" : "?") + "h=" + Uri.EscapeDataString(hash);
+
+            return url;
         }
+
+        private static bool TrySaveMapBatch(string mapId, List<MapChunkDownload> pending, byte[] bytes)
+        {
+            try
+            {
+                Dictionary<string, MapChunkDownload> byKey = pending.ToDictionary(download => download.Record.Key);
+                using MemoryStream stream = new(bytes);
+                using BinaryReader reader = new(stream);
+                int count = reader.ReadInt32();
+                if (count < 0 || count > 64) return false;
+
+                bool updated = false;
+                for (int i = 0; i < count; i++)
+                {
+                    string key = reader.ReadString();
+                    int length = reader.ReadInt32();
+                    if (length < 0 || length > 64 * 1024 * 1024 || stream.Length - stream.Position < length)
+                        return false;
+
+                    byte[] chunk = reader.ReadBytes(length);
+                    if (!byKey.TryGetValue(key, out MapChunkDownload download))
+                        continue;
+
+                    if (StreamingAssetIO.ComputeSha256(chunk) != download.Record.Hash)
+                    {
+                        CMain.SaveError($"Streaming asset hash mismatch: {download.RelativePath}");
+                        continue;
+                    }
+
+                    WriteCacheFile(download.CachePath, chunk);
+                    updated = true;
+                }
+
+                return updated;
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Invalid map chunk batch {mapId}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private static async Task<bool> SaveVerifiedAssetAsync(byte[] bytes, string hash, string cachePath, string relativePath)
+        {
+            if (!string.IsNullOrEmpty(hash) && StreamingAssetIO.ComputeSha256(bytes) != hash)
+            {
+                CMain.SaveError($"Streaming asset hash mismatch: {relativePath}");
+                return false;
+            }
+
+            await Task.Run(() => WriteCacheFile(cachePath, bytes)).ConfigureAwait(false);
+            return true;
+        }
+
+        private static void WriteCacheFile(string cachePath, byte[] bytes)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(cachePath) ?? ".");
+            string temp = cachePath + ".tmp";
+            File.WriteAllBytes(temp, bytes);
+            if (File.Exists(cachePath)) File.Delete(cachePath);
+            File.Move(temp, cachePath);
+        }
+
+        private sealed record MapChunkDownload(MapChunkRecord Record, string RelativePath, string CachePath);
 
         private static IEnumerable<string> GetSoundIdCandidates(string soundName, IEnumerable<string> extensions)
         {

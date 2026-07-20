@@ -207,6 +207,7 @@ namespace Client
         public static string AssetBaseUrl = @"http://127.0.0.1:8088/assets/v1/";
         public static bool PreferLocalAssets = true;
         public static int AssetDownloadConcurrency = 4;
+        public static int AssetRequestTimeoutSeconds = 30;
         public static string AssetCachePath = @".\Cache\Assets\";
 
         public static void Load()
@@ -315,6 +316,7 @@ namespace Client
             AssetBaseUrl = Reader.ReadString("Streaming", "AssetBaseUrl", AssetBaseUrl);
             PreferLocalAssets = Reader.ReadBoolean("Streaming", "PreferLocalAssets", PreferLocalAssets);
             AssetDownloadConcurrency = Reader.ReadInt32("Streaming", "ConcurrentDownloads", AssetDownloadConcurrency);
+            AssetRequestTimeoutSeconds = Reader.ReadInt32("Streaming", "RequestTimeoutSeconds", AssetRequestTimeoutSeconds);
             AssetCachePath = Reader.ReadString("Streaming", "CachePath", AssetCachePath);
 
             if (!P_Host.EndsWith("/")) P_Host += "/";
@@ -438,6 +440,7 @@ namespace Client
             Reader.Write("Streaming", "AssetBaseUrl", AssetBaseUrl);
             Reader.Write("Streaming", "PreferLocalAssets", PreferLocalAssets);
             Reader.Write("Streaming", "ConcurrentDownloads", AssetDownloadConcurrency);
+            Reader.Write("Streaming", "RequestTimeoutSeconds", AssetRequestTimeoutSeconds);
             Reader.Write("Streaming", "CachePath", AssetCachePath);
         }
 
