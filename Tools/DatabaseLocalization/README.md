@@ -34,12 +34,12 @@ dotnet run --project Tools\DatabaseLocalization\DatabaseLocalization.csproj -- a
 dotnet run --project Tools\DatabaseLocalization\DatabaseLocalization.csproj -- apply --database Build\Server\Debug\Server.MirDB --input Tools\DatabaseLocalization\debug-zh-CN.json --write
 ```
 
-可安全回写的字段包括：NPC 名称、地图标题、技能名称、任务名称和任务消息、物品 Tooltip。任务详细说明不在数据库内，而在 `Envir\Quests\*.txt`。
-
-物品名和怪物名是高风险字段。它们还被掉落表、任务、NPC 脚本及部分服务器设置用作查找键。工具会导出它们供审阅，但默认拒绝写回。只有在同步处理完引用后，才可明确传入 `--allow-unsafe-names`：
+写入完成后，核对所有译文已经持久化，并确认物品、怪物的英文内部查找名没有改变：
 
 ```powershell
-dotnet run --project Tools\DatabaseLocalization\DatabaseLocalization.csproj -- apply --database Build\Server\Debug\Server.MirDB --input Tools\DatabaseLocalization\debug-zh-CN.json --allow-unsafe-names --write
+dotnet run --project Tools\DatabaseLocalization\DatabaseLocalization.csproj -- verify --database Build\Server\Debug\Server.MirDB --input Tools\DatabaseLocalization\debug-zh-CN.json
 ```
 
-这项危险开关不会自动重写脚本、掉落表或配置。怪物改名尤其需要检查 `Envir\Drops\<怪物英文名>.txt` 和 `Configs\Setup.ini` 中的特殊怪物名。
+物品名和怪物名现在使用独立的玩家显示名字段。数据库中的英文 `Name` 仍然保留为内部查找键，因此不会破坏掉落表、任务、NPC 脚本及服务器设置。NPC 名称、地图标题、技能名称、任务名称和任务消息、物品 Tooltip 也都可以安全回写。任务详细说明不在数据库内，而在 `Envir\Quests\*.txt`。
+
+工具会把数据库从旧版本自动升级到包含显示名字段的新版本。升级前会创建备份；升级后的服务端和客户端必须使用同一份新代码编译出来的文件。

@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Server;
 using Server.MirEnvir;
 
@@ -8,6 +10,9 @@ namespace DatabaseLocalization;
 internal static class Program
 {
     private const int SchemaVersion = 1;
+    private static readonly Regex ProtectedTokenRegex = new(
+        @"<[^>]+>|\{[^}]+\}|@\w+|\$\w+|#[A-Za-z_]+",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
@@ -23,6 +28,7 @@ internal static class Program
             {
                 "export" => Export(command),
                 "validate" => Validate(command),
+                "verify" => Verify(command),
                 "apply" => Apply(command),
                 "report" => Report(command),
                 _ => ShowUsage(),
@@ -77,6 +83,49 @@ internal static class Program
         Console.WriteLine($"Remaining: {document.Entries.Count - translated.Count}");
         Console.WriteLine($"Unsafe name changes: {translated.Count(entry => entry.IsUnsafeNameChange)}");
         PrintEntryCounts(translated);
+        return 0;
+    }
+
+    private static int Verify(CommandLine command)
+    {
+        string databasePath = RequireDatabase(command);
+        string inputPath = RequirePath(command, "input");
+        TranslationDocument document = ReadDocument(inputPath);
+        DatabaseContext context = DatabaseContext.Load(databasePath);
+        ValidationResult result = new();
+        int checkedEntries = 0;
+
+        if (document.SchemaVersion != SchemaVersion)
+        {
+            result.Errors.Add($"Unsupported schema version {document.SchemaVersion}. Expected {SchemaVersion}.");
+        }
+
+        foreach (TranslationEntry entry in document.Entries)
+        {
+            string? current = ReadEntryValue(context.Edit, entry);
+            string expected = entry.HasTranslation ? entry.Translation! : entry.Source;
+            if (current is null)
+            {
+                result.Errors.Add($"{entry.Key}: target no longer exists or field is invalid.");
+                continue;
+            }
+
+            checkedEntries++;
+            if (!string.Equals(current, expected, StringComparison.Ordinal))
+            {
+                result.Errors.Add($"{entry.Key}: stored value does not match the expected translation.");
+            }
+
+            ValidateLookupName(entry, context.Edit, result);
+        }
+
+        PrintValidation(result);
+        if (result.Errors.Count > 0)
+        {
+            return 2;
+        }
+
+        Console.WriteLine($"Verified {checkedEntries} stored value(s); protected item and monster lookup names are unchanged.");
         return 0;
     }
 
@@ -183,6 +232,8 @@ internal static class Program
             result.Errors.Add($"{entry.Key}: source text no longer matches the database.");
         }
 
+        ValidateLookupName(entry, database, result);
+
         if (!entry.HasTranslation)
         {
             return;
@@ -191,6 +242,13 @@ internal static class Program
         if (entry.Translation!.Contains('\0'))
         {
             result.Errors.Add($"{entry.Key}: translation contains a null character.");
+        }
+
+        string[] sourceTokens = ProtectedTokenRegex.Matches(entry.Source).Select(match => match.Value).ToArray();
+        string[] translatedTokens = ProtectedTokenRegex.Matches(entry.Translation).Select(match => match.Value).ToArray();
+        if (!sourceTokens.SequenceEqual(translatedTokens, StringComparer.Ordinal))
+        {
+            result.Errors.Add($"{entry.Key}: protected placeholders or script tokens were changed. Expected [{string.Join(", ", sourceTokens)}], got [{string.Join(", ", translatedTokens)}].");
         }
 
         if (entry.IsUnsafeNameChange && !allowUnsafeNames)
@@ -204,13 +262,33 @@ internal static class Program
         }
     }
 
+    private static void ValidateLookupName(TranslationEntry entry, Envir database, ValidationResult result)
+    {
+        if (string.IsNullOrEmpty(entry.LookupName))
+        {
+            return;
+        }
+
+        string? current = (entry.Kind, entry.Field) switch
+        {
+            ("item", "name") => database.ItemInfoList.FirstOrDefault(item => item.Index == entry.Index)?.Name,
+            ("monster", "name") => database.MonsterInfoList.FirstOrDefault(monster => monster.Index == entry.Index)?.Name,
+            _ => null,
+        };
+
+        if (!string.Equals(current, entry.LookupName, StringComparison.Ordinal))
+        {
+            result.Errors.Add($"{entry.Key}: protected lookup name changed. Expected '{entry.LookupName}', got '{current ?? "<missing>"}'.");
+        }
+    }
+
     private static string? ReadEntryValue(Envir database, TranslationEntry entry)
     {
         return (entry.Kind, entry.Field) switch
         {
-            ("item", "name") => database.ItemInfoList.FirstOrDefault(item => item.Index == entry.Index)?.Name,
+            ("item", "name") => database.ItemInfoList.FirstOrDefault(item => item.Index == entry.Index)?.DisplayName,
             ("item", "toolTip") => database.ItemInfoList.FirstOrDefault(item => item.Index == entry.Index)?.ToolTip ?? string.Empty,
-            ("monster", "name") => database.MonsterInfoList.FirstOrDefault(monster => monster.Index == entry.Index)?.Name,
+            ("monster", "name") => database.MonsterInfoList.FirstOrDefault(monster => monster.Index == entry.Index)?.DisplayName,
             ("npc", "name") => database.NPCInfoList.FirstOrDefault(npc => npc.Index == entry.Index)?.Name,
             ("map", "title") => database.MapInfoList.FirstOrDefault(map => map.Index == entry.Index)?.Title,
             ("magic", "name") => database.MagicInfoList.FirstOrDefault(magic => (byte)magic.Spell == entry.Index)?.Name,
@@ -229,13 +307,13 @@ internal static class Program
         switch (entry.Kind, entry.Field)
         {
             case ("item", "name"):
-                database.ItemInfoList.Single(item => item.Index == entry.Index).Name = value;
+                database.ItemInfoList.Single(item => item.Index == entry.Index).DisplayName = value;
                 break;
             case ("item", "toolTip"):
                 database.ItemInfoList.Single(item => item.Index == entry.Index).ToolTip = value;
                 break;
             case ("monster", "name"):
-                database.MonsterInfoList.Single(monster => monster.Index == entry.Index).Name = value;
+                database.MonsterInfoList.Single(monster => monster.Index == entry.Index).DisplayName = value;
                 break;
             case ("npc", "name"):
                 database.NPCInfoList.Single(npc => npc.Index == entry.Index).Name = value;
@@ -325,6 +403,7 @@ internal static class Program
         Console.WriteLine("export   --database <Server.MirDB> [--output <translations.json>]");
         Console.WriteLine("report   --input <translations.json>");
         Console.WriteLine("validate --database <Server.MirDB> --input <translations.json> [--allow-unsafe-names]");
+        Console.WriteLine("verify   --database <Server.MirDB> --input <translations.json>");
         Console.WriteLine("apply    --database <Server.MirDB> --input <translations.json> [--write] [--allow-unsafe-names]");
         Console.WriteLine();
         Console.WriteLine("apply is a dry run unless --write is supplied.");
@@ -408,12 +487,12 @@ internal sealed class TranslationDocument
 
         Envir database = context.Edit;
         document.Entries.AddRange(database.ItemInfoList.OrderBy(item => item.Index).Select(item =>
-            TranslationEntry.Create("item", item.Index, "name", item.Name, "unsafe", "Also used by scripts and item lookup.")));
+            TranslationEntry.Create("item", item.Index, "name", string.IsNullOrEmpty(item.DisplayName) ? item.Name : item.DisplayName, "safe", "Internal item lookup name is preserved.", item.Name)));
         document.Entries.AddRange(database.ItemInfoList.OrderBy(item => item.Index)
             .Where(item => !string.IsNullOrWhiteSpace(item.ToolTip))
             .Select(item => TranslationEntry.Create("item", item.Index, "toolTip", item.ToolTip, "safe", "Player-visible item tooltip.")));
         document.Entries.AddRange(database.MonsterInfoList.OrderBy(monster => monster.Index).Select(monster =>
-            TranslationEntry.Create("monster", monster.Index, "name", monster.Name, "unsafe", "Also used by drops, scripts, and some server settings.")));
+            TranslationEntry.Create("monster", monster.Index, "name", string.IsNullOrEmpty(monster.DisplayName) ? monster.Name : monster.DisplayName, "safe", "Internal monster lookup name is preserved.", monster.Name)));
         document.Entries.AddRange(database.NPCInfoList.OrderBy(npc => npc.Index).Select(npc =>
             TranslationEntry.Create("npc", npc.Index, "name", npc.Name, "safe", "NPC script file name is not changed.")));
         document.Entries.AddRange(database.MapInfoList.OrderBy(map => map.Index).Select(map =>
@@ -450,13 +529,16 @@ internal sealed class TranslationEntry
     public string Field { get; set; } = string.Empty;
     public string Source { get; set; } = string.Empty;
     public string? Translation { get; set; }
+    public string? LookupName { get; set; }
     public string Safety { get; set; } = string.Empty;
     public string Note { get; set; } = string.Empty;
 
+    [JsonIgnore]
     public bool HasTranslation => !string.IsNullOrWhiteSpace(Translation) && !string.Equals(Source, Translation, StringComparison.Ordinal);
+    [JsonIgnore]
     public bool IsUnsafeNameChange => HasTranslation && Safety == "unsafe";
 
-    public static TranslationEntry Create(string kind, int index, string field, string source, string safety, string note)
+    public static TranslationEntry Create(string kind, int index, string field, string source, string safety, string note, string? lookupName = null)
     {
         return new TranslationEntry
         {
@@ -466,6 +548,7 @@ internal sealed class TranslationEntry
             Field = field,
             Source = source,
             Translation = string.Empty,
+            LookupName = lookupName,
             Safety = safety,
             Note = note,
         };

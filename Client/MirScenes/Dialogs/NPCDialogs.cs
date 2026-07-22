@@ -2168,7 +2168,7 @@ namespace Client.MirScenes.Dialogs
             {
                 ItemCells[1].Item = new UserItem(Materials[0]);
                 ItemCells[1].Item.Count = MaterialsCount[0];
-                NeedItemLabel1.Text = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.NeedItemQuantity), Regex.Replace(ItemCells[1].Item.Info.Name, @"[\d-]", string.Empty), MaterialsCount[0].ToString());
+                NeedItemLabel1.Text = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.NeedItemQuantity), ItemCells[1].Item.Info.FriendlyName, MaterialsCount[0].ToString());
             }
             else
             {
@@ -2180,7 +2180,7 @@ namespace Client.MirScenes.Dialogs
             {
                 ItemCells[2].Item = new UserItem(Materials[1]);
                 ItemCells[2].Item.Count = MaterialsCount[1];
-                NeedItemLabel2.Text = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.NeedItemQuantity), Regex.Replace(ItemCells[2].Item.Info.Name, @"[\d-]", string.Empty), MaterialsCount[1].ToString());
+                NeedItemLabel2.Text = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.NeedItemQuantity), ItemCells[2].Item.Info.FriendlyName, MaterialsCount[1].ToString());
             }
             else
             {

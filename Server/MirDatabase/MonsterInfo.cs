@@ -22,6 +22,8 @@ namespace Server.MirDatabase
 
         public int Index;
         public string Name = string.Empty;
+        // Name remains the server lookup key; DisplayName is sent to players.
+        public string DisplayName = string.Empty;
 
         public Monster Image;
         public byte AI, Effect, ViewRange = 7, CoolEye;
@@ -54,6 +56,7 @@ namespace Server.MirDatabase
         {
             Index = reader.ReadInt32();
             Name = reader.ReadString();
+            DisplayName = Envir.LoadVersion >= 118 ? reader.ReadString() : Name;
 
             Image = (Monster) reader.ReadUInt16();
             AI = reader.ReadByte();
@@ -149,7 +152,7 @@ namespace Server.MirDatabase
 
         public string GameName
         {
-            get { return Regex.Replace(Name, @"[\d-]", string.Empty); }
+            get { return Regex.Replace(string.IsNullOrEmpty(DisplayName) ? Name : DisplayName, @"[\d-]", string.Empty); }
         }
 
         public ClientMonsterInfo ClientInformation
@@ -172,7 +175,7 @@ namespace Server.MirDatabase
                 return new ClientMonsterInfo
                 {
                     Index = Index,
-                    Name = Name,
+                    Name = string.IsNullOrEmpty(DisplayName) ? Name : DisplayName,
                     GameName = GameName,
                     Image = Image,
                     AI = AI,
@@ -197,6 +200,7 @@ namespace Server.MirDatabase
         {
             writer.Write(Index);
             writer.Write(Name);
+            writer.Write(string.IsNullOrEmpty(DisplayName) ? Name : DisplayName);
 
             writer.Write((ushort) Image);
             writer.Write(AI);

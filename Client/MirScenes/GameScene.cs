@@ -667,53 +667,12 @@ namespace Client.MirScenes
                         return;
 
                     case KeybindOptions.Closeall:
-                        InventoryDialog.Hide();
-                        CharacterDialog.Hide();
-                        OptionDialog.Hide();
-                        MenuDialog.Hide();
-                        if (NPCDialog.Visible) NPCDialog.Hide();
-                        HelpDialog.Hide();
-                        KeyboardLayoutDialog.Hide();
-                        RankingDialog.Hide();
-                        IntelligentCreatureDialog.Hide();
-                        IntelligentCreatureOptionsDialog.Hide();
-                        IntelligentCreatureOptionsGradeDialog.Hide();
-                        MountDialog.Hide();
-                        FishingDialog.Hide();
-                        FriendDialog.Hide();
-                        RelationshipDialog.Hide();
-                        MentorDialog.Hide();
-                        GameShopDialog.Hide();
-                        GroupDialog.Hide();
-                        GuildDialog.Hide();
-                        InspectDialog.Hide();
-                        StorageDialog.Hide();
-                        TrustMerchantDialog.Hide();
-                        //CharacterDuraPanel.Hide();
-                        QuestListDialog.Hide();
-                        QuestDetailDialog.Hide();
-                        QuestLogDialog.Hide();
-                        NPCAwakeDialog.Hide();
-                        RefineDialog.Hide();
-                        BigMapDialog.Hide();
-                        if (FishingStatusDialog.bEscExit) FishingStatusDialog.Cancel();
-                        MailComposeLetterDialog.Hide();
-                        MailComposeParcelDialog.Hide();
-                        MailListDialog.Hide();
-                        MailReadLetterDialog.Hide();
-                        MailReadParcelDialog.Hide();
-                        ItemRentalDialog.Hide();
-                        NoticeDialog.Hide();
-                        HeroInventoryDialog?.Hide();
-                        HeroManageDialog?.Hide();
-                        HeroDialog?.Hide();
-
-                        GameScene.Scene.DisposeItemLabel();
+                        CloseAllDialogs();
                         break;
                     case KeybindOptions.Options:
                     case KeybindOptions.Options2:
-                        if (!OptionDialog.Visible) OptionDialog.Show();
-                        else OptionDialog.Hide();
+                        if (HasOpenDialogs()) CloseAllDialogs();
+                        else OptionDialog.Show();
                         break;
                     case KeybindOptions.Group:
                         if (!GroupDialog.Visible) GroupDialog.Show();
@@ -886,6 +845,97 @@ namespace Client.MirScenes
                         break;
                 }
             }
+        }
+
+        private bool HasOpenDialogs()
+        {
+            return
+                InventoryDialog.Visible ||
+                CharacterDialog.Visible ||
+                OptionDialog.Visible ||
+                MenuDialog.Visible ||
+                NPCDialog.Visible ||
+                HelpDialog.Visible ||
+                KeyboardLayoutDialog.Visible ||
+                RankingDialog.Visible ||
+                IntelligentCreatureDialog.Visible ||
+                IntelligentCreatureOptionsDialog.Visible ||
+                IntelligentCreatureOptionsGradeDialog.Visible ||
+                MountDialog.Visible ||
+                FishingDialog.Visible ||
+                FriendDialog.Visible ||
+                RelationshipDialog.Visible ||
+                MentorDialog.Visible ||
+                GameShopDialog.Visible ||
+                GroupDialog.Visible ||
+                GuildDialog.Visible ||
+                InspectDialog.Visible ||
+                StorageDialog.Visible ||
+                TrustMerchantDialog.Visible ||
+                QuestListDialog.Visible ||
+                QuestDetailDialog.Visible ||
+                QuestLogDialog.Visible ||
+                NPCAwakeDialog.Visible ||
+                RefineDialog.Visible ||
+                BigMapDialog.Visible ||
+                FishingStatusDialog.bEscExit ||
+                MailComposeLetterDialog.Visible ||
+                MailComposeParcelDialog.Visible ||
+                MailListDialog.Visible ||
+                MailReadLetterDialog.Visible ||
+                MailReadParcelDialog.Visible ||
+                ItemRentalDialog.Visible ||
+                NoticeDialog.Visible ||
+                HeroInventoryDialog?.Visible == true ||
+                HeroManageDialog?.Visible == true ||
+                HeroDialog?.Visible == true ||
+                ItemLabel != null && !ItemLabel.IsDisposed;
+        }
+
+        private void CloseAllDialogs()
+        {
+            InventoryDialog.Hide();
+            CharacterDialog.Hide();
+            OptionDialog.Hide();
+            MenuDialog.Hide();
+            if (NPCDialog.Visible) NPCDialog.Hide();
+            HelpDialog.Hide();
+            KeyboardLayoutDialog.Hide();
+            RankingDialog.Hide();
+            IntelligentCreatureDialog.Hide();
+            IntelligentCreatureOptionsDialog.Hide();
+            IntelligentCreatureOptionsGradeDialog.Hide();
+            MountDialog.Hide();
+            FishingDialog.Hide();
+            FriendDialog.Hide();
+            RelationshipDialog.Hide();
+            MentorDialog.Hide();
+            GameShopDialog.Hide();
+            GroupDialog.Hide();
+            GuildDialog.Hide();
+            InspectDialog.Hide();
+            StorageDialog.Hide();
+            TrustMerchantDialog.Hide();
+            //CharacterDuraPanel.Hide();
+            QuestListDialog.Hide();
+            QuestDetailDialog.Hide();
+            QuestLogDialog.Hide();
+            NPCAwakeDialog.Hide();
+            RefineDialog.Hide();
+            BigMapDialog.Hide();
+            if (FishingStatusDialog.bEscExit) FishingStatusDialog.Cancel();
+            MailComposeLetterDialog.Hide();
+            MailComposeParcelDialog.Hide();
+            MailListDialog.Hide();
+            MailReadLetterDialog.Hide();
+            MailReadParcelDialog.Hide();
+            ItemRentalDialog.Hide();
+            NoticeDialog.Hide();
+            HeroInventoryDialog?.Hide();
+            HeroManageDialog?.Hide();
+            HeroDialog?.Hide();
+
+            DisposeItemLabel();
         }
 
         public void ChangeSkillMode(bool? ctrl)

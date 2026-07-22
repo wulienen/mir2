@@ -218,7 +218,7 @@
             list.Add(InputKey);
             InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.QuestDiaryOpenClose), function = KeybindOptions.Quests, RequireAlt = 0, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.Q };
             list.Add(InputKey);
-            InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.OptionsOpenClose), function = KeybindOptions.Options, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.F12 };
+            InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.OptionsOpenClose), function = KeybindOptions.Options, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.Escape };
             list.Add(InputKey);
             InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.OptionsOpenCloseAlt), function = KeybindOptions.Options2, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.O };
             list.Add(InputKey);
@@ -236,7 +236,7 @@
             list.Add(InputKey);
             InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.KeybindsOpenClose), function = KeybindOptions.Keybind, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.U };
             list.Add(InputKey);
-            InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.CloseAllWindows), function = KeybindOptions.Closeall, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.Escape };
+            InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.CloseAllWindows), function = KeybindOptions.Closeall, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.None };
             list.Add(InputKey);
 
             InputKey = new KeyBind { Group = "Skillbar", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SkillbarSlot)+" 1", function = KeybindOptions.Bar1Skill1, RequireAlt = 2, RequireShift = 0, RequireTilde = 0, RequireCtrl = 0, Key = Keys.F1 };
