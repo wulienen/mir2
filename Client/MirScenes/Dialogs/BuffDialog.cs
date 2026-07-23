@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 
@@ -67,7 +67,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 AutoSize = true,
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
-                Font = new Font(Settings.FontName, 10F, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, 10F, FontStyle.Bold),
                 NotControl = true,
                 Sort = true,
                 Visible = false,
@@ -598,7 +598,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 AutoSize = true,
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
-                Font = new Font(Settings.FontName, 10F, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, 10F, FontStyle.Bold),
                 NotControl = true,
                 Sort = true,
                 Visible = false,

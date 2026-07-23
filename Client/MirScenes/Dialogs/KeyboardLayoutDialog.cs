@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 
@@ -43,7 +43,7 @@ namespace Client.MirScenes.Dialogs
             PageLabel = new MirLabel
             {
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.KeyboardSettings),
-                Font = new Font(Settings.FontName, Settings.FontSize + 2, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, Settings.FontSize + 2, FontStyle.Bold),
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                 Parent = this,
                 Size = new System.Drawing.Size(242, 30),
@@ -419,7 +419,7 @@ namespace Client.MirScenes.Dialogs
                 Text = groupName,
                 Size = new Size(100, 20),
                 Location = new Point(20, 5),
-                Font = new Font(Settings.FontName, Settings.FontSize + 1, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, Settings.FontSize + 1, FontStyle.Bold),
                 Visible = true
             };
 

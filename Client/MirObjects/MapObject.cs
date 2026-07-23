@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirScenes;
 using Client.MirSounds;
@@ -9,7 +9,7 @@ namespace Client.MirObjects
 {
     public abstract class MapObject
     {
-        public static Font ChatFont = new Font(Settings.FontName, 10F);
+        public static Font ChatFont = new Font(Settings.FontFamily, 10F);
         public static List<MirLabel> LabelList = new List<MirLabel>();
 
         public static UserObject User;

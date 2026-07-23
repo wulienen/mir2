@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirSounds;
@@ -497,7 +497,7 @@ namespace Client.MirScenes.Dialogs
             {
                 ForeColour = Color.White,
                 Parent = this,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 Location = new Point(15, 30),
                 Size = new Size(165, 100),
             };

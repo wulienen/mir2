@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirSounds;
@@ -174,7 +174,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Size = new Size(115, 205),
                 Location = new Point(8, 237),
-                Font = new Font(Settings.FontName, Settings.FontSize - 1),
+                Font = new Font(Settings.FontFamily, Settings.FontSize - 1),
                 ForeColour = Color.White,
                 Visible = false
             };
@@ -534,7 +534,7 @@ namespace Client.MirScenes.Dialogs
                 Location = new Point(6, 451),
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, Settings.FontSize),
+                Font = new Font(Settings.FontFamily, Settings.FontSize),
                 Visible = false
             };
             #endregion
@@ -611,7 +611,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SalePrice),
                 Parent = this,
-                Font = new Font(Settings.FontName, Settings.FontSize - 1, FontStyle.Italic),
+                Font = new Font(Settings.FontFamily, Settings.FontSize - 1, FontStyle.Italic),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Size = new Size(100, 21),
                 Location = new Point(15, 142)
@@ -621,7 +621,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SellItem),
                 Parent = this,
-                Font = new Font(Settings.FontName, Settings.FontSize - 1, FontStyle.Italic),
+                Font = new Font(Settings.FontFamily, Settings.FontSize - 1, FontStyle.Italic),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Size = new Size(110, 21),
                 Location = new Point(10, 60)
@@ -631,7 +631,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Item),
                 Parent = this,
-                Font = new Font(Settings.FontName, Settings.FontSize - 1, FontStyle.Italic),
+                Font = new Font(Settings.FontFamily, Settings.FontSize - 1, FontStyle.Italic),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Size = new Size(166, 21),
                 Location = new Point(127, 60)
@@ -641,7 +641,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Price),
                 Parent = this,
-                Font = new Font(Settings.FontName, Settings.FontSize - 1, FontStyle.Italic),
+                Font = new Font(Settings.FontFamily, Settings.FontSize - 1, FontStyle.Italic),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Size = new Size(88, 21),
                 Location = new Point(295, 60)
@@ -662,7 +662,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Expiry),
                 Parent = this,
-                Font = new Font(Settings.FontName, Settings.FontSize - 1, FontStyle.Italic),
+                Font = new Font(Settings.FontFamily, Settings.FontSize - 1, FontStyle.Italic),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Size = new Size(98, 21),
                 Location = new Point(384, 60)

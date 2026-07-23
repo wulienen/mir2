@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirSounds;
@@ -148,7 +148,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             MentorLevelLabel = new MirLabel
@@ -160,7 +160,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             MentorOnlineLabel = new MirLabel
@@ -172,7 +172,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 7F),
+                Font = new Font(Settings.FontFamily, 7F),
                 Visible = false,
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.ONLINE),
             };
@@ -186,7 +186,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             StudentLevelLabel = new MirLabel
@@ -198,7 +198,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             StudentOnlineLabel = new MirLabel
@@ -210,7 +210,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 7F),
+                Font = new Font(Settings.FontFamily, 7F),
                 Visible = false,
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.ONLINE),
             };
@@ -224,7 +224,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 7F),
+                Font = new Font(Settings.FontFamily, 7F),
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.MENTOR),
             };
 
@@ -237,7 +237,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 7F),
+                Font = new Font(Settings.FontFamily, 7F),
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.MENTEE),
             };
 
@@ -250,7 +250,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 7F),
+                Font = new Font(Settings.FontFamily, 7F),
             };
 
 

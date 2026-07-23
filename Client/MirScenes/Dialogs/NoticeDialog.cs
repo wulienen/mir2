@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 using System.Text.RegularExpressions;
@@ -20,7 +20,7 @@ namespace Client.MirScenes.Dialogs
 
         public Notice Notice = new Notice();
 
-        Font font = new Font(Settings.FontName, 10F);
+        Font font = new Font(Settings.FontFamily, 10F);
 
         public List<string> CurrentLines = new List<string>();
         private int _index = 0;
@@ -42,7 +42,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = "",
                 Parent = this,
-                Font = new Font(Settings.FontName, 10F, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, 10F, FontStyle.Bold),
                 ForeColour = Color.BurlyWood,
                 Location = new Point(30, 6),
                 AutoSize = true

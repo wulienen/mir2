@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -612,11 +612,11 @@ namespace Client
                         Alignment = StringAlignment.Center
                     };
 
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 3, 10), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 9), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 5, 10), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 11), sf);
-                    graphics.DrawString(text, new Font(Settings.FontName, 9F), Brushes.White, new Point((Settings.ScreenWidth / 2) + 4, 10), sf);//SandyBrown               
+                    graphics.DrawString(text, new Font(Settings.FontFamily, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 3, 10), sf);
+                    graphics.DrawString(text, new Font(Settings.FontFamily, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 9), sf);
+                    graphics.DrawString(text, new Font(Settings.FontFamily, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 5, 10), sf);
+                    graphics.DrawString(text, new Font(Settings.FontFamily, 9F), Brushes.Black, new Point((Settings.ScreenWidth / 2) + 4, 11), sf);
+                    graphics.DrawString(text, new Font(Settings.FontFamily, 9F), Brushes.White, new Point((Settings.ScreenWidth / 2) + 4, 10), sf);//SandyBrown
 
                     string path = Path.Combine(Application.StartupPath, @"Screenshots\");
                     if (!Directory.Exists(path))

@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 
@@ -48,7 +48,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Location = new Point(12, 57),
                 Size = new Size(330, 150),
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
             };
 
             MessageArea.MultiLine();

@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 
 namespace Client.MirScenes.Dialogs
@@ -22,7 +22,7 @@ namespace Client.MirScenes.Dialogs
             TextLabel1 = new MirLabel
             {
                 Text = "",
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Parent = this,
                 NotControl = true,
@@ -35,7 +35,7 @@ namespace Client.MirScenes.Dialogs
             TextLabel2 = new MirLabel
             {
                 Text = "",
-                Font = new Font(Settings.FontName, 15F),
+                Font = new Font(Settings.FontFamily, 15F),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Parent = this,
                 NotControl = true,

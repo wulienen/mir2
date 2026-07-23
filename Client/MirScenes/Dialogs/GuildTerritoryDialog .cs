@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using System.Collections.Generic;
 using System.Linq;
@@ -208,7 +208,7 @@ namespace Client.MirScenes.Dialogs
                 AutoSize = true,
                 Parent = this,
                 ForeColour = Color.Goldenrod,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 NotControl = true,
                 BackColour = Color.Transparent,
                 Text = "GT #"
@@ -220,7 +220,7 @@ namespace Client.MirScenes.Dialogs
                 AutoSize = true,
                 Parent = this,
                 ForeColour = Color.Goldenrod,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 NotControl = true,
                 BackColour = Color.Transparent,
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.OwningGuild)
@@ -232,7 +232,7 @@ namespace Client.MirScenes.Dialogs
                 AutoSize = true,
                 Parent = this,
                 ForeColour = Color.Goldenrod,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 NotControl = true,
                 BackColour = Color.Transparent,
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GuildLeaders)
@@ -244,7 +244,7 @@ namespace Client.MirScenes.Dialogs
                 AutoSize = true,
                 Parent = this,
                 ForeColour = Color.Goldenrod,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 NotControl = true,
                 BackColour = Color.Transparent,
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GTStatus)
@@ -256,7 +256,7 @@ namespace Client.MirScenes.Dialogs
                 AutoSize = true,
                 Parent = this,
                 ForeColour = Color.Goldenrod,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 NotControl = true,
                 BackColour = Color.Transparent,
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GTPrice)

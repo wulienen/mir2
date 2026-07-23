@@ -336,6 +336,190 @@ EXACT_MAP = {
     "Football Player Pink and Blue uniform": "粉蓝球衣时装", "WhiteDress Blue/Red Trident": "白裙蓝红戟时装",
     "Angry Sheep": "愤怒绵羊时装", "Formal Male": "男士礼服",
 }
+# Fixed names from the official Legend of Mir terminology take precedence over
+# generic CamelCase splitting. These values are display names only; lookupName
+# stays unchanged so drops, scripts, and spawn settings remain valid.
+OFFICIAL_ITEM_MAP = {
+    "WoodenSword": "木剑",
+    "JudgementMace": "裁决之杖",
+    "ZumaJudgementMace": "祖玛裁决之杖",
+    "DragonSlayer": "屠龙",
+    "BlackDragonSlayer": "黑龙屠龙",
+    "WoomasHorn": "沃玛号角",
+    "RedMoonChip": "赤月碎片",
+    "RedMoonSword": "赤月剑",
+    "RedMoonBlades": "赤月双刃",
+    "RedMoonBow": "赤月弓",
+    "FrozenSabre": "凝霜",
+    "SerpentSword": "银蛇",
+    "MageStaff": "魔杖",
+    "ParalysisRing": "麻痹戒指",
+    "TeleportRing": "传送戒指",
+    "ProtectionRing": "防御戒指",
+    "RevivalRing": "复活戒指",
+    "FlameRing": "火焰戒指",
+    "PowerRing": "力量戒指",
+    "CopperRing": "古铜戒指",
+    "GlassRing": "玻璃戒指",
+    "HornRing": "牛角戒指",
+    "BlueRing": "蓝色水晶戒指",
+    "BlackRing": "黑色水晶戒指",
+    "GoldRing": "金戒指",
+    "ExpelRing": "降妖除魔戒指",
+    "CoralRing": "珊瑚戒指",
+    "RubyRing": "红宝石戒指",
+    "PlatinumRing": "铂金戒指",
+    "DragonRing": "龙之戒指",
+    "SilverBracelet": "银手镯",
+    "SteelBracelet": "钢手镯",
+    "LargeBracelet": "大手镯",
+    "GoldBracelet": "金手镯",
+    "DragonBracelet": "龙之手镯",
+    "BlackIronBracelet": "黑铁手镯",
+    "GoldNecklace": "金项链",
+    "BlueJadeNecklace": "蓝翡翠项链",
+    "BlackIronHelmet": "黑铁头盔",
+    "SoulNecklace": "灵魂项链",
+    "DragonNecklace": "龙之项链",
+}
+
+OFFICIAL_MONSTER_MAP = {
+    "Hen": "鸡",
+    "HookingCat": "多钩猫",
+    "RakingCat": "钉耙猫",
+    "CannibalPlant": "食人花",
+    "Oma": "半兽人",
+    "OmaFighter": "半兽战士",
+    "OmaWarrior": "半兽勇士",
+    "RedSnake": "红蛇",
+    "TigerSnake": "虎蛇",
+    "BoneFighter": "骷髅战士",
+    "BoneWarrior": "骷髅战将",
+    "BoneElite": "骷髅精灵",
+    "WhiteBoar": "白野猪",
+    "RedBoar": "红野猪",
+    "BlackBoar": "黑野猪",
+    "BlackMaggot": "黑色恶蛆",
+    "WhimperingBee": "跳跳蜂",
+    "Tongs": "钳虫",
+    "EvilTongs": "邪恶钳虫",
+    "WedgeMoth": "楔蛾",
+    "SnakeScorpion": "蝎蛇",
+    "GiantRat": "大老鼠",
+    "ZumaGuardian": "祖玛卫士",
+    "Dark": "暗黑战士",
+    "WoomaSoldier": "沃玛战士",
+    "WoomaFighter": "沃玛勇士",
+    "WoomaWarrior": "沃玛战将",
+    "WoomaGuardian": "沃玛卫士",
+    "WoomaTaurus": "沃玛教主",
+    "ZumaTaurus": "祖玛教主",
+    "WhiteSerpent": "白蛇",
+    "KingHog": "野猪王",
+    "KingScorpion": "蝎子王",
+    "RedMoonEvil": "赤月恶魔",
+}
+
+ITEM_SIZE_MAP = {"S": "小", "M": "中", "L": "大", "XL": "特大"}
+ITEM_SIZE_BASE_MAP = {
+    "HealthStone": "生命石",
+    "MagicStone": "魔法石",
+    "PowerStone": "力量石",
+    "TaoistDrug": "道士药品",
+}
+
+
+def fixed_name(source: str, mapping: dict[str, str]) -> str | None:
+    if source in mapping:
+        return mapping[source]
+    match = re.fullmatch(r"(.+?)(\d+)", source)
+    if match and match.group(1) in mapping:
+        return f"{mapping[match.group(1)]}{match.group(2)}"
+    return None
+
+
+def translate_item_special_case(source: str) -> str | None:
+    match = re.fullmatch(r"(HealthStone|MagicStone|PowerStone|TaoistDrug)(?:\((S|M|L|XL)\))?", source)
+    if not match:
+        return None
+    base = ITEM_SIZE_BASE_MAP[match.group(1)]
+    size = ITEM_SIZE_MAP.get(match.group(2) or "")
+    return f"{base}（{size}）" if size else base
+
+
+NPC_ROLE_MAP = {
+    "CraftsLady": "制作师",
+    "HighPriest": "大祭司",
+    "HighAssassin": "刺客导师",
+    "MasterMage": "法师导师",
+    "Teleport": "传送员",
+    "TrustMerchant": "寄售商",
+    "Warehouse": "仓库管理员",
+    "TrainerTaoist": "道士导师",
+    "BigTaoist": "大道士",
+    "MasterMK": "武学大师",
+    "Transport": "传送员",
+    "Mysterious": "神秘人",
+    "VillageChief": "村长",
+    "StableGirl": "马厩管理员",
+    "SubjugationLead": "讨伐队长",
+    "SubjagationManager": "讨伐管理员",
+    "PotionShop": "药店老板",
+    "Grocery": "杂货商",
+    "Accessory": "首饰商",
+    "Book": "书店老板",
+    "FishMonger": "鱼贩",
+    "TheWatcher": "守望者",
+    "SquadLeader": "小队长",
+    "VulnerableSon": "胆怯的孩子",
+    "GTMerchant": "行会领地商人",
+    "GTStore": "行会领地商店",
+}
+
+NPC_PERSON_MAP = {
+    "Bull": "布尔",
+    "Cloud": "克劳德",
+    "Cook": "库克",
+    "Smith": "史密斯",
+    "Yu": "余",
+}
+
+NPC_EXACT_MAP = {
+    "BorderVillage_Board": "边境村公告牌",
+    "BichonWall_Board": "比奇城公告牌",
+    "MudWall_Board": "盟重土城公告牌",
+    "Prison_Guard": "监狱守卫",
+    "_Shinsu(Jude)": "神兽（裘德）",
+    "Challange_OldMan": "挑战老人",
+    "Sir_Mogu": "莫古爵士",
+    "StrangeMan": "神秘人",
+    "Merchant_Dr.Kim": "商人·金博士",
+    "Merchant_Mr.Wang": "商人·王先生",
+    "Merchant_Dr.Hwa": "商人·华博士",
+    "General_Sir.Kevin": "将军·凯文爵士",
+    "OddOldMan": "古怪老人",
+    "TimeStone": "时光石",
+    "MysteriousStone": "神秘石",
+    "OldSkull": "古老骷髅头",
+    "GuardianRock": "守护石",
+    "BrokenCarriage": "损坏的马车",
+    "CrushedBones": "碎骨堆",
+    "SkullPile": "骷髅堆",
+    "SkeletonPile": "骷髅堆",
+    "CraftingVillage_Portal": "工匠村传送门",
+    "GTTransporter": "行会领地传送员",
+    "GT_BulletinBoard": "行会领地公告牌",
+    "Gt_BulletinBoard": "行会领地公告牌",
+    "GT_Peddler": "行会领地商贩",
+    "GT_Steward": "行会领地管家",
+    "Administrator_SabukOfficer": "沙巴克管理员",
+    "GM_Teleporter": "GM 传送员",
+    "Premium_Elijah": "高级通行证管理员·以利亚",
+    "Proceeder": "接引人",
+    "MissDo": "多小姐",
+    "MissMi": "米小姐",
+    "MissRe": "蕾小姐",
+}
 
 PHRASE_MAP = {
     "Instantly heals player.": "立即恢复生命值。", "Repairs equipped weapons durability to maximum.": "将已装备武器的持久恢复至最大值。",
@@ -417,6 +601,17 @@ def split_tokens(value: str) -> list[str]:
 def translate_name(source: str, category: str = "") -> str:
     if not source:
         return source
+    if category == "item":
+        special_case = translate_item_special_case(source)
+        if special_case:
+            return special_case
+        official = fixed_name(source, OFFICIAL_ITEM_MAP)
+        if official:
+            return official
+    if category == "monster":
+        official = fixed_name(source, OFFICIAL_MONSTER_MAP)
+        if official:
+            return official
     if source in EXACT_MAP:
         return EXACT_MAP[source]
     if category == "monster" and source == "00":
@@ -438,6 +633,10 @@ def translate_name(source: str, category: str = "") -> str:
             translated = {"item": "秘制", "monster": "异种", "map": "秘境", "magic": "秘术"}.get(category, "人物")
         output.append(translated)
     result = "".join(output).replace("（）", "")
+    if category == "item":
+        result = result.replace("（拱门）", "（弓箭手）")
+        result = result.replace("（战争）", "（战士）")
+        result = result.replace("（道）", "（道士）")
     result = re.sub(r"(秘制|异种|秘境|秘术|人物)(?=\1)", "", result)
     if not result:
         result = "未命名"
@@ -501,24 +700,87 @@ def translate_sentence(source: str, replacements: dict[str, str]) -> str:
 
 
 def translate_npc(source: str) -> str:
+    if source in NPC_EXACT_MAP:
+        return NPC_EXACT_MAP[source]
     if source in {"Signpost", "Pillar", "Stairs", "Monument", "Bones", "Ashes", "SkullPile", "SkeletonPile", "CrushedBones"}:
         return translate_name(source)
     parts = source.split("_")
-    role = translate_name(parts[0])
+    role = NPC_ROLE_MAP.get(parts[0], translate_name(parts[0]))
     if len(parts) == 1:
         return role
-    suffix = "·".join(translate_name(part) for part in parts[1:])
+    suffix = "·".join(NPC_PERSON_MAP.get(part, translate_name(part)) for part in parts[1:] if part)
     return f"{role}·{suffix}"
+
+
+def fill_name_corrections(document: dict, reference_path: Path, kinds: set[str]) -> int:
+    supported_kinds = {"item", "monster", "npc", "map", "magic", "quest"}
+    unknown_kinds = kinds - supported_kinds
+    if unknown_kinds:
+        raise ValueError(f"Unsupported correction kind(s): {', '.join(sorted(unknown_kinds))}")
+
+    reference = json.loads(reference_path.read_text(encoding="utf-8-sig"))
+    reference_by_key = {
+        entry["key"]: entry
+        for entry in reference["entries"]
+        if entry["kind"] in kinds and entry["field"] == "name"
+    }
+    changed = 0
+    for entry in document["entries"]:
+        entry["translation"] = ""
+        if entry["kind"] not in kinds or entry["field"] != "name":
+            continue
+        reference_entry = reference_by_key.get(entry["key"])
+        if reference_entry is None:
+            continue
+        current_lookup = entry.get("lookupName")
+        reference_lookup = reference_entry.get("lookupName")
+        if current_lookup and reference_lookup and current_lookup != reference_lookup:
+            raise ValueError(
+                f'{entry["key"]}: lookupName mismatch '
+                f'({current_lookup!r} != {reference_lookup!r})'
+            )
+        desired = reference_entry.get("translation", "")
+        if desired and desired != entry["source"]:
+            entry["translation"] = desired
+            changed += 1
+    kind_label = ",".join(sorted(kinds))
+    document["translationGeneratedBy"] = (
+        f"fill_database_translations.py --name-corrections-reference ({kind_label})"
+    )
+    return changed
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("input", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--npc-corrections-reference", type=Path)
+    parser.add_argument("--name-corrections-reference", type=Path)
+    parser.add_argument("--name-correction-kinds", default="item,monster")
     args = parser.parse_args()
     output = args.output or args.input
 
     document = json.loads(args.input.read_text(encoding="utf-8-sig"))
+    if args.npc_corrections_reference and args.name_corrections_reference:
+        parser.error("use only one corrections reference option")
+    if args.npc_corrections_reference:
+        changed = fill_name_corrections(document, args.npc_corrections_reference, {"npc"})
+        output.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Prepared {changed} NPC name correction entries: {output}")
+        return 0
+    if args.name_corrections_reference:
+        kinds = {
+            kind.strip()
+            for kind in args.name_correction_kinds.split(",")
+            if kind.strip()
+        }
+        if not kinds:
+            parser.error("--name-correction-kinds cannot be empty")
+        changed = fill_name_corrections(document, args.name_corrections_reference, kinds)
+        output.write_text(json.dumps(document, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print(f"Prepared {changed} name correction entries ({','.join(sorted(kinds))}): {output}")
+        return 0
+
     entries = document["entries"]
     by_source: dict[str, str] = {}
 

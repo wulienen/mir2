@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirSounds;
@@ -167,7 +167,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             LoverDateLabel = new MirLabel
@@ -179,7 +179,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             LoverLengthLabel = new MirLabel
@@ -191,7 +191,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
 
             LoverOnlineLabel = new MirLabel
@@ -203,7 +203,7 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = TextFormatFlags.VerticalCenter,
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
             };
         }
 

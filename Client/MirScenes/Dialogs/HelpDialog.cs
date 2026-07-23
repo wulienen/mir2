@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 
@@ -74,7 +74,7 @@ namespace Client.MirScenes.Dialogs
             PageLabel = new MirLabel
             {
                 Text = "",
-                Font = new Font(Settings.FontName, 9F),
+                Font = new Font(Settings.FontFamily, 9F),
                 DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter,
                 Parent = this,
                 NotControl = true,
@@ -310,7 +310,7 @@ namespace Client.MirScenes.Dialogs
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Shortcuts),
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                 ForeColour = Color.White,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
                 Parent = this,
                 AutoSize = true,
                 Location = new Point(13, 75),
@@ -322,7 +322,7 @@ namespace Client.MirScenes.Dialogs
                 Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Information),
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                 ForeColour = Color.White,
-                Font = new Font(Settings.FontName, 10F),
+                Font = new Font(Settings.FontFamily, 10F),
                 Parent = this,
                 AutoSize = true,
                 Location = new Point(114, 75),
@@ -341,7 +341,7 @@ namespace Client.MirScenes.Dialogs
                     Text = Shortcuts[i].Shortcut,
                     ForeColour = Color.Yellow,
                     DrawFormat = TextFormatFlags.VerticalCenter,
-                    Font = new Font(Settings.FontName, 9F),
+                    Font = new Font(Settings.FontFamily, 9F),
                     Parent = this,
                     AutoSize = true,
                     Location = new Point(18, 107 + (20 * i)),
@@ -353,7 +353,7 @@ namespace Client.MirScenes.Dialogs
                     Text = Shortcuts[i].Information,
                     DrawFormat = TextFormatFlags.VerticalCenter,
                     ForeColour = Color.White,
-                    Font = new Font(Settings.FontName, 9F),
+                    Font = new Font(Settings.FontFamily, 9F),
                     Parent = this,
                     AutoSize = true,
                     Location = new Point(119, 107 + (20 * i)),
@@ -385,7 +385,7 @@ namespace Client.MirScenes.Dialogs
             PageTitleLabel = new MirLabel
             {
                 Text = Title,
-                Font = new Font(Settings.FontName, 10F, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, 10F, FontStyle.Bold),
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                 Parent = this,
                 Size = new System.Drawing.Size(242, 30),

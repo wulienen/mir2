@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 
 namespace Client.MirObjects
 {
@@ -36,7 +36,7 @@ namespace Client.MirObjects
                     OutLine = true,
                     OutLineColour = Color.Black,
                     Text = Text,
-                    Font = new Font(Settings.FontName, 8F, FontStyle.Bold)
+                    Font = new Font(Settings.FontFamily, 8F, FontStyle.Bold)
                 };
             }
 

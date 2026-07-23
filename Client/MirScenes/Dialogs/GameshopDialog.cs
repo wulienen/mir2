@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 
@@ -84,7 +84,7 @@ namespace Client.MirScenes.Dialogs
                 Location = new Point(123, 449),
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
             };
             totalCredits = new MirLabel
             {
@@ -93,7 +93,7 @@ namespace Client.MirScenes.Dialogs
                 Location = new Point(5, 449),
                 Parent = this,
                 NotControl = true,
-                Font = new Font(Settings.FontName, 8F)
+                Font = new Font(Settings.FontFamily, 8F)
             };
 
             UpButton = new MirButton
@@ -173,7 +173,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Size = new Size(140, 16),
                 Location = new Point(540, 69),
-                Font = new Font(Settings.FontName, 9F),
+                Font = new Font(Settings.FontFamily, 9F),
                 MaxLength = 23,
                 CanLoseFocus = true,
             };
@@ -383,7 +383,7 @@ namespace Client.MirScenes.Dialogs
                 Size = new Size(83, 17),
                 Location = new Point(597, 446),
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
-                Font = new Font(Settings.FontName, 7F),
+                Font = new Font(Settings.FontFamily, 7F),
             };
 
             PreviousButton = new MirButton
@@ -432,7 +432,7 @@ namespace Client.MirScenes.Dialogs
                     Location = new Point(15, 103 + (15 * i)),
                     Text = "Testing - " + i.ToString(),
                     ForeColour = Color.Gray,
-                    Font = new Font(Settings.FontName, 7F),
+                    Font = new Font(Settings.FontFamily, 7F),
                 };
                 Filters[i].Click += (o, e) =>
                 {

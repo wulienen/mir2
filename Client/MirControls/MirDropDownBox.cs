@@ -1,4 +1,4 @@
-﻿using Client.MirGraphics;
+using Client.MirGraphics;
 
 namespace Client.MirControls
 {
@@ -108,7 +108,7 @@ namespace Client.MirControls
                 Location = new Point(0, 0),
                 ForeColour = ForeColour,
                 BackColour = BackColour,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 Visible = true,
             };
             _label.Click += (o, e) =>
@@ -138,7 +138,7 @@ namespace Client.MirControls
                     Location = new Point(0, 15 + (i * 13)),
                     ForeColour = ForeColour,
                     BackColour = Color.FromArgb(255,20,20,20),
-                    Font = new Font(Settings.FontName, 8F)
+                    Font = new Font(Settings.FontFamily, 8F)
                 };
                 int index = i;
                 _Option[index].MouseEnter += (o, e) => _Option[index].BackColour = Color.FromArgb(255,140,70,0);

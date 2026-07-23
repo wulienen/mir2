@@ -1,4 +1,4 @@
-﻿using Client.MirGraphics;
+using Client.MirGraphics;
 using SlimDX;
 using SlimDX.Direct3D9;
 using System.Drawing.Imaging;
@@ -253,7 +253,7 @@ namespace Client.MirControls
             {
                 BackColor = BackColour,
                 BorderStyle = BorderStyle.None,
-                Font = new System.Drawing.Font(Settings.FontName, 10F * 96f / CMain.Graphics.DpiX),
+                Font = new System.Drawing.Font(Settings.FontFamily, 10F * 96f / CMain.Graphics.DpiX),
                 ForeColor = ForeColour,
                 Location = DisplayLocation,
                 Size = Size,

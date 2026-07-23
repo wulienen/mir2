@@ -1,4 +1,4 @@
-﻿using System.Text.RegularExpressions;
+using System.Text.RegularExpressions;
 using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
@@ -326,7 +326,7 @@ namespace Client.MirScenes.Dialogs
             GoldLabel = new MirLabel
             {
                 DrawFormat = TextFormatFlags.VerticalCenter,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 Location = new Point(this.Size.Width - 105, 119),
                 Parent = this,
                 Size = new Size(99, 13),
@@ -705,7 +705,7 @@ namespace Client.MirScenes.Dialogs
         public MirImageControl CountBar;
         public MirImageControl ChatInputBackground;
         public MirTextBox ChatTextBox;
-        public Font ChatFont = new Font(Settings.FontName, 8F);
+        public Font ChatFont = new Font(Settings.FontFamily, 8F);
         public string LastPM = string.Empty;
 
         public int StartIndex, LineCount = 4, WindowSize;
@@ -1901,7 +1901,7 @@ namespace Client.MirScenes.Dialogs
             BindNumberLabel = new MirLabel
             {
                 Text = "1",
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 ForeColour = Color.White,
                 Parent = this,
                 Location = new Point(0, 1),
@@ -1914,7 +1914,7 @@ namespace Client.MirScenes.Dialogs
                 KeyNameLabels[i] = new MirLabel
                 {
                     Text = "F" + (i + 1),
-                    Font = new Font(Settings.FontName, 8F),
+                    Font = new Font(Settings.FontFamily, 8F),
                     ForeColour = Color.White,
                     Parent = this,
                     Location = useXiayiUi ? new Point(i * 37 + 4, 0) : new Point(i * 25 + 13, 0),
@@ -2321,7 +2321,7 @@ namespace Client.MirScenes.Dialogs
                     {
                         AutoSize = true,
                         Parent = GameScene.Scene.MiniMapDialog,
-                        Font = new Font(Settings.FontName, 9f, FontStyle.Bold),
+                        Font = new Font(Settings.FontFamily, 9f, FontStyle.Bold),
                         DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                         Text = text,
                         ForeColour = color,

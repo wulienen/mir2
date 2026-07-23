@@ -76,7 +76,7 @@ EXACT_REPLACEMENTS = {
 
 CONFIG_REPLACEMENTS = {
     re.compile(r"^(Language\s*=\s*)English\s*$", re.IGNORECASE | re.MULTILINE): r"\1Chinese",
-    re.compile(r"^(FontName\s*=\s*)Arial\s*$", re.IGNORECASE | re.MULTILINE): r"\1Microsoft YaHei UI",
+    re.compile(r"^(FontName\s*=\s*)Arial\s*$", re.IGNORECASE | re.MULTILINE): r"\1HarmonyOS Sans SC Medium",
 }
 
 PLACEHOLDER_RE = re.compile(r"\{[0-9]+(?::[^}]*)?\}")

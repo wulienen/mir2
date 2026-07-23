@@ -71,7 +71,9 @@ namespace Client
 
         //Graphics
         public static bool FullScreen = true, Borderless = true, TopMost = true, MouseClip = false;
-        public static string FontName = "Microsoft YaHei UI"; //"MS Sans Serif"
+        public const string DefaultFontName = Client.Utils.FontManager.HarmonyOSFontName;
+        public static string FontName = DefaultFontName;
+        public static System.Drawing.FontFamily FontFamily = System.Drawing.FontFamily.GenericSansSerif;
         public static float FontSize = 8F;
         public static bool UseMouseCursors = true;
 
@@ -212,6 +214,7 @@ namespace Client
 
         public static void Load()
         {
+            Client.Utils.FontManager.Initialize();
 
 
             if (!Directory.Exists(DataPath)) Directory.CreateDirectory(DataPath);
@@ -262,7 +265,13 @@ namespace Client
             NameView = Reader.ReadBoolean("Game", "NameView", NameView);
             HPView = Reader.ReadBoolean("Game", "HPMPView", HPView);
             ModeView = Reader.ReadBoolean("Game", "ModeView", ModeView);
-            FontName = Reader.ReadString("Game", "FontName", FontName);
+            string configuredFontName = Reader.ReadString("Game", "FontName", FontName);
+            if (string.Equals(configuredFontName, "Arial", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(configuredFontName, "Microsoft YaHei UI", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(configuredFontName, "Noto Sans SC", StringComparison.OrdinalIgnoreCase))
+                configuredFontName = DefaultFontName;
+            FontName = Client.Utils.FontManager.ResolveFontName(configuredFontName);
+            FontFamily = Client.Utils.FontManager.ResolveFontFamily(FontName);
             TransparentChat = Reader.ReadBoolean("Game", "TransparentChat", TransparentChat);
             DisplayDamage = Reader.ReadBoolean("Game", "DisplayDamage", DisplayDamage);
             TargetDead = Reader.ReadBoolean("Game", "TargetDead", TargetDead);

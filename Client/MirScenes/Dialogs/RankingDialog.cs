@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirSounds;
 
@@ -194,7 +194,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Text = "",
                 Parent = this,
-                Font = new Font(Settings.FontName, 10F, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, 10F, FontStyle.Bold),
                 ForeColour = Color.BurlyWood,
                 Location = new Point(229, 36),
                 Size = new Size(82, 22),

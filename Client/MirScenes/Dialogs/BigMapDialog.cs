@@ -1,4 +1,4 @@
-﻿using Client.MirControls;
+using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirObjects;
@@ -203,7 +203,7 @@ namespace Client.MirScenes.Dialogs
             {
                 Location = new Point(59, Size.Height - 27),
                 Parent = this,
-                Font = new Font(Settings.FontName, 8F),
+                Font = new Font(Settings.FontFamily, 8F),
                 Size = new Size(130, 10),
                 MaxLength = Globals.MaxChatLength
             };
@@ -229,7 +229,7 @@ namespace Client.MirScenes.Dialogs
                 AutoSize = false,
                 Size = new Size(699, 20),
                 Location = new Point(19, 6),
-                Font = new Font(Settings.FontName, 9F, FontStyle.Bold),
+                Font = new Font(Settings.FontFamily, 9F, FontStyle.Bold),
                 DrawFormat = TextFormatFlags.HorizontalCenter
             };
 
