@@ -151,6 +151,8 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 PressedIndex = 500,
                 Size = new Size(64, 20),
+                Text = "人物",
+                CenterText = true,
                 Sound = SoundList.ButtonA,
             };
             CharacterButton.Click += (o, e) => ShowCharacterPage();
@@ -161,6 +163,8 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 PressedIndex = 501,
                 Size = new Size(64, 20),
+                Text = "属性",
+                CenterText = true,
                 Sound = SoundList.ButtonA
             };
             StatusButton.Click += (o, e) => ShowStatusPage();
@@ -172,6 +176,8 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 PressedIndex = 502,
                 Size = new Size(64, 20),
+                Text = "状态",
+                CenterText = true,
                 Sound = SoundList.ButtonA
             };
             StateButton.Click += (o, e) => ShowStatePage();
@@ -183,6 +189,8 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 PressedIndex = 503,
                 Size = new Size(64, 20),
+                Text = "技能",
+                CenterText = true,
                 Sound = SoundList.ButtonA
             };
             SkillButton.Click += (o, e) => ShowSkillPage();
