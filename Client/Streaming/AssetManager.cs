@@ -16,6 +16,8 @@ namespace Client.Streaming
         });
         private static readonly ConcurrentDictionary<string, Task> Downloads = new ConcurrentDictionary<string, Task>();
         private static readonly ConcurrentDictionary<string, byte> PendingMapDownloads = new ConcurrentDictionary<string, byte>();
+        // 分页清单内存缓存：libraryId → (pageIndex → 已反序列化的页面)
+        private static readonly ConcurrentDictionary<string, ConcurrentDictionary<int, LibraryManifestPage>> PageCache = new();
         private static readonly object ManifestLock = new object();
         private static SemaphoreSlim DownloadSemaphore = new SemaphoreSlim(3);
         private static SemaphoreSlim MapDownloadSemaphore = new SemaphoreSlim(1);
@@ -162,6 +164,54 @@ namespace Client.Streaming
 
             string cachePath = Path.Combine(CacheRoot, record.ManifestPath.Replace('/', Path.DirectorySeparatorChar));
             QueueDownload(record.ManifestPath, record.Hash, cachePath);
+        }
+
+        /// <summary>
+        /// 尝试从磁盘缓存（或内存缓存）中读取包含 imageIndex 的分页清单页面。
+        /// 仅当 manifest.IsPaged 为 true 时有效；非分页图库直接返回 false。
+        /// </summary>
+        public static bool TryGetCachedLibraryPage(string libraryId, LibraryManifest manifest, int imageIndex, out LibraryManifestPage page)
+        {
+            page = null;
+            if (!manifest.IsPaged) return false;
+
+            int pageIndex = imageIndex / manifest.PageSize!.Value;
+            LibraryManifestPageRecord pageRecord = manifest.Pages!.FirstOrDefault(p => p.PageIndex == pageIndex);
+            if (pageRecord == null) return false;
+
+            // 优先读内存缓存
+            ConcurrentDictionary<int, LibraryManifestPage> pages = PageCache.GetOrAdd(NormalizeId(libraryId), _ => new());
+            if (pages.TryGetValue(pageIndex, out page)) return true;
+
+            // 再读磁盘缓存
+            string relative = GetLibraryPageRelativePath(libraryId, pageRecord);
+            string cachePath = Path.Combine(CacheRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (!TryReadValidCache(cachePath, pageRecord.Hash, out byte[] bytes)) return false;
+
+            page = JsonSerializer.Deserialize<LibraryManifestPage>(bytes, StreamingAssetIO.JsonOptions);
+            if (page == null) return false;
+
+            pages.TryAdd(pageIndex, page);
+            return true;
+        }
+
+        /// <summary>将包含 imageIndex 的分页页面加入后台下载队列。</summary>
+        public static void QueueLibraryPage(string libraryId, LibraryManifest manifest, int imageIndex)
+        {
+            if (!Enabled || !manifest.IsPaged) return;
+
+            int pageIndex = imageIndex / manifest.PageSize!.Value;
+            LibraryManifestPageRecord pageRecord = manifest.Pages!.FirstOrDefault(p => p.PageIndex == pageIndex);
+            if (pageRecord == null) return;
+
+            string relative = GetLibraryPageRelativePath(libraryId, pageRecord);
+            string cachePath = Path.Combine(CacheRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            QueueDownload(relative, pageRecord.Hash, cachePath);
+        }
+
+        private static string GetLibraryPageRelativePath(string libraryId, LibraryManifestPageRecord pageRecord)
+        {
+            return $"{StreamingAssetConstants.LibrariesDirectory}/{NormalizeId(libraryId)}/{pageRecord.Path}";
         }
 
         public static async Task<MapManifest> GetMapManifestAsync(string mapId)

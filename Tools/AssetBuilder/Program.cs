@@ -159,6 +159,13 @@ internal static class Program
                 Directory.CreateDirectory(imagesRoot);
                 LibraryManifest libraryManifest = StreamingLibraryReader.ReadLibrary(file, id, imagesRoot,
                     (current, total) => progress.ReportItemProgress(file, index, current, total));
+
+                // 图片超过阈值时拆分为分页清单，客户端按需下载单页而非全量 69MB
+                if (libraryManifest.Images.Count > StreamingAssetConstants.LibraryManifestPageThreshold)
+                {
+                    SplitLibraryIntoPages(libraryManifest, libraryRoot, output);
+                }
+
                 StreamingAssetIO.WriteJson(manifestPath, libraryManifest);
 
                 using FileStream stream = File.OpenRead(manifestPath);
@@ -179,6 +186,48 @@ internal static class Program
         }
 
         progress.FinishStage();
+    }
+
+    /// <summary>
+    /// 将大型图库清单拆分为多个页面文件。拆分后 manifest.Images 被清空，
+    /// PageSize / Pages 字段填充；页面文件写到 libraryRoot 下。
+    /// </summary>
+    private static void SplitLibraryIntoPages(LibraryManifest manifest, string libraryRoot, string outputRoot)
+    {
+        int pageSize = StreamingAssetConstants.LibraryManifestDefaultPageSize;
+        manifest.PageSize = pageSize;
+        manifest.Pages = new List<LibraryManifestPageRecord>();
+
+        for (int p = 0; p * pageSize < manifest.Images.Count; p++)
+        {
+            int start = p * pageSize;
+            int count = Math.Min(pageSize, manifest.Images.Count - start);
+
+            LibraryManifestPage page = new()
+            {
+                PageIndex = p,
+                Start = start,
+                Images = manifest.Images.GetRange(start, count)
+            };
+
+            string pageFileName = string.Format(StreamingAssetConstants.LibraryManifestPagePattern, p);
+            string pageAbsPath = Path.Combine(libraryRoot, pageFileName);
+            StreamingAssetIO.WriteJson(pageAbsPath, page);
+
+            using FileStream pageStream = File.OpenRead(pageAbsPath);
+            manifest.Pages.Add(new LibraryManifestPageRecord
+            {
+                PageIndex = p,
+                Start = start,
+                Count = count,
+                Path = pageFileName,
+                Hash = StreamingAssetIO.ComputeSha256(pageStream),
+                Length = pageStream.Length
+            });
+        }
+
+        // 根清单不重复存储 Images，仅保留轻量页面索引
+        manifest.Images.Clear();
     }
 
     private static string ResolveLibraryDataPath(string source)

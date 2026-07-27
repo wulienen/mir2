@@ -502,7 +502,10 @@ namespace Client.MirGraphics
         private bool _streaming;
         private string _streamingId;
         private LibraryManifest _streamingManifest;
+        // 非分页：全量记录字典；分页：随页面加载逐步填充
         private Dictionary<int, LibraryImageRecord> _streamingImages;
+        // 分页模式下记录已入队但尚未完成下载的页码，避免重复入队
+        private HashSet<int> _pendingPages;
 
         private BinaryReader _reader;
         private FileStream _fStream;
@@ -674,7 +677,17 @@ namespace Client.MirGraphics
             _streaming = true;
             _count = _streamingManifest.ImageCount;
             _images = new MImage[_count];
-            _streamingImages = _streamingManifest.Images.ToDictionary(x => x.Index, x => x);
+
+            if (_streamingManifest.IsPaged)
+            {
+                // 分页模式：字典为空，由 CheckStreamingImage 在使用时按需填充
+                _streamingImages = new Dictionary<int, LibraryImageRecord>();
+                _pendingPages = new HashSet<int>();
+            }
+            else
+            {
+                _streamingImages = _streamingManifest.Images.ToDictionary(x => x.Index, x => x);
+            }
 
             if (_streamingManifest.Frames.Count > 0)
             {
@@ -733,6 +746,27 @@ namespace Client.MirGraphics
         {
             if (_images[index] == null)
             {
+                // 分页模式：若当前索引所在的页面尚未加载到字典，先处理页面
+                if (_streamingManifest.IsPaged && !_streamingImages.ContainsKey(index))
+                {
+                    int pageIndex = index / _streamingManifest.PageSize!.Value;
+
+                    if (AssetManager.TryGetCachedLibraryPage(_streamingId, _streamingManifest, index, out LibraryManifestPage page))
+                    {
+                        // 页面已在本地缓存，合并所有记录到字典
+                        foreach (LibraryImageRecord r in page.Images)
+                            _streamingImages[r.Index] = r;
+                        _pendingPages!.Remove(pageIndex);
+                    }
+                    else
+                    {
+                        // 页面尚未下载；首次发现时入队，之后等待完成
+                        if (_pendingPages!.Add(pageIndex))
+                            AssetManager.QueueLibraryPage(_streamingId, _streamingManifest, index);
+                        return false;
+                    }
+                }
+
                 if (!_streamingImages.TryGetValue(index, out LibraryImageRecord record) || string.IsNullOrEmpty(record.Path))
                     return false;
 
