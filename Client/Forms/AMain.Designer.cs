@@ -99,13 +99,13 @@ namespace Launcher
             this.SpeedLabel.RightToLeft = System.Windows.Forms.RightToLeft.No;
             this.SpeedLabel.Size = new System.Drawing.Size(83, 18);
             this.SpeedLabel.TabIndex = 13;
-            this.SpeedLabel.Text = "Speed";
+            this.SpeedLabel.Text = "";
             this.SpeedLabel.TextAlign = System.Drawing.ContentAlignment.TopRight;
             this.SpeedLabel.Visible = false;
             // 
             // InterfaceTimer
             // 
-            this.InterfaceTimer.Enabled = true;
+            this.InterfaceTimer.Enabled = false;
             this.InterfaceTimer.Interval = 50;
             this.InterfaceTimer.Tick += new System.EventHandler(this.InterfaceTimer_Tick);
             // 
@@ -197,7 +197,7 @@ namespace Launcher
             this.Version_label.Name = "Version_label";
             this.Version_label.Size = new System.Drawing.Size(143, 15);
             this.Version_label.TabIndex = 31;
-            this.Version_label.Text = "Version 1.0.0.0";
+            this.Version_label.Text = "版本：1.0.0.0";
             this.Version_label.TextAlign = System.Drawing.ContentAlignment.TopRight;
             // 
             // CurrentFile_label
@@ -211,7 +211,7 @@ namespace Launcher
             this.CurrentFile_label.Name = "CurrentFile_label";
             this.CurrentFile_label.Size = new System.Drawing.Size(422, 20);
             this.CurrentFile_label.TabIndex = 27;
-            this.CurrentFile_label.Text = "Checking Files.";
+            this.CurrentFile_label.Text = "未检查更新";
             this.CurrentFile_label.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             this.CurrentFile_label.Visible = false;
             // 
@@ -257,7 +257,7 @@ namespace Launcher
             this.Credit_label.Name = "Credit_label";
             this.Credit_label.Size = new System.Drawing.Size(114, 13);
             this.Credit_label.TabIndex = 30;
-            this.Credit_label.Text = "Powered by Crystal M2";
+            this.Credit_label.Text = "基于 Crystal M2";
             this.Credit_label.Click += new System.EventHandler(this.Credit_label_Click);
             // 
             // ProgTotalEnd_pb
@@ -351,7 +351,7 @@ namespace Launcher
             // AMain
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.BackColor = System.Drawing.SystemColors.ActiveCaption;
             this.BackgroundImage = global::Client.Resources.Images.pfffft;
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Center;
@@ -379,7 +379,7 @@ namespace Launcher
             this.MinimizeBox = false;
             this.Name = "AMain";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Launcher";
+            this.Text = "游戏启动器";
             this.TransparencyKey = System.Drawing.Color.Black;
             this.FormClosed += new System.Windows.Forms.FormClosedEventHandler(this.AMain_FormClosed);
             this.Load += new System.EventHandler(this.AMain_Load);

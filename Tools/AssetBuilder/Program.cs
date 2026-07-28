@@ -18,6 +18,12 @@ internal static class Program
             return FixManifest(existingOutput, newVersion);
         }
 
+        if (args.Length > 0 && string.Equals(args[0], "paginate-manifests", StringComparison.OrdinalIgnoreCase))
+        {
+            string existingOutput = Path.GetFullPath(args.Length > 1 ? args[1] : "StreamingAssets");
+            return PaginateManifests(existingOutput);
+        }
+
         BuildOptions options = BuildOptions.Parse(args);
         string source = options.Source;
         string output = options.Output;
@@ -71,6 +77,62 @@ internal static class Program
         Console.WriteLine($"Libraries: {manifest.Libraries.Count}, Maps: {manifest.Maps.Count}, Sounds: {manifest.Sounds.Count}");
         Console.WriteLine($"Rebuilt: {progress.RebuiltCount}, Reused: {progress.ReusedCount}, Failed: {progress.FailedCount}");
         Console.WriteLine($"Manifest version: {manifest.Version}");
+        return 0;
+    }
+
+    /// <summary>
+    /// 对已有的 StreamingAssets 目录做原地分页，无需重新解析 .Lib 文件。
+    /// 仅处理 images 数量超过阈值且尚未分页的库清单。
+    /// </summary>
+    private static int PaginateManifests(string output)
+    {
+        string rootManifestPath = Path.Combine(output, StreamingAssetConstants.ManifestFileName);
+        if (!File.Exists(rootManifestPath))
+        {
+            Console.Error.WriteLine($"根清单不存在: {rootManifestPath}");
+            return 1;
+        }
+
+        AssetManifest rootManifest = StreamingAssetIO.ReadJson<AssetManifest>(rootManifestPath);
+        int paginatedCount = 0;
+
+        foreach (AssetLibraryRecord libraryRecord in rootManifest.Libraries)
+        {
+            string libManifestPath = Path.Combine(output, libraryRecord.ManifestPath.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(libManifestPath)) continue;
+
+            LibraryManifest libManifest = StreamingAssetIO.ReadJson<LibraryManifest>(libManifestPath);
+
+            // 已分页或图片数未超阈值，跳过
+            if (libManifest.IsPaged || libManifest.Images.Count <= StreamingAssetConstants.LibraryManifestPageThreshold)
+                continue;
+
+            Console.WriteLine($"分页: {libraryRecord.Id} ({libManifest.Images.Count} 张图片)");
+
+            string libraryRoot = Path.GetDirectoryName(libManifestPath)!;
+            SplitLibraryIntoPages(libManifest, libraryRoot, output);
+            StreamingAssetIO.WriteJson(libManifestPath, libManifest);
+
+            // 更新根清单中该库条目的 hash/length
+            using FileStream updatedStream = File.OpenRead(libManifestPath);
+            libraryRecord.Hash = StreamingAssetIO.ComputeSha256(updatedStream);
+            libraryRecord.Length = updatedStream.Length;
+
+            paginatedCount++;
+        }
+
+        if (paginatedCount > 0)
+        {
+            rootManifest.Version = DateTime.UtcNow.ToString("yyyyMMddHHmmss");
+            rootManifest.CreatedUtc = DateTime.UtcNow;
+            StreamingAssetIO.WriteJson(rootManifestPath, rootManifest);
+            Console.WriteLine($"完成：{paginatedCount} 个库已分页，根清单版本更新为 {rootManifest.Version}");
+        }
+        else
+        {
+            Console.WriteLine("所有库清单已是分页格式，无需处理。");
+        }
+
         return 0;
     }
 

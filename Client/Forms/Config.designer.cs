@@ -160,7 +160,7 @@
             this.ID_l.Name = "ID_l";
             this.ID_l.Size = new System.Drawing.Size(124, 17);
             this.ID_l.TabIndex = 8;
-            this.ID_l.Text = "Username";
+            this.ID_l.Text = "用户名";
             this.ID_l.Click += new System.EventHandler(this.AccountLogin_txt_Click);
             // 
             // Password_l
@@ -175,7 +175,7 @@
             this.Password_l.Name = "Password_l";
             this.Password_l.Size = new System.Drawing.Size(124, 17);
             this.Password_l.TabIndex = 9;
-            this.Password_l.Text = "Password";
+            this.Password_l.Text = "密码";
             this.Password_l.Click += new System.EventHandler(this.AccountPass_txt_Click);
             // 
             // label4
@@ -210,7 +210,7 @@
             this.AutoStart_label.Name = "AutoStart_label";
             this.AutoStart_label.Size = new System.Drawing.Size(54, 13);
             this.AutoStart_label.TabIndex = 12;
-            this.AutoStart_label.Text = "Auto start";
+            this.AutoStart_label.Text = "更新后自动进入游戏";
             this.AutoStart_label.Click += new System.EventHandler(this.AutoStart_pb_Click);
             // 
             // Fullscreen_label
@@ -224,7 +224,7 @@
             this.Fullscreen_label.Name = "Fullscreen_label";
             this.Fullscreen_label.Size = new System.Drawing.Size(56, 13);
             this.Fullscreen_label.TabIndex = 14;
-            this.Fullscreen_label.Text = "Fullscreen";
+            this.Fullscreen_label.Text = "全屏模式";
             this.Fullscreen_label.Click += new System.EventHandler(this.Fullscreen_pb_Click);
             // 
             // Fullscreen_pb
@@ -249,7 +249,7 @@
             this.OnTop_label.Name = "OnTop_label";
             this.OnTop_label.Size = new System.Drawing.Size(72, 13);
             this.OnTop_label.TabIndex = 16;
-            this.OnTop_label.Text = "Always on top";
+            this.OnTop_label.Text = "窗口置顶";
             this.OnTop_label.Click += new System.EventHandler(this.OnTop_pb_Click);
             // 
             // OnTop_pb
@@ -275,7 +275,7 @@
             this.FPScap_label.Name = "FPScap_label";
             this.FPScap_label.Size = new System.Drawing.Size(42, 13);
             this.FPScap_label.TabIndex = 18;
-            this.FPScap_label.Text = "FPS cap";
+            this.FPScap_label.Text = "限制帧率";
             this.FPScap_label.Click += new System.EventHandler(this.FPScap_pb_Click);
             // 
             // FPScap_pb
@@ -328,7 +328,7 @@
             this.label9.Name = "label9";
             this.label9.Size = new System.Drawing.Size(55, 14);
             this.label9.TabIndex = 21;
-            this.label9.Text = "Graphics";
+            this.label9.Text = "画面设置";
             // 
             // label10
             // 
@@ -341,7 +341,7 @@
             this.label10.Name = "label10";
             this.label10.Size = new System.Drawing.Size(66, 14);
             this.label10.TabIndex = 22;
-            this.label10.Text = "Resolution";
+            this.label10.Text = "分辨率";
             // 
             // label11
             // 
@@ -354,7 +354,7 @@
             this.label11.Name = "label11";
             this.label11.Size = new System.Drawing.Size(39, 14);
             this.label11.TabIndex = 23;
-            this.label11.Text = "Game";
+            this.label11.Text = "启动设置";
             // 
             // label12
             // 
@@ -367,7 +367,7 @@
             this.label12.Name = "label12";
             this.label12.Size = new System.Drawing.Size(80, 13);
             this.label12.TabIndex = 24;
-            this.label12.Text = "Account details";
+            this.label12.Text = "账号信息";
             // 
             // label5
             // 
@@ -420,7 +420,7 @@
             // Config
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.BackColor = System.Drawing.Color.Black;
             this.BackgroundImage = global::Client.Resources.Images.Config_Base1;
             this.BackgroundImageLayout = System.Windows.Forms.ImageLayout.Center;
@@ -461,7 +461,7 @@
             this.ShowInTaskbar = false;
             this.SizeGripStyle = System.Windows.Forms.SizeGripStyle.Hide;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
-            this.Text = "Config";
+            this.Text = "启动器设置";
             this.TransparencyKey = System.Drawing.Color.Black;
             this.Load += new System.EventHandler(this.Config_Load);
             this.VisibleChanged += new System.EventHandler(this.Config_VisibleChanged);

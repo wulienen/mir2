@@ -202,6 +202,7 @@ namespace Client
         public static string P_BrowserAddress = "https://www.lomcn.org/mir2-patchsite/";
         public static string P_Client = Application.StartupPath + "\\";
         public static bool P_AutoStart = false;
+        public static bool P_AutoUpdate = false;
         public static int P_Concurrency = 1;
 
         //Streaming Assets
@@ -316,6 +317,7 @@ namespace Client
             P_Login = Reader.ReadString("Launcher", "Login", P_Login);
             P_Password = Reader.ReadString("Launcher", "Password", P_Password);
             P_AutoStart = Reader.ReadBoolean("Launcher", "AutoStart", P_AutoStart);
+            P_AutoUpdate = Reader.ReadBoolean("Launcher", "AutoUpdate", P_AutoUpdate);
             P_ServerName = Reader.ReadString("Launcher", "ServerName", P_ServerName);
             P_BrowserAddress = Reader.ReadString("Launcher", "Browser", P_BrowserAddress);
             P_Concurrency = Reader.ReadInt32("Launcher", "ConcurrentDownloads", P_Concurrency);
@@ -442,6 +444,7 @@ namespace Client
             Reader.Write("Launcher", "ServerName", P_ServerName);
             Reader.Write("Launcher", "Browser", P_BrowserAddress);
             Reader.Write("Launcher", "AutoStart", P_AutoStart);
+            Reader.Write("Launcher", "AutoUpdate", P_AutoUpdate);
             Reader.Write("Launcher", "ConcurrentDownloads", P_Concurrency);
 
             //Streaming Assets

@@ -5,11 +5,14 @@ using Microsoft.Web.WebView2.Core;
 using System.Net.Http.Headers;
 using System.Net.Http.Handlers;
 using Client.Utils;
+using System.Drawing.Drawing2D;
 
 namespace Launcher
 {
     public partial class AMain : Form
     {
+        private const int ProgressBarMaximum = 550;
+
         long _totalBytes, _completedBytes;
         private int _fileCount, _currentCount;
 
@@ -31,12 +34,231 @@ namespace Launcher
 
         private bool Restart = false;
 
+        private Panel _statusPanel;
+        private Button _checkUpdateButton;
+        private bool _launchHovered;
+        private bool _launchPressed;
+
         public AMain()
         {
             InitializeComponent();
+            InitializeLauncherLayout();
 
             BackColor = Color.FromArgb(1, 0, 0);
             TransparencyKey = Color.FromArgb(1, 0, 0);
+        }
+
+        private void InitializeLauncherLayout()
+        {
+            AutoScaleMode = AutoScaleMode.None;
+            Text = "游戏启动器";
+
+            _statusPanel = new Panel
+            {
+                BackColor = Color.FromArgb(21, 29, 38),
+                Bounds = new Rectangle(7, 458, 790, 94)
+            };
+
+            Font statusFont = new Font("Microsoft YaHei UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point);
+            Color secondaryText = Color.FromArgb(160, 168, 176);
+
+            _statusPanel.Controls.Add(CreateCaptionLabel("文件", new Rectangle(7, 4, 40, 21), statusFont, secondaryText));
+            _statusPanel.Controls.Add(CreateCaptionLabel("当前", new Rectangle(7, 29, 40, 17), statusFont, secondaryText));
+            _statusPanel.Controls.Add(CreateCaptionLabel("总计", new Rectangle(7, 47, 40, 17), statusFont, secondaryText));
+
+            Panel currentTrack = CreateProgressTrack(new Rectangle(51, 31, 558, 13));
+            Panel totalTrack = CreateProgressTrack(new Rectangle(51, 49, 558, 13));
+            _statusPanel.Controls.Add(currentTrack);
+            _statusPanel.Controls.Add(totalTrack);
+
+            CurrentFile_label.Parent = _statusPanel;
+            CurrentFile_label.Bounds = new Rectangle(51, 4, 255, 21);
+            CurrentFile_label.Font = statusFont;
+            CurrentFile_label.ForeColor = secondaryText;
+            CurrentFile_label.Visible = true;
+
+            SpeedLabel.Parent = _statusPanel;
+            SpeedLabel.Bounds = new Rectangle(310, 4, 80, 21);
+            SpeedLabel.Font = statusFont;
+            SpeedLabel.TextAlign = ContentAlignment.MiddleRight;
+
+            ActionLabel.Parent = _statusPanel;
+            ActionLabel.Bounds = new Rectangle(394, 4, 116, 21);
+            ActionLabel.Font = statusFont;
+            ActionLabel.TextAlign = ContentAlignment.MiddleRight;
+
+            CurrentPercent_label.Parent = _statusPanel;
+            CurrentPercent_label.Bounds = new Rectangle(610, 28, 40, 17);
+            CurrentPercent_label.Font = statusFont;
+            CurrentPercent_label.TextAlign = ContentAlignment.MiddleRight;
+            CurrentPercent_label.Visible = true;
+
+            TotalPercent_label.Parent = _statusPanel;
+            TotalPercent_label.Bounds = new Rectangle(610, 46, 40, 17);
+            TotalPercent_label.Font = statusFont;
+            TotalPercent_label.TextAlign = ContentAlignment.MiddleRight;
+            TotalPercent_label.Visible = true;
+
+            ProgressCurrent_pb.Parent = _statusPanel;
+            ProgressCurrent_pb.Location = new Point(51, 31);
+            ProgressCurrent_pb.Height = 13;
+            ProgressCurrent_pb.Anchor = AnchorStyles.None;
+
+            TotalProg_pb.Parent = _statusPanel;
+            TotalProg_pb.Location = new Point(51, 49);
+            TotalProg_pb.Height = 13;
+            TotalProg_pb.Anchor = AnchorStyles.None;
+
+            ProgEnd_pb.Parent = _statusPanel;
+            ProgEnd_pb.Size = new Size(6, 13);
+            ProgEnd_pb.Anchor = AnchorStyles.None;
+
+            ProgTotalEnd_pb.Parent = _statusPanel;
+            ProgTotalEnd_pb.Size = new Size(6, 13);
+            ProgTotalEnd_pb.Anchor = AnchorStyles.None;
+
+            Launch_pb.Parent = _statusPanel;
+            Launch_pb.Bounds = new Rectangle(652, 15, 115, 53);
+            Launch_pb.Anchor = AnchorStyles.None;
+            Launch_pb.Image = null;
+            Launch_pb.Paint += Launch_pb_Paint;
+            Launch_pb.EnabledChanged += (_, _) => Launch_pb.Invalidate();
+
+            _checkUpdateButton = new Button
+            {
+                Bounds = new Rectangle(514, 3, 94, 23),
+                BackColor = Color.FromArgb(31, 44, 55),
+                Cursor = Cursors.Hand,
+                FlatStyle = FlatStyle.Flat,
+                Font = new Font("Microsoft YaHei UI", 8.25F, FontStyle.Regular, GraphicsUnit.Point),
+                ForeColor = Color.White,
+                Text = "检查更新",
+                UseVisualStyleBackColor = false
+            };
+            _checkUpdateButton.FlatAppearance.BorderColor = Color.FromArgb(58, 76, 89);
+            _checkUpdateButton.FlatAppearance.MouseOverBackColor = Color.FromArgb(40, 57, 70);
+            _checkUpdateButton.FlatAppearance.MouseDownBackColor = Color.FromArgb(15, 23, 30);
+            _checkUpdateButton.Click += (_, _) => BeginUpdate();
+            _statusPanel.Controls.Add(_checkUpdateButton);
+
+            Credit_label.Parent = _statusPanel;
+            Credit_label.AutoSize = false;
+            Credit_label.Bounds = new Rectangle(7, 74, 210, 16);
+            Credit_label.Font = statusFont;
+            Credit_label.Text = "基于 Crystal M2";
+
+            Version_label.Parent = _statusPanel;
+            Version_label.Bounds = new Rectangle(420, 74, 347, 16);
+            Version_label.Font = statusFont;
+
+            Controls.Add(_statusPanel);
+            _statusPanel.BringToFront();
+        }
+
+        private static Label CreateCaptionLabel(string text, Rectangle bounds, Font font, Color color)
+        {
+            return new Label
+            {
+                BackColor = Color.Transparent,
+                Bounds = bounds,
+                Font = font,
+                ForeColor = color,
+                Text = text,
+                TextAlign = ContentAlignment.MiddleRight
+            };
+        }
+
+        private static Panel CreateProgressTrack(Rectangle bounds)
+        {
+            return new Panel
+            {
+                BackColor = Color.FromArgb(7, 9, 11),
+                BorderStyle = BorderStyle.FixedSingle,
+                Bounds = bounds
+            };
+        }
+
+        public void BeginUpdate(bool cleanFiles = false)
+        {
+            if (_workThread?.IsAlive == true) return;
+
+            Completed = false;
+            Checked = false;
+            CleanFiles = cleanFiles;
+            ErrorFound = false;
+            Restart = false;
+            errorcount = 0;
+            _totalBytes = 0;
+            _completedBytes = 0;
+            _fileCount = 0;
+            _currentCount = 0;
+            OldList = null;
+            DownloadList.Clear();
+            ActiveDownloads.Clear();
+
+            SetProgress(ProgressCurrent_pb, 0);
+            SetProgress(TotalProg_pb, 0);
+            CurrentPercent_label.Text = "0%";
+            TotalPercent_label.Text = "0%";
+            CurrentFile_label.Text = cleanFiles ? "正在准备清理文件..." : "正在检查文件...";
+            SpeedLabel.Text = string.Empty;
+            ActionLabel.Text = string.Empty;
+            SpeedLabel.Visible = false;
+            ActionLabel.Visible = false;
+            Launch_pb.Enabled = false;
+            _checkUpdateButton.Enabled = false;
+            InterfaceTimer.Enabled = true;
+
+            _workThread = new Thread(Start) { IsBackground = true };
+            _workThread.Start();
+        }
+
+        private static void SetProgress(PictureBox progress, int width)
+        {
+            progress.Width = Math.Clamp(width, 0, ProgressBarMaximum);
+        }
+
+        private void Launch_pb_Paint(object sender, PaintEventArgs e)
+        {
+            Rectangle bounds = new Rectangle(0, 0, Launch_pb.Width - 1, Launch_pb.Height - 1);
+            Color top;
+            Color bottom;
+            Color textColor;
+
+            if (!Launch_pb.Enabled)
+            {
+                top = Color.FromArgb(34, 43, 50);
+                bottom = Color.FromArgb(20, 27, 33);
+                textColor = Color.FromArgb(105, 113, 120);
+            }
+            else if (_launchPressed)
+            {
+                top = Color.FromArgb(14, 23, 30);
+                bottom = Color.FromArgb(34, 47, 57);
+                textColor = Color.FromArgb(255, 211, 0);
+            }
+            else if (_launchHovered)
+            {
+                top = Color.FromArgb(48, 66, 78);
+                bottom = Color.FromArgb(22, 32, 40);
+                textColor = Color.FromArgb(255, 211, 0);
+            }
+            else
+            {
+                top = Color.FromArgb(45, 60, 71);
+                bottom = Color.FromArgb(20, 29, 36);
+                textColor = Color.White;
+            }
+
+            using LinearGradientBrush background = new(bounds, top, bottom, LinearGradientMode.Vertical);
+            using Pen border = new(Color.FromArgb(5, 9, 12));
+            using Pen innerBorder = new(Color.FromArgb(55, 73, 85));
+            e.Graphics.FillRectangle(background, bounds);
+            e.Graphics.DrawRectangle(border, bounds);
+            e.Graphics.DrawRectangle(innerBorder, 2, 2, bounds.Width - 4, bounds.Height - 4);
+            using Font font = new("Microsoft YaHei UI", 15F, FontStyle.Bold, GraphicsUnit.Point);
+            TextRenderer.DrawText(e.Graphics, "开始游戏", font,
+                bounds, textColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
 
         public static void SaveError(string ex)
@@ -93,7 +315,7 @@ namespace Launcher
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.ToString(), "Error");
+                MessageBox.Show(ex.ToString(), "错误");
                 Completed = true;
                 SaveError(ex.ToString());
             }
@@ -396,10 +618,13 @@ namespace Launcher
 
             RepairOldFiles();
 
-            Launch_pb.Enabled = false;
-            ProgressCurrent_pb.Width = 5;
-            TotalProg_pb.Width = 5;
-            Version_label.Text = string.Format("Build: {0}.{1}.{2}", Globals.ProductCodename, Settings.UseTestConfig ? "Debug" : "Release", Application.ProductVersion);
+            Launch_pb.Enabled = true;
+            SetProgress(ProgressCurrent_pb, 0);
+            SetProgress(TotalProg_pb, 0);
+            CurrentPercent_label.Text = "0%";
+            TotalPercent_label.Text = "0%";
+            CurrentFile_label.Text = "未检查更新，可直接进入游戏";
+            Version_label.Text = string.Format("版本：{0}.{1}.{2}", Globals.ProductCodename, Settings.UseTestConfig ? "调试" : "正式", Application.ProductVersion);
 
             if (Settings.P_ServerName != String.Empty)
             {
@@ -407,8 +632,9 @@ namespace Launcher
                 Name_label.Text = Settings.P_ServerName;
             }
 
-            _workThread = new Thread(Start) { IsBackground = true };
-            _workThread.Start();
+            InterfaceTimer.Enabled = false;
+            if (Settings.P_AutoUpdate)
+                BeginUpdate();
         }
 
         private void Main_browser_NavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
@@ -459,12 +685,15 @@ namespace Launcher
 
         private void Launch_pb_MouseEnter(object sender, EventArgs e)
         {
-            Launch_pb.Image = Client.Resources.Images.Launch_Hover;
+            _launchHovered = true;
+            Launch_pb.Invalidate();
         }
 
         private void Launch_pb_MouseLeave(object sender, EventArgs e)
         {
-            Launch_pb.Image = Client.Resources.Images.Launch_Base1;
+            _launchHovered = false;
+            _launchPressed = false;
+            Launch_pb.Invalidate();
         }
 
         private void Close_pb_MouseEnter(object sender, EventArgs e)
@@ -479,12 +708,14 @@ namespace Launcher
 
         private void Launch_pb_MouseDown(object sender, MouseEventArgs e)
         {
-            Launch_pb.Image = Client.Resources.Images.Launch_Pressed;
+            _launchPressed = true;
+            Launch_pb.Invalidate();
         }
 
         private void Launch_pb_MouseUp(object sender, MouseEventArgs e)
         {
-            Launch_pb.Image = Client.Resources.Images.Launch_Base1;
+            _launchPressed = false;
+            Launch_pb.Invalidate();
         }
 
         private void Close_pb_MouseDown(object sender, MouseEventArgs e)
@@ -545,10 +776,10 @@ namespace Launcher
                 if (Completed && ActiveDownloads.Count == 0)
                 {
                     ActionLabel.Text = "";
-                    CurrentFile_label.Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.UpToDate);
+                    CurrentFile_label.Text = "已是最新版本";
                     SpeedLabel.Text = "";
-                    ProgressCurrent_pb.Width = 550;
-                    TotalProg_pb.Width = 550;
+                    SetProgress(ProgressCurrent_pb, ProgressBarMaximum);
+                    SetProgress(TotalProg_pb, ProgressBarMaximum);
                     CurrentFile_label.Visible = true;
                     CurrentPercent_label.Visible = true;
                     TotalPercent_label.Visible = true;
@@ -556,6 +787,7 @@ namespace Launcher
                     TotalPercent_label.Text = "100%";
                     InterfaceTimer.Enabled = false;
                     Launch_pb.Enabled = true;
+                    _checkUpdateButton.Enabled = true;
                     if (ErrorFound) MessageBox.Show(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.FilesDownloadFailed), GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.DownloadFailed));
                     ErrorFound = false;
 
@@ -614,12 +846,12 @@ namespace Launcher
                 CurrentPercent_label.Visible = true;
                 TotalPercent_label.Visible = true;
 
-                if (LabelSwitch) ActionLabel.Text = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.FilesRemaining), _fileCount - _currentCount);
-                else ActionLabel.Text = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.MBRemaining), ((_totalBytes) - (_completedBytes + currentBytes)) / 1024 / 1024);
+                if (LabelSwitch) ActionLabel.Text = $"剩余 {_fileCount - _currentCount} 个文件";
+                else ActionLabel.Text = $"剩余 {((_totalBytes) - (_completedBytes + currentBytes)) / 1024 / 1024:#,##0} MB";
 
                 if (Settings.P_Concurrency > 1)
                 {
-                    CurrentFile_label.Text = string.Format("<Concurrent> {0}", ActiveDownloads.Count);
+                    CurrentFile_label.Text = string.Format("并发下载：{0} 个文件", ActiveDownloads.Count);
                     SpeedLabel.Text = ToSize(currentBytes / _stopwatch.Elapsed.TotalSeconds);
                 }
                 else
@@ -629,13 +861,13 @@ namespace Launcher
                         CurrentFile_label.Text = string.Format("{0}", currentFile.FileName);
                         SpeedLabel.Text = ToSize(currentBytes / _stopwatch.Elapsed.TotalSeconds);
                         CurrentPercent_label.Text = ((int)(100 * currentBytes / currentFile.Length)).ToString() + "%";
-                        ProgressCurrent_pb.Width = (int)(5.5 * (100 * currentBytes / currentFile.Length));
+                        SetProgress(ProgressCurrent_pb, (int)(ProgressBarMaximum * currentBytes / currentFile.Length));
                     }
                 }
 
                 if (!(_completedBytes is 0 && currentBytes is 0 && _totalBytes is 0))
                 {
-                    TotalProg_pb.Width = (int)(5.5 * (100 * (_completedBytes + currentBytes) / _totalBytes));
+                    SetProgress(TotalProg_pb, (int)(ProgressBarMaximum * (_completedBytes + currentBytes) / _totalBytes));
                     TotalPercent_label.Text = ((int)(100 * (_completedBytes + currentBytes) / _totalBytes)).ToString() + "%";
                 }
 
@@ -659,8 +891,8 @@ namespace Launcher
 
         private void Credit_label_Click(object sender, EventArgs e)
         {
-            if (Credit_label.Text == "Powered by Crystal M2") Credit_label.Text = "Designed by Breezer";
-            else Credit_label.Text = "Powered by Crystal M2";
+            if (Credit_label.Text == "基于 Crystal M2") Credit_label.Text = "界面设计：Breezer";
+            else Credit_label.Text = "基于 Crystal M2";
         }
 
         private void AMain_FormClosed(object sender, FormClosedEventArgs e)
