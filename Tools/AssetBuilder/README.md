@@ -1,195 +1,169 @@
-# AssetBuilder 使用说明
+# AssetBuilder v2 使用说明
 
-`AssetBuilder` 的作用是把完整客户端中的资源转换为资源服务器可以提供的 `StreamingAssets` 文件。
+AssetBuilder 把完整客户端资源转换成 AssetServer 可以按需发送的流式资源。
 
-客户端不会直接下载完整的 `Data_Full`、`Map`、`Sound` 目录，而是根据这里生成的文件，按需要下载图片、地图区块和音频。
+v2 使用 SHA-256 内容寻址。同一个资源即使跨版本也只保存和下载一次；修改
+`Title.Lib` 不会让客户端重新下载未变化的地图、怪物和声音。
 
-## 一、准备工作
+## 目录约定
 
-本项目中的完整客户端目录是：
+完整客户端：
 
 ```text
 E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug
 ```
 
-资源服务器目录建议使用：
+其中只读取：
+
+- `Data_Full\**\*.Lib`，没有 `Data_Full` 时才读取 `Data`
+- `Map\*.map`
+- `Sound\*.wav`、`*.mp3` 和 `SoundList.lst`
+
+`Client.exe`、DLL 和登录器配置不会被当成资源。
+
+建议将 v2 输出放在新目录：
 
 ```text
-E:\GameSourceCode\StreamingAssets
+E:\GameSourceCode\StreamingAssetsV2
 ```
 
-运行命令前，先进入工具目录：
+## 从现有资源快速迁移
+
+已有 v1 `StreamingAssets` 时，不需要重新解析 8 GB 的 `Data_Full`。
 
 ```powershell
 cd E:\GameSourceCode\YangfeiCrystal\Tools\AssetBuilder
+
+dotnet run --project AssetBuilder.csproj -- migrate-v2 `
+  "E:\GameSourceCode\StreamingAssets" `
+  "E:\GameSourceCode\StreamingAssetsV2"
 ```
 
-资源来源规则：
+迁移会读取已经拆好的图片、地图块和声音，生成二进制索引与 v2 对象目录。
+在同一个磁盘上优先使用硬链接，不会再复制一份大资源；硬链接不可用时自动复制。
 
-- 图库：优先读取 `Debug\Data_Full`。只有不存在 `Data_Full` 时才读取 `Debug\Data`。
-- 地图：读取 `Debug\Map`。
-- 音频：读取 `Debug\Sound` 中的 `.wav`、`.mp3` 和 `SoundList.lst`。
+迁移只有全部校验成功后才会发布 `manifest.json`。中途失败不会产生可用的半成品版本。
 
-`Debug` 目录中的 `Client.exe`、DLL、配置文件等登录器文件不会被当作资源转换。
-
-## 二、第一次使用增量功能
-
-如果你已经成功生成过 `StreamingAssets`，只是之前的 AssetBuilder 没有增量状态文件，先执行一次下面的命令：
+迁移完成后，执行一次以下命令登记源文件状态：
 
 ```powershell
 dotnet run --project AssetBuilder.csproj -- `
   "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
-  "E:\GameSourceCode\StreamingAssets" `
+  "E:\GameSourceCode\StreamingAssetsV2" `
   --adopt-existing
 ```
 
-这一步只登记当前的资源输出状态，生成：
+这一步不会重新拆分资源。以后日常更新就不再需要 `--adopt-existing`。
 
-```text
-E:\GameSourceCode\StreamingAssets\.assetbuilder-state.json
-```
+## 第一次全新生成
 
-它不会重新拆分全部资源，不会重新生成 8G 文件。
-
-注意：只有当当前 `StreamingAssets` 确实是从现在这份完整客户端资源生成时，才使用 `--adopt-existing`。
-
-## 三、日常更新资源
-
-以后只要 `Data_Full`、`Map` 或 `Sound` 有新增或修改，执行：
+没有旧 StreamingAssets 时执行：
 
 ```powershell
 dotnet run --project AssetBuilder.csproj -- `
   "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
-  "E:\GameSourceCode\StreamingAssets"
+  "E:\GameSourceCode\StreamingAssetsV2"
 ```
 
-AssetBuilder 会自动判断哪些源文件变了。
+第一次需要读取全部源资源，耗时较长。后续更新使用增量模式。
 
-| 资源变化 | 会发生什么 |
+## 日常更新
+
+`Data_Full`、`Map` 或 `Sound` 有新增或修改后，仍执行同一条命令：
+
+```powershell
+dotnet run --project AssetBuilder.csproj -- `
+  "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
+  "E:\GameSourceCode\StreamingAssetsV2"
+```
+
+AssetBuilder 会自动判断：
+
+| 变化 | 处理方式 |
 | --- | --- |
-| 新增一个 `.Lib` | 只拆分这个图库 |
-| 修改一个 `.Lib` | 只重新生成这个图库的图片 chunk 和 manifest |
-| 新增或修改一个 `.map` | 只重新生成这张地图的区块 |
-| 新增或修改一个音频 | 只复制这个音频 |
-| 没有修改的资源 | 直接复用，不重新拆分 |
+| 新增或修改一个 `.Lib` | 只处理这个图库 |
+| 新增或修改一个 `.map` | 只处理这张地图 |
+| 新增或修改一个声音 | 只处理这个声音 |
+| 没有变化 | 直接复用已有对象 |
 
-运行时会显示进度，例如：
+输出中的 `rebuilt` 是本次重建数量，`reused` 是直接复用数量。
 
-```text
-[Libraries]   34.7% (301/1439) rebuilt 3, reused 298, elapsed 00:02:14 | Objects12.Lib
-```
+如果构建中任意资源失败，AssetBuilder 不会替换已发布的根清单，AssetServer 会继续
+提供上一版完整资源。
 
-其中：
+## AssetServer 设置
 
-- `34.7%`：当前阶段进度。
-- `301/1439`：当前处理到第几个文件。
-- `rebuilt 3`：本次重新转换的文件数。
-- `reused 298`：直接复用旧输出的文件数。
-- 最后的文件名：当前正在处理的文件。
-
-正常的小范围更新结束时，应该看到大部分文件是 `reused`，只有变更的文件是 `rebuilt`。
-
-## 四、版本号
-
-日常更新时不需要手动填写版本号。只要发现资源变化，AssetBuilder 会自动生成一个新的资源版本号；没有资源变化时会保留当前版本号。
-
-如果你需要指定版本号，例如 `v4`，可以在最后加上：
-
-```powershell
-dotnet run --project AssetBuilder.csproj -- `
-  "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
-  "E:\GameSourceCode\StreamingAssets" `
-  v4
-```
-
-## 五、需要全量重建时
-
-通常不需要全量重建。以下情况才建议使用：
-
-- 第一次创建一个全新的 `StreamingAssets` 目录。
-- 你怀疑现有输出目录被误删、损坏或混入了错误资源。
-- AssetBuilder 的资源格式以后发生了不兼容升级。
-
-强制全量重建命令：
-
-```powershell
-dotnet run --project AssetBuilder.csproj -- `
-  "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
-  "E:\GameSourceCode\StreamingAssets" `
-  --full
-```
-
-这个命令会重新处理所有资源，耗时会比较长。
-
-## 六、深度校验模式
-
-普通增量判断使用文件大小和最后修改时间，正常编辑资源后会自动识别。
-
-如果你担心某个工具修改了资源内容却没有修改时间，或者希望做一次更严格的检查，可以加 `--verify`：
-
-```powershell
-dotnet run --project AssetBuilder.csproj -- `
-  "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
-  "E:\GameSourceCode\StreamingAssets" `
-  --verify
-```
-
-`--verify` 会额外计算源文件 SHA-256，读取量较大，只在排查问题时使用，不建议每次更新都使用。
-
-## 七、和 AssetServer 的关系
-
-AssetBuilder 只负责生成资源文件，不启动资源服务器。
-
-AssetServer 的 `AssetRoot` 应该指向 AssetBuilder 的输出目录：
+修改 `AssetServer\appsettings.json`：
 
 ```json
 {
-  "AssetRoot": "E:\\GameSourceCode\\StreamingAssets"
+  "Urls": "http://0.0.0.0:8088",
+  "AssetRoot": "E:\\GameSourceCode\\StreamingAssetsV2",
+  "CacheSeconds": 31536000
 }
 ```
 
-客户端配置中的 `AssetBaseUrl` 则指向 AssetServer，例如：
+启动：
+
+```powershell
+cd E:\GameSourceCode\YangfeiCrystal\AssetServer
+dotnet run
+```
+
+检查：
+
+```text
+http://127.0.0.1:8088/health
+```
+
+`ok=true` 且 `formatVersion=2` 表示资源目录正确。
+
+## 客户端设置
 
 ```ini
 [Streaming]
 Enabled=True
-AssetBaseUrl=http://127.0.0.1:8088/assets/v1/
+AssetBaseUrl=http://127.0.0.1:8088/assets/v2/
 PreferLocalAssets=True
+ConcurrentDownloads=4
+RequestTimeoutSeconds=30
+CachePath=.\Cache\Assets\
+CacheMaxMB=4096
 ```
 
-资源更新完成后，新启动的客户端会读取最新的顶层 manifest；已经在线的客户端通常在重新启动后会拿到新版本。
+旧配置中的 `/assets/v1/` 会自动升级为 `/assets/v2/`，IP 和端口保持不变。
 
-## 八、常见问题
+`CacheMaxMB` 是流式缓存上限，最低 256 MB，默认 4096 MB。超过上限时优先删除
+最久没有使用的对象。旧的按版本缓存目录会在客户端启动时自动清理。
 
-### 每次都显示大量 `rebuilt`
+客户端不需要删除 `Data` 或 `Cache` 才能刷新资源：
 
-检查以下内容：
+- 本地 `Data\*.Lib` 存在且 `PreferLocalAssets=True` 时，始终优先本地文件。
+- 流式资源更新后，新清单引用新哈希；客户端自动下载变化对象。
+- 哈希没有变化的对象直接复用，不重复下载。
 
-- `StreamingAssets\.assetbuilder-state.json` 是否存在。
-- 是否每次都带了 `--full`。
-- 输出目录是否和上次运行时相同。
-- 完整客户端文件是否被重新复制或解压，导致大量文件修改时间变化。
+## 检查与排错
 
-如果 `StreamingAssets` 是以前全量生成的、但没有 `.assetbuilder-state.json`，执行一次 `--adopt-existing` 即可。
-
-### Data_Full 新增资源后没有被处理
-
-确认新增的是 `.Lib` 文件，并且放在：
-
-```text
-E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug\Data_Full
-```
-
-然后重新执行“日常更新资源”命令。
-
-### 想只修复顶层 manifest
-
-可以使用现有命令：
+运行内置协议自测：
 
 ```powershell
-dotnet run --project AssetBuilder.csproj -- fix-manifest `
-  "E:\GameSourceCode\StreamingAssets" `
-  v4
+dotnet run --project AssetBuilder.csproj -- self-test
 ```
 
-这个命令只修复顶层 manifest 中的 hash 和版本号，不重新拆分资源。
+怀疑源文件内容变化但修改时间没变时：
+
+```powershell
+dotnet run --project AssetBuilder.csproj -- `
+  "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
+  "E:\GameSourceCode\StreamingAssetsV2" `
+  --verify
+```
+
+只有输出损坏或需要从源资源完全重建时才使用 `--full`。它会重新读取全部资源：
+
+```powershell
+dotnet run --project AssetBuilder.csproj -- `
+  "E:\GameSourceCode\YangfeiCrystal\Build\Client\Debug" `
+  "E:\GameSourceCode\StreamingAssetsV2" `
+  --full
+```

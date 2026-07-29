@@ -207,11 +207,12 @@ namespace Client
 
         //Streaming Assets
         public static bool StreamingEnabled = true;
-        public static string AssetBaseUrl = @"http://127.0.0.1:8088/assets/v1/";
+        public static string AssetBaseUrl = @"http://127.0.0.1:8088/assets/v2/";
         public static bool PreferLocalAssets = true;
         public static int AssetDownloadConcurrency = 4;
         public static int AssetRequestTimeoutSeconds = 30;
         public static string AssetCachePath = @".\Cache\Assets\";
+        public static int AssetCacheMaxMB = 4096;
 
         public static void Load()
         {
@@ -329,6 +330,10 @@ namespace Client
             AssetDownloadConcurrency = Reader.ReadInt32("Streaming", "ConcurrentDownloads", AssetDownloadConcurrency);
             AssetRequestTimeoutSeconds = Reader.ReadInt32("Streaming", "RequestTimeoutSeconds", AssetRequestTimeoutSeconds);
             AssetCachePath = Reader.ReadString("Streaming", "CachePath", AssetCachePath);
+            AssetCacheMaxMB = Reader.ReadInt32("Streaming", "CacheMaxMB", AssetCacheMaxMB);
+            if (AssetCacheMaxMB < 256) AssetCacheMaxMB = 256;
+            if (AssetBaseUrl.Contains("/assets/v1", StringComparison.OrdinalIgnoreCase))
+                AssetBaseUrl = AssetBaseUrl.Replace("/assets/v1", "/assets/v2", StringComparison.OrdinalIgnoreCase);
 
             if (!P_Host.EndsWith("/")) P_Host += "/";
             if (P_Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) P_Host = P_Host.Insert(0, "http://");
@@ -454,6 +459,7 @@ namespace Client
             Reader.Write("Streaming", "ConcurrentDownloads", AssetDownloadConcurrency);
             Reader.Write("Streaming", "RequestTimeoutSeconds", AssetRequestTimeoutSeconds);
             Reader.Write("Streaming", "CachePath", AssetCachePath);
+            Reader.Write("Streaming", "CacheMaxMB", AssetCacheMaxMB);
         }
 
         public static void LoadTrackedQuests(string charName)

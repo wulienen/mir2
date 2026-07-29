@@ -502,10 +502,7 @@ namespace Client.MirGraphics
         private bool _streaming;
         private string _streamingId;
         private LibraryManifest _streamingManifest;
-        // 非分页：全量记录字典；分页：随页面加载逐步填充
         private Dictionary<int, LibraryImageRecord> _streamingImages;
-        // 分页模式下记录已入队但尚未完成下载的页码，避免重复入队
-        private HashSet<int> _pendingPages;
 
         private BinaryReader _reader;
         private FileStream _fStream;
@@ -678,15 +675,21 @@ namespace Client.MirGraphics
             _count = _streamingManifest.ImageCount;
             _images = new MImage[_count];
 
-            if (_streamingManifest.IsPaged)
+            _streamingImages = new Dictionary<int, LibraryImageRecord>();
+            if (blocking)
             {
-                // 分页模式：字典为空，由 CheckStreamingImage 在使用时按需填充
-                _streamingImages = new Dictionary<int, LibraryImageRecord>();
-                _pendingPages = new HashSet<int>();
-            }
-            else
-            {
-                _streamingImages = _streamingManifest.Images.ToDictionary(x => x.Index, x => x);
+                List<LibraryImageRecord> images = AssetManager.GetAllLibraryImages(_streamingManifest);
+                if (images == null)
+                {
+                    _streaming = false;
+                    _streamingManifest = null;
+                    _streamingImages = null;
+                    _images = null;
+                    return false;
+                }
+
+                foreach (LibraryImageRecord image in images)
+                    _streamingImages[image.Index] = image;
             }
 
             if (_streamingManifest.Frames.Count > 0)
@@ -746,28 +749,7 @@ namespace Client.MirGraphics
         {
             if (_images[index] == null)
             {
-                // 分页模式：若当前索引所在的页面尚未加载到字典，先处理页面
-                if (_streamingManifest.IsPaged && !_streamingImages.ContainsKey(index))
-                {
-                    int pageIndex = index / _streamingManifest.PageSize!.Value;
-
-                    if (AssetManager.TryGetCachedLibraryPage(_streamingId, _streamingManifest, index, out LibraryManifestPage page))
-                    {
-                        // 页面已在本地缓存，合并所有记录到字典
-                        foreach (LibraryImageRecord r in page.Images)
-                            _streamingImages[r.Index] = r;
-                        _pendingPages!.Remove(pageIndex);
-                    }
-                    else
-                    {
-                        // 页面尚未下载；首次发现时入队，之后等待完成
-                        if (_pendingPages!.Add(pageIndex))
-                            AssetManager.QueueLibraryPage(_streamingId, _streamingManifest, index);
-                        return false;
-                    }
-                }
-
-                if (!_streamingImages.TryGetValue(index, out LibraryImageRecord record) || string.IsNullOrEmpty(record.Path))
+                if (!EnsureStreamingRecord(index, out LibraryImageRecord record) || !record.Exists)
                     return false;
 
                 if (!AssetManager.TryReadCachedLibraryImage(_streamingId, record, out StreamingLibraryImageChunk chunk))
@@ -791,6 +773,22 @@ namespace Client.MirGraphics
             return true;
         }
 
+        private bool EnsureStreamingRecord(int index, out LibraryImageRecord record)
+        {
+            if (_streamingImages.TryGetValue(index, out record)) return true;
+
+            if (AssetManager.TryGetCachedLibraryPage(_streamingId, _streamingManifest, index, out LibraryManifestPage page))
+            {
+                foreach (LibraryImageRecord image in page.Images) _streamingImages[image.Index] = image;
+            }
+            else
+            {
+                AssetManager.QueueLibraryPage(_streamingId, _streamingManifest, index);
+            }
+
+            return _streamingImages.TryGetValue(index, out record);
+        }
+
         public Point GetOffSet(int index)
         {
             if (!_initialized) Initialize();
@@ -803,7 +801,7 @@ namespace Client.MirGraphics
                 if (_images[index] != null)
                     return new Point(_images[index].X, _images[index].Y);
 
-                if (_streamingImages.TryGetValue(index, out LibraryImageRecord record))
+                if (EnsureStreamingRecord(index, out LibraryImageRecord record))
                     return new Point(record.X, record.Y);
 
                 return Point.Empty;
@@ -828,7 +826,7 @@ namespace Client.MirGraphics
                 if (_images[index] != null)
                     return new Size(_images[index].Width, _images[index].Height);
 
-                if (_streamingImages.TryGetValue(index, out LibraryImageRecord record))
+                if (EnsureStreamingRecord(index, out LibraryImageRecord record))
                     return new Size(record.Width, record.Height);
 
                 return Size.Empty;
@@ -852,6 +850,7 @@ namespace Client.MirGraphics
 
             if (_streaming)
             {
+                EnsureStreamingRecord(index, out _);
                 if (!CheckImage(index))
                 {
                     // Layout is calculated while controls are constructed. On a cold
