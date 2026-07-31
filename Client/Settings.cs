@@ -209,10 +209,17 @@ namespace Client
         public static bool StreamingEnabled = true;
         public static string AssetBaseUrl = @"http://127.0.0.1:8088/assets/v3/";
         public static bool PreferLocalAssets = true;
-        public static int AssetDownloadConcurrency = 4;
+        public static int AssetDownloadConcurrency = 16;
         public static int AssetRequestTimeoutSeconds = 30;
-        public static string AssetCachePath = @".\Cache\AssetsV3.db";
+        public static string AssetCachePath = @".\Cache\AssetsV3";
         public static int AssetCacheMaxMB = 4096;
+
+        /// <summary>
+        /// Records every streaming image the client touches into <c>Cache/AssetsV3/workset-usage.txt</c>, which
+        /// AssetBuilder turns into the first-run working set pack. Off in a shipped client: it is a tool for
+        /// producing the recording, not something a player benefits from.
+        /// </summary>
+        public static bool RecordWorkingSet = false;
 
         public static void Load()
         {
@@ -322,10 +329,12 @@ namespace Client
             AssetRequestTimeoutSeconds = Reader.ReadInt32("Streaming", "RequestTimeoutSeconds", AssetRequestTimeoutSeconds);
             AssetCachePath = Reader.ReadString("Streaming", "CachePath", AssetCachePath);
             AssetCacheMaxMB = Reader.ReadInt32("Streaming", "CacheMaxMB", AssetCacheMaxMB);
+            RecordWorkingSet = Reader.ReadBoolean("Streaming", "RecordWorkingSet", RecordWorkingSet);
             if (AssetCacheMaxMB < 256) AssetCacheMaxMB = 256;
-            if (Directory.Exists(AssetCachePath) || AssetCachePath.EndsWith(Path.DirectorySeparatorChar) ||
-                AssetCachePath.EndsWith(Path.AltDirectorySeparatorChar))
-                AssetCachePath = @".\Cache\AssetsV3.db";
+            // The V3 cache is a directory (sparse library containers plus a blob folder), not a database file.
+            if (string.IsNullOrWhiteSpace(AssetCachePath) || File.Exists(AssetCachePath) ||
+                AssetCachePath.EndsWith(".db", StringComparison.OrdinalIgnoreCase))
+                AssetCachePath = @".\Cache\AssetsV3";
 
             if (!P_Host.EndsWith("/")) P_Host += "/";
             if (P_Host.StartsWith("www.", StringComparison.OrdinalIgnoreCase)) P_Host = P_Host.Insert(0, "http://");
@@ -461,6 +470,7 @@ namespace Client
             Reader.Write("Streaming", "RequestTimeoutSeconds", AssetRequestTimeoutSeconds);
             Reader.Write("Streaming", "CachePath", AssetCachePath);
             Reader.Write("Streaming", "CacheMaxMB", AssetCacheMaxMB);
+            Reader.Write("Streaming", "RecordWorkingSet", RecordWorkingSet);
         }
 
         public static void LoadTrackedQuests(string charName)

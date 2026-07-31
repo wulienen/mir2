@@ -183,6 +183,9 @@ namespace Client.MirSounds
 
         private static void OnAssetsUpdated()
         {
+            // The sound list is fetched by the streaming startup phase, which normally finishes after this
+            // class' static constructor has already run, so the first attempt found nothing to read.
+            if (SoundList.Indexes.Count == 0) SoundList.LoadSoundList();
             _retryMusic = true;
             _clearEmptySoundCache = true;
         }

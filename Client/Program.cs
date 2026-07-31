@@ -22,7 +22,7 @@ namespace Client
             {
                 try
                 {
-                    AssetCacheDatabase.SelfTest();
+                    AssetCacheSelfTest.Run();
                     Console.WriteLine("Asset cache self-test passed.");
                 }
                 catch (Exception ex)
@@ -54,9 +54,15 @@ namespace Client
                 Packet.IsServer = false;
                 Settings.Load();
 
-                if (AssetManager.Enabled && !AssetManager.StartupMetadataReady)
+                // The single bounded wait on streaming metadata. Settings.Load starts the phase through
+                // AssetManager.Initialize; here the main thread waits once instead of blocking inside
+                // property getters and static constructors while the UI is being laid out.
+                if (AssetManager.Enabled &&
+                    !StartupAssetBootstrapper.Wait(
+                        TimeSpan.FromSeconds(Math.Max(10, Settings.AssetRequestTimeoutSeconds * 2))))
                 {
-                    CMain.SaveError("启动界面资源索引暂时不可用，客户端继续使用透明占位并在后台重试。");
+                    CMain.SaveError($"启动界面资源索引暂时不可用（{StartupAssetBootstrapper.Status}），" +
+                        "客户端继续使用透明占位并在后台重试。");
                 }
 
                 Application.EnableVisualStyles();
@@ -74,6 +80,8 @@ namespace Client
                     Application.Run(Form = new CMain());
 
                 Settings.Save();
+                // Marks every library container clean so the next run can trust its present bitmap.
+                AssetManager.Shutdown();
 
                 if (Restart)
                 {

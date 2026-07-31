@@ -44,6 +44,9 @@ Build\Client\Debug\Sound\SoundList.lst
 
 ## 2. 当前代码基线
 
+> 本节记录的是 V3 开工之前的 V2 基线，仅用于理解当初的问题来源。V1/V2 协议、路由和对象小
+> 文件缓存都已删除，仓库里只剩一套 V3 实现。
+
 仓库目前已有 V2 实现，关键入口如下：
 
 | 模块 | 文件 | 当前职责 |
@@ -204,12 +207,10 @@ E:\GameSourceCode\CrystalMirFullAssets\Data_Full
 - 完整客户端的 `Data/**/*.Lib` 存在且有效时，客户端直接本地读取，不需要为这些图片写
   流式 Cache。
 - 轻量客户端没有完整 Lib 时，从 AssetServer 对 Lib 发起 Range 请求，并把取得的单张图片
-  记录写入 `Cache/AssetsV3.db`（或少量 cache pack），否则每次启动都会重复下载。
-- V3 本次不实现“在 `Data/*.Lib` 内按 Range 填充半个 Lib”。当前
-  `MLibrary.HasUsableLocalFile()` 只按存在和最小长度判断，确实可以加强判断；但要安全使用
-  部分 Lib，还需要稀疏文件、已下载区间位图、缺块读取拦截、崩溃恢复以及版本变化后的
-  区间作废。这不是单独增加一个 `IsComplete` 判断就能完成。为控制改动，流式数据仍进入
-  专用 Cache，只有完整且验证通过的文件才能使用 `.Lib` 后缀放入 Data。
+  记录写入 `Cache/AssetsV3/libs` 下的稀疏容器（见 6.4），否则每次启动都会重复下载。
+- 稀疏回填只发生在 `Cache` 里的 `.libpart`，不会在 `Data/*.Lib` 内原地填充半个 Lib：只有
+  完整且验证通过的文件才能使用 `.Lib` 后缀放进 `Data`。`MLibrary.HasUsableLocalFile()`
+  必须按结构校验，不能只看存在和最小长度。
 - Data 是用户预装的完整资源；Cache 是微端自动管理、可删除并可重新下载的按需数据。
 
 每个图片索引记录至少包含：
@@ -235,23 +236,31 @@ Range 请求即可取得完整图片。图片数据在 Lib 内已经按层 GZip 
 `MaskLength`，不能误用主图 `Length`。V3 远程解析器和本地解析器应共享同一个经过边界检查
 的图片记录解析函数，避免两套格式逻辑漂移。
 
-### 4.2 地图使用每张地图一个 Map Pack
+### 4.2 地图使用每张地图一个 Map Pack，整包一次拉取
 
-原始 `.map` 中一个 `32x32` 矩形通常不是一个连续字节区间，不适合客户端直接做单次
-Range。AssetBuilder 对发生变化的 map 解析一次，生成一个不可变文件：
+原始 `.map` 中一个 `32x32` 矩形不是一个连续字节区间，不适合客户端直接做单次 Range。
+AssetBuilder 对发生变化的 map 解析一次，生成一个不可变文件：
 
 ```text
 maps/{mapContentHash}.mappack
 ```
 
-Map Pack 内是该地图所有 `32x32` 压缩区块的连续数据。地图二进制索引记录每块的：
+Map Pack 是自描述的 `YMP3` 结构，客户端不需要任何外部索引即可解析：
 
 ```text
-X/Y, Width/Height, PackOffset, CompressedLength, UncompressedLength, SHA-256
+[magic "YMP3"][formatVersion=3][width][height][chunkSize][chunkCount]   // 24 字节头
+[chunkCount × (compressedLength int32, uncompressedLength int32)]        // 区块目录
+[各区块压缩载荷，按目录顺序紧邻排列]
 ```
 
-客户端只 Range 下载视野覆盖块，优先按角色距离排序，全部可见块到达后再预取外圈一块。
-Pack 文件本身不能整体 ZIP/GZip；每个区块可以独立压缩。
+区块顺序为列优先：第 `i` 块覆盖 `X = i / rows * chunkSize`、`Y = i % rows * chunkSize`。
+每个载荷是单独 GZip 的「20 字节区块头 + 每格 32 字节」数据；Pack 整体不再压缩，因此仍可
+被 Range 读取，只是客户端默认不需要。
+
+**整包一次拉取**：实测 468 张地图共 348 个唯一 Pack、24.2 MB，最大一张 953,943 字节
+（`n0`：700×700，484 块，未压缩 15.7 MB，压缩比 17.1×）。一张地图一次 GET 的成本低于
+按块多次 Range 的往返与调度开销，所以客户端进入地图时一次拉整包，落进 blob 缓存，
+再按视野解压区块。因此 Catalog 中不再存在地图索引块（原来这部分占 1,631,456 字节）。
 
 一张 map 更新只重建这一张 map 的 Pack，不重建其他地图。
 
@@ -274,6 +283,8 @@ StreamingAssetsV3/
   sounds/
     {soundHash}.wav
     {soundHash}.mp3
+  worksets/
+    {worksetHash}.wsp
 ```
 
 这是几千个中大文件，不再是几十万小文件。发布文件以内容哈希命名并保持不可变；根清单
@@ -289,17 +300,89 @@ AssetServer 在文件长度或修改时间与已发布清单不符时返回 `412
 根 `manifest.json` 只保存资源 ID、版本、文件位置、长度、哈希，以及资源在二进制 Catalog
 中的 offset/length。不要把数百万图片记录放进 JSON。
 
-`catalogs/{catalogHash}.bin` 可包含独立的图库索引块和地图索引块。根清单记录每个块的
-`CatalogOffset`、`CatalogLength` 和块 SHA-256，客户端只 Range 读取正在使用的索引块。
+`catalogs/{catalogHash}.bin` 只包含图库索引块（地图 Pack 自描述，不再有地图索引块）。根
+清单记录每个块的 `CatalogOffset`、`CatalogLength`，以及块头长度 `CatalogHeaderLength` 和
+块头 SHA-256 `CatalogHeaderHash`，客户端只 Range 读取正在使用的索引块。
+
+索引块本身分段（magic `YLI4`）：未压缩的块头 + 若干 Brotli 压缩的分段载荷。
+
+```text
+块头：magic, formatVersion, id, imageCount, segmentSize(4096), segmentCount, frameCount,
+      segmentCount × (compressedLength int32, uncompressedLength int32, SHA-256 32 字节),
+      frameCount × 35 字节帧记录
+载荷：segmentCount 个 Brotli 段，每段 segmentSize 条 25 字节图片记录
+```
+
+单条图片记录固定 25 字节，不再逐图存 SHA-256：
+
+```text
+[uint32 Offset][uint32 Length][int16 Width][int16 Height][int16 X][int16 Y]
+[int16 ShadowX][int16 ShadowY][byte Shadow][int16 TrueWidth][int16 TrueHeight]
+```
+
+`Index` 由段内位置隐含，`Offset=0 && Length=0` 表示该图不存在（解码为 `Offset=-1`）。
+去掉的逐图哈希由结构校验替代：`StreamingAssetV3IO.IsLibraryImageRecordValid` 要求下载
+回来的字节恰好解析成一条 Lib 图片记录，且 Width/Height/X/Y/ShadowX/ShadowY/Shadow 与
+索引元数据完全一致。每个块头和每个分段都有独立 SHA-256，因此任何一次独立取回的片段
+都可校验、都可进 blob 缓存。
+
+分段的收益是客户端只需拉正在用的那一段：92% 的图库只有一段，最大的
+`map/wemademir2/tiles`（155,305 张图）有 38 段。实测 Catalog 从 141,551,988 B 降到
+16,464,917 B；七个启动图库合计只需拉约 45 KB。
 
 所有二进制结构必须有：
 
-- 4 字节 magic，例如 `YAC3`、`YLI3`、`YMI3`。
+- 4 字节 magic，例如 `YAC3`、`YLI4`、`YMP3`。
 - 明确的 `formatVersion=3`。
 - 数量和长度上限检查。
 - little-endian 定义。
 - 解析结束位置检查，拒绝截断和尾随垃圾。
 - 对应的 round-trip、自损坏和越界单元测试。
+
+### 4.6 首启工作集包（已完成）
+
+冷启动最贵的不是单张图片，而是「登录界面 → 选角 → 第一张地图」这段时间里成百次零散的
+Range 往返。整库预取已被实测排除：七个启动图库的像素合计 88.96 MB。工作集包只发布这段
+时间**真实触达过**的图片记录，一次整文件 GET 取回。
+
+录制在客户端完成（`Client/Streaming/WorkingSetRecorder.cs`）：`[Streaming]
+RecordWorkingSet=True` 时，绘制路径上每次访问都记下 `(libraryId, imageIndex)`，命中和未命中
+都记，因此可以对着热缓存录制。录制到 48 MB 记录后自行停止，退出时（`AssetManager.Shutdown`）
+把结果合并写入 `<CachePath>/workset-usage.txt`：
+
+```text
+# 一行一个 "libraryId<TAB>imageIndex"，# 注释和空行忽略
+chrsel	0
+map/wemademir2/tiles	1837
+```
+
+合并而不是覆盖，因此登录、创角、进入第二张地图可以分几次录制累加。把这个文件交给
+AssetBuilder（`--usage <file>`，或直接放在发布目录下由构建自动发现）即可发布工作集包：
+
+```text
+包头：magic `YWS3`, formatVersion, libraryCount
+每库：id, fileHash, entryCount, entryCount × (int32 index, int64 offset, int32 length)
+载荷：int64 payloadLength + 依次拼接的原始 Lib 图片记录
+```
+
+要点：
+
+- 载荷字节取自**已发布**的 `libraries/{fileHash}.lib`，偏移取自本次构建的 Catalog 块，因此
+  复用未变化的 Lib 也能生成工作集。
+- 每库嵌入 `fileHash`：客户端发现该库已重新发布就整库跳过这些条目，绝不会把新 Lib 的字节
+  按旧偏移写回。
+- 真实性由根清单里工作集整文件的 SHA-256 保证，逐条只做结构校验。
+- **单图上限 `--workset-max-image-kb`（默认 256 KB）**：兆字节级的大图自身传输远大于它能省下
+  的一次往返，打包进去只会强迫每个冷客户端把可能根本不显示的立绘一起下载。首次真实录制
+  1112 张里，仅 `chrsel` 的 20 张登录/选角大图就占 40.8 MB；设上限后包体 3.6 MB / 1092 张，
+  被排除的 20 张仍走正常 Range。
+- 总上限 `--workset-max-mb`（默认 64 MB），超出即截断并打印提示；录制中已不存在的库/图片会
+  被跳过并计数。
+- 客户端只读一次，**不进 blob 缓存**；`blobs` 元数据里的 `workset.applied` 记录已应用过的
+  工作集哈希，热客户端不会重复下载。即使一条都没写入也会写标记，重复下载比少量 Range 更贵。
+
+实测（本机一次真实冷启动录制：登录 → 选角 → 出生地图走动几步）：29 个图库 1112 张图，
+包体 3.6 MB，覆盖 1092 张；发布后一次 GET 取代原来这段时间上千次零散 Range。
 
 ## 5. V3 HTTP 接口
 
@@ -315,24 +398,48 @@ AssetServer 在文件长度或修改时间与已发布清单不符时返回 `412
 GET /assets/v3/manifest.json
 GET /assets/v3/catalogs/{hash}.bin
 GET /assets/v3/libraries/{hash}.lib
+GET /assets/v3/libraries/{hash}.lib?segments=offset-length,offset-length,…
 GET /assets/v3/maps/{hash}.mappack
 GET /assets/v3/sounds/{hash}.{ext}
+GET /assets/v3/worksets/{hash}.wsp
 GET /health
 ```
 
 要求：
 
-1. Catalog、Lib、Map Pack 必须支持标准 HTTP Range，正确返回 `206`、`Content-Range`、
-   `Accept-Ranges: bytes`。
-2. 哈希资源响应：`Cache-Control: public,max-age=31536000,immutable`，`ETag` 为内容哈希。
-3. 根清单：`Cache-Control: no-cache`，支持 `If-None-Match` 和 `304`。
-4. Range 越界返回 `416`。
-5. 只接受严格的十六进制 SHA-256 文件名和允许的扩展名，禁止 `..`、绝对路径、编码后的
+1. Catalog、Lib 必须支持标准 HTTP Range，正确返回 `206`、`Content-Range`、
+   `Accept-Ranges: bytes`；这两类资源缺少 `Range` 头时返回 `416`。Map Pack、声音和工作集包
+   是整体获取的对象，普通 GET 必须正常返回 `200`，不能因为没有 `Range` 就返回 `416`。
+2. `?segments=` 是一次取多条分散图片记录的批量读：至多 64 段、载荷至多 4 MB，响应体是
+   请求顺序的 `[int64 offset][int32 length][bytes]` 序列，一次往返代替 N 次 Range。越界、
+   超段数、超载荷或格式错误一律 `400`。
+3. 哈希资源响应：`Cache-Control: public,max-age=31536000,immutable`，`ETag` 为内容哈希。
+4. 根清单：`Cache-Control: no-cache`，支持 `If-None-Match` 和 `304`。
+5. Range 越界返回 `416`。
+6. 只接受严格的十六进制 SHA-256 文件名和允许的扩展名，禁止 `..`、绝对路径、编码后的
    路径穿越和任意文件读取。
-6. 使用 Kestrel `Results.File(..., enableRangeProcessing: true)` 或等价的流式发送，禁止
+7. 使用 Kestrel `Results.File(..., enableRangeProcessing: true)` 或等价的流式发送，禁止
    `File.ReadAllBytes` 读取大型 Lib/Pack。
-7. AssetServer 仍是独立项目，默认 `http://0.0.0.0:8088`。不要把接口加进
+8. AssetServer 仍是独立项目，默认 `http://0.0.0.0:8088`。不要把接口加进
    `Server/Utils/HttpServer.cs`，不要占用游戏服 TCP 7000 或原 HTTP 5679。
+
+### 5.1 服务端实现（已完成）
+
+首次进入游戏是一串针对少数几个大 Lib 的密集小 Range 请求，请求本身的固定开销比读盘更贵，
+因此服务端按以下三点实现，不要退回到"每个请求打开文件、读进数组再返回"的写法：
+
+1. `AssetServer/ManifestCache.cs`：根清单常驻内存，只在文件的写入时间或长度变化时重读并
+   重算 ETag。此前每个请求都要读 930 KB JSON 再算一次 SHA-256。
+2. `AssetServer/PublishedFiles.cs`：已发布文件按内容哈希命名、永不变更，因此句柄可以池化
+   （上限 256，LRU 淘汰）。句柄用 `FileShare.Read | FileShare.Delete` 打开，`--prune` 和
+   重新发布仍可以在服务运行时删除旧文件（已实测：句柄在池中时删除成功）。
+3. `AssetServer/RangeResponses.cs`：Range 与 `?segments=` 都从池化句柄经 64 KB
+   `ArrayPool` 缓冲直接写响应体，不再为一次 4 MB 的批量读分配大对象堆数组。`?segments=`
+   会先写出 `Content-Length`（`12 × 段数 + Σ长度`）。多段 Range（`bytes=a-b,c-d`）一律
+   返回 `416`，不实现 multipart 响应。
+
+实测（本机，8 并发 × 150 次随机 Range，覆盖 1440 个 Lib，池上限被反复触发）：
+1956 req/s，p50 3.9 ms、p99 5.8 ms、0 失败。
 
 ## 6. 客户端实现要求
 
@@ -368,9 +475,22 @@ AssetManager.Initialize
 异步加载实际图片像素并逐帧刷新
 ```
 
-不要在图库静态构造函数内部发起一串不可控的同步 HTTP 请求。建议新增显式
-`StartupAssetBootstrapper`，在 Scene 创建前以一个异步阶段并发加载七个启动图库索引。
-UI 线程只等待一个有超时且可展示状态的启动任务。
+不要在图库静态构造函数内部发起一串不可控的同步 HTTP 请求。已实现显式
+`Client/Streaming/StartupAssetBootstrapper.cs`：`AssetManager.Initialize` 末尾调用
+`Begin()` 启动一个异步阶段，并发取回根 manifest、七个启动图库的全部索引分段，以及
+（尽力而为的）`soundlist.lst`；`Program.Main` 在 `Settings.Load` 之后只做一次有超时的
+`Wait(...)`，失败时把 `Status` 写进日志并继续启动，由后台重试补齐。
+
+同一阶段里还会**并发**发起一次首启工作集应用（`AssetManager.ApplyWorkingSetAsync`）。它是
+像素而不是布局元数据，所以绝不参与 `StartupMetadataReady`：清单里没有工作集、下载失败或
+只应用了一部分都不影响登录界面，只是多几次后续 Range。放在索引取回之前发起，是为了让这
+一次整文件 GET 与索引请求重叠而不是排在它们后面。
+
+因此 `AssetManager` 里不再有任何 UI 线程上的同步等待：`Manifest` getter 在未就绪时只发起
+后台请求并返回 `null`；`GetSoundBytes` 只读缓存，未命中时排队下载；只有
+`WaitForLibraryIndex(id, timeout)` 会等待，且只由启动图库的阻塞初始化调用，此时
+bootstrapper 通常已经预取完毕，等待立即返回。`SoundManager` 的静态构造函数早于预取完成，
+所以 `OnAssetsUpdated` 会在 `SoundList.Indexes` 仍为空时重新加载一次声音列表。
 
 ### 6.3 Range 下载
 
@@ -378,12 +498,17 @@ UI 线程只等待一个有超时且可展示状态的启动任务。
 
 - HTTP 状态必须为 `206`。
 - `Content-Range` 起止与请求一致。
-- 返回长度等于索引 `RecordLength`。
+- 返回长度等于索引 `Length`。
 - 图片记录解析不越界。
-- SHA-256 等于图片索引记录。
+- 结构校验通过：`IsLibraryImageRecordValid`（记录整体长度、单条记录解析、以及与索引元数据
+  的尺寸/偏移一致性）。索引里已不存在逐图 SHA-256。
 
-同一资源并发请求需要 single-flight 去重。相邻区间可在下载调度器中合并，但第一版优先
-保证正确；不得为了合并而下载整个大 Lib。
+同一资源并发请求需要 single-flight 去重。相邻区间应在下载调度器中合并：间隔 ≤16 KB 的
+记录合并成一次 Range，单次合并上限 4 MB；分散记录用 `?segments=` 一次取回，上限 64 段
+/4 MB。合并的目的是减少往返，不是下载整个大 Lib——超出上限就拆成多批。
+
+地图 Pack 与声音是整体对象，用普通 GET 一次取回并写入 blob 缓存，不做分块 Range。首启
+工作集包同样是整体 GET，但只读一次、不进 blob 缓存（见 4.6）。
 
 ### 6.4 客户端缓存
 
@@ -393,29 +518,51 @@ UI 线程只等待一个有超时且可展示状态的启动任务。
 Cache/Assets/objects/ab/abcdef....bin
 ```
 
-推荐使用 `Microsoft.Data.Sqlite` 保存一个缓存数据库，或实现有索引的少量 append-only
-cache pack。若使用 SQLite：
+也不要使用单一 SQLite 数据库（`Cache/AssetsV3.db`）。渲染线程每帧都要判断「这张图在本地
+吗」，SQLite 的全局锁会与下载线程的写入争用，这正是首次进入游戏卡顿的主因。V3 采用两层
+本地布局：
 
-```sql
-CREATE TABLE asset_cache (
-    hash        BLOB PRIMARY KEY,
-    kind        INTEGER NOT NULL,
-    length      INTEGER NOT NULL,
-    last_access INTEGER NOT NULL,
-    payload     BLOB NOT NULL
-) WITHOUT ROWID;
+```text
+Cache/AssetsV3/
+  libs/{libraryId}.libpart      # 稀疏文件，长度等于已发布 Lib
+  libs/{libraryId}.bits         # 位图边车：每张图 1 bit + 72 字节头
+  blobs/ab/abcdef….bin          # Catalog 块、Map Pack、声音
 ```
+
+图片：`.libpart` 是与已发布 `.Lib` 等长的 NTFS 稀疏文件（`FSCTL_SET_SPARSE` +
+`SetLength`），下载到的图片记录按其**原始 Lib 偏移**写回原位。因此：
+
+- 「是否已缓存」是内存位图的一次 bit 读取，渲染线程不加锁、不查库、不算哈希。
+- 命中就是一次 `RandomAccess.Read`，读出的字节即原始 Lib 记录，可直接解析建纹理。
+- 写入顺序是「写载荷 → `FlushToDisk` → 置位」，崩溃不可能暴露半条记录。
+- `.bits` 头（72 字节，magic `YLB4`）依次是 magic、FormatVersion、ImageCount、FileLength、
+  32 字节 Lib `FileHash`（偏移 20）、已存字节数（偏移 52）、干净关闭标志（偏移 60）、
+  最后使用时间 UTC ticks（偏移 64）。发布的 Lib 一变，容器整体重置；上次非正常退出则每条
+  记录首次读取时按结构校验一次再信任。
+- 退出时必须走 `AssetManager.Shutdown()`，否则下次启动全部记录都要重新校验。
+
+整体对象（Catalog 块、Map Pack、声音）：一个不可变内容寻址文件一个 blob，读取时校验长度
+和 SHA-256，命中后由调用方常驻内存。
 
 要求：
 
-- 单写入队列，读取可并发。
-- 写入事务化，崩溃后不会出现“索引存在但数据不完整”。
-- 读取时至少校验长度；首次读取或数据库恢复后校验 SHA-256。
-- `CacheMaxMB` 超限后按 `last_access` 批量 LRU 删除。
+- 位图和 blob 写入都在后台线程，渲染线程只做内存位图判断和一次定位读。
+- 单库容器的粒度决定淘汰粒度：超过 `CacheMaxMB` 时按「blob 预算 = max(64 MB, 1/8 上限)」
+  先 LRU 清 blob，剩余预算不足再整库淘汰，启动图库（UI/选角等）永不淘汰。
+- 容量统计必须包含**本次运行没有打开**的容器：`AssetCacheStore.CollectEntries` 会扫描
+  `libs/**/*.bits` 并读取头部的已存字节数，否则刚启动时预算等于形同虚设（此前只统计了
+  内存里已打开的容器）。无法解析的边车、缺少 `.libpart` 的边车在扫描时直接删除。
+- 淘汰顺序必须是**最久未使用优先**，不能按容器大小从大到小：最大的容器往往正是玩家当前
+  所在地图的 tiles 库，删掉立刻要重下。最后使用时间由 `LibraryCacheContainer.Touch()`
+  维护，最多每 5 分钟落盘一次。
+- 淘汰不能只在应用清单时触发，否则一次长时间游戏永远不会清理。写入累计超过 256 MB 时由
+  `AssetCacheStore.NoteGrowth` 在后台触发一次 `Trim()`。
+- 容器或位图损坏、长度不符时直接重置该库，不影响本地完整客户端启动。
+- 已下线的图库容器由 `RemoveOrphans` 清理，不依赖用户手工删目录。
 - 清理在后台执行，不能阻塞渲染线程。
-- 开启合理的 WAL/`synchronous=NORMAL`，处理数据库被占用和损坏后的重建。
-- 根清单和 Catalog 块也按哈希缓存，不按版本复制目录。
-- 缓存数据库损坏时删除/重建缓存，不影响本地完整客户端启动。
+- `Client.exe --asset-cache-self-test` 覆盖上述行为：稀疏读写、位图跨重启、发布版本变更
+  重置、磁盘上未打开容器计入预算、LRU 淘汰顺序、启动图库不被淘汰，以及首启工作集包的解包
+  （合法记录落位、畸形记录被拒、已存在的记录不重写）。
 
 流式缓存不得写入 `Data`、`Map`、`Sound`。
 
@@ -480,7 +627,11 @@ Rebuilt: 2, Reused: 3514, Failed: 0
 build-v3              默认增量构建
 build-v3 --verify     全量读取源内容并核对哈希，不重建未变化资源
 build-v3 --full       明确的全量重建
-self-test-v3          使用小型夹具完成协议、Lib、map、发布原子性测试
+build-v3 --prune      删除当前清单不再引用的已发布文件
+build-v3 --usage <f>  按录制文件发布首启工作集包（省略时自动发现 <output>\workset-usage.txt）
+build-v3 --workset-max-mb <n>  工作集包上限，默认 64，允许 1~4096
+build-v3 --workset-max-image-kb <n>  单图上限，默认 256，超过的图不进包、仍走 Range
+self-test-v3          使用小型夹具完成协议、Lib、map、工作集、发布原子性测试
 gc-v3 --dry-run       列出不再被当前/保留版本引用的哈希文件
 gc-v3                 显式清理旧文件，不能在正常 build 中冒险删除
 ```
@@ -523,20 +674,24 @@ gc-v3                 显式清理旧文件，不能在正常 build 中冒险删
 - 第一次进入游戏主界面即正确，不需要重启。
 - 在限速和 200 ms 网络延迟下重复以上测试，布局仍稳定，只允许图片像素逐步出现。
 - 对启动图库执行本地/V3 的 Width、Height、X、Y、TrueWidth、TrueHeight 全量对照。
+- 发布过工作集包之后重复一次冷启动：日志出现 `Streaming working set applied: N image(s).`，
+  这段时间的 Range 请求数明显下降；删除 `workset.applied` 之外的缓存后仍可重现。
+- 清单里没有工作集、工作集哈希损坏或服务端 404 时，冷启动行为与未发布工作集时完全一致。
 
 ### 9.3 地图和进入游戏
 
-- 点击 Start 后下载出生点所需地图块并进入游戏，不永久 Loading。
-- 只下载当前视野及一圈预取块，不下载整张地图。
+- 点击 Start 后拉取出生地图的整个 Pack 并进入游戏，不永久 Loading。
+- 拉取期间空块占位，可见区块解压后立即出现；Pack 已在 blob 缓存时不再请求网络。
 - 移动跨块后新块自动出现，旧 CellObjects 不因替换 CellInfo 丢失。
 - AssetServer 中途关闭：客户端保持连接、空块占位；恢复后自动继续。
 
 ### 9.4 更新和缓存
 
 - 更新 `Title.Lib`/`Prguse.Lib` 并发布后，不删除客户端任何目录也能自动显示新素材。
-- 未变化的图片哈希命中缓存，不重复下载。
-- Cache 只增长统一数据库/少量 Pack，不写 Data。
-- 超过 `CacheMaxMB` 后 LRU 生效，数据库损坏可自动重建。
+- 未变化的图片命中容器位图，不重复下载；发布的 Lib 变化后该库容器重置。
+- Cache 只增长 `AssetsV3/libs` 稀疏容器和少量 blob，不写 Data。
+- 超过 `CacheMaxMB` 后 blob LRU 与整库淘汰生效，容器损坏可自动重置。
+- 正常退出后重启不触发全量 SHA-256 复检；强杀进程后仅首次读取各记录时校验一次。
 - 日志能看出资源来自 local、streaming-network 或 streaming-cache。
 
 ### 9.5 完整客户端和故障隔离
@@ -548,7 +703,9 @@ gc-v3                 显式清理旧文件，不能在正常 build 中冒险删
 ### 9.6 安全和 HTTP
 
 - Range 正常返回精确字节和 `206`。
-- 无 Range 的大型文件请求按策略拒绝或受限，避免误下载整个 Lib。
+- Catalog/Lib 无 `Range` 时返回 `416`；Map Pack、声音和工作集包的普通 GET 返回 `200`，
+  `ETag` 等于内容哈希，`If-None-Match` 命中返回 `304`。
+- `?segments=` 越界、超 64 段、超 4 MB 载荷或格式错误返回 `400`。
 - `../`、URL 编码穿越、错误哈希、错误扩展名、超大 Range 均被拒绝。
 - 客户端拒绝长度、Content-Range 或 SHA-256 不匹配的数据。
 
@@ -571,11 +728,19 @@ AssetServer：
 Enabled=True
 AssetBaseUrl=http://127.0.0.1:8088/assets/v3/
 PreferLocalAssets=True
-ConcurrentDownloads=4
+ConcurrentDownloads=16
 RequestTimeoutSeconds=30
-CachePath=.\Cache\AssetsV3.db
+CachePath=.\Cache\AssetsV3
 CacheMaxMB=4096
+RecordWorkingSet=False
 ```
+
+`CachePath` 是目录（内含 `libs` 与 `blobs`），不是 `.db` 文件；配置里残留旧的
+`AssetsV3.db` 会被客户端自动纠正为默认目录。`ConcurrentDownloads` 允许 1~32。
+
+`RecordWorkingSet` 只给发布者用，默认关闭：打开后本次运行触达的图片会在退出时写入
+`<CachePath>\workset-usage.txt`，供 `build-v3 --usage` 生成首启工作集包（见 4.6）。玩家开着
+它没有任何收益。
 
 V3 不需要自动把 `/assets/v1/` 或 `/assets/v2/` 改写为 V3。配置错误应清楚记录并失败，
 避免客户端静默连接到与自身模型不匹配的协议。
@@ -583,7 +748,9 @@ V3 不需要自动把 `/assets/v1/` 或 `/assets/v2/` 改写为 V3。配置错�
 ## 11. 不要采用的实现
 
 - 不要把每张图片、每个地图块作为单独服务器文件或客户端缓存文件。
-- 不要要求客户端下载完整 Lib 或完整 Map Pack 后才能使用其中一个对象。
+- 不要要求客户端下载完整 Lib 后才能使用其中一张图片。Map Pack 是例外：单包只有几十 KB
+  到 1 MB，整包一次 GET 比按块 Range 更快，允许并且推荐整包拉取。
+- 不要在渲染线程上查数据库、加全局锁或算哈希来判断「这张图在不在本地」。
 - 不要对整个 Lib/Pack 再做 ZIP/GZip，破坏随机 Range；只压缩内部独立记录。
 - 不要在 UI 构造期间让尺寸查询依赖图片像素下载。
 - 不要用 `Width/Height` 冒充 `TrueWidth/TrueHeight`。
@@ -600,7 +767,8 @@ V3 不需要自动把 `/assets/v1/` 或 `/assets/v2/` 改写为 V3。配置错�
 
 1. V3 不再产生海量小文件，发布目录和客户端缓存可快速复制、备份和迁移。
 2. 冷缓存第一次启动的登录、选角和主界面布局与完整客户端一致。
-3. 图片按 Lib Range、地图按 chunk Range、声音按需下载。
+3. 图片按 Lib Range（或 `?segments=` 批量）下载，地图按整包下载，声音按需下载，首启阶段
+   由工作集包一次取回已录制的图片。
 4. 更新资源无需清缓存，未变化内容可复用。
 5. 无变化的日常构建快速完成，修改单项只处理单项。
 6. AssetServer 故障与游戏服隔离，完整客户端完全不受影响。

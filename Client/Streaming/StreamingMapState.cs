@@ -4,24 +4,34 @@ using Shared.StreamingAssets;
 
 namespace Client.Streaming
 {
+    /// <summary>
+    /// Applies a streamed map to a <see cref="MapControl"/>. The whole map pack arrives in one request and
+    /// stays resident in compressed form; individual 32x32 chunks are inflated on the game thread, nearest
+    /// to the player first, with a per-frame budget so entering a map never stalls a frame.
+    /// </summary>
     public sealed class StreamingMapState
     {
+        private const int MaxChunksPerCall = 96;
+
         private readonly string _mapId;
         private readonly V3MapRecord _record;
-        private V3MapIndex _index;
-        private Dictionary<string, V3MapChunkRecord> _chunks;
-        private readonly HashSet<string> _loadedChunks = new HashSet<string>();
+        private StreamingMapPack _pack;
+        private bool[] _applied;
+        private int _appliedCount;
+        private int _lastUserChunk = -1;
+        private bool _lastCallSatisfied;
 
-        private StreamingMapState(string mapId, V3MapRecord record, V3MapIndex index)
+        private StreamingMapState(string mapId, V3MapRecord record, StreamingMapPack pack)
         {
             _mapId = mapId;
             _record = record;
-            _index = index;
-            SetIndex(index);
+            SetPack(pack);
         }
 
-        public int Width => _index?.Width ?? _record.Width;
-        public int Height => _index?.Height ?? _record.Height;
+        public int Width => _pack?.Width ?? _record.Width;
+        public int Height => _pack?.Height ?? _record.Height;
+        public bool IsReady => _pack != null;
+        public bool IsComplete => _pack != null && _appliedCount >= _pack.ChunkCount;
 
         public static bool TryCreate(string localMapFile, out StreamingMapState state)
         {
@@ -30,10 +40,10 @@ namespace Client.Streaming
 
             string mapId = AssetManager.ToMapId(localMapFile);
             if (!AssetManager.TryGetLoadedMapRecord(mapId, out V3MapRecord record)) return false;
-            AssetManager.TryGetCachedMapIndex(mapId, out V3MapIndex index);
+            AssetManager.TryGetCachedMapPack(mapId, out StreamingMapPack pack);
 
-            state = new StreamingMapState(mapId, record, index);
-            if (index == null) AssetManager.QueueMapIndex(mapId);
+            state = new StreamingMapState(mapId, record, pack);
+            if (pack == null) AssetManager.QueueMapPack(mapId);
             return true;
         }
 
@@ -53,56 +63,70 @@ namespace Client.Streaming
 
         public bool IsLoaded(Point point)
         {
-            if (point.X < 0 || point.Y < 0 || point.X >= Width || point.Y >= Height)
-            {
-                return false;
-            }
-
-            if (_index == null) return false;
-            int chunkX = point.X / _index.ChunkSize * _index.ChunkSize;
-            int chunkY = point.Y / _index.ChunkSize * _index.ChunkSize;
-            return _loadedChunks.Contains($"{chunkX}_{chunkY}");
+            if (_pack == null || point.X < 0 || point.Y < 0 || point.X >= Width || point.Y >= Height) return false;
+            int index = _pack.GetChunkIndexForCell(point.X, point.Y);
+            return index >= 0 && _applied[index];
         }
 
         public void EnsureVisibleChunks(MapControl map)
         {
             if (MapControl.User == null || map.M2CellInfo == null) return;
-            if (_index == null && !TryPromoteIndex())
+            if (_pack == null && !TryPromotePack())
             {
-                AssetManager.QueueMapIndex(_mapId);
+                AssetManager.QueueMapPack(_mapId);
+                return;
+            }
+            if (IsComplete) return;
+
+            Point user = MapControl.User.Movement;
+            int chunkSize = _pack.ChunkSize;
+            int userChunk = _pack.GetChunkIndexForCell(Math.Clamp(user.X, 0, Width - 1), Math.Clamp(user.Y, 0, Height - 1));
+            if (_lastCallSatisfied && userChunk == _lastUserChunk) return;
+            _lastUserChunk = userChunk;
+
+            int startX = Math.Max(0, user.X - MapControl.ViewRangeX - chunkSize);
+            int endX = Math.Min(Width - 1, user.X + MapControl.ViewRangeX + chunkSize);
+            int startY = Math.Max(0, user.Y - MapControl.ViewRangeY - chunkSize);
+            int endY = Math.Min(Height - 1, user.Y + MapControl.ViewRangeY + 25 + chunkSize);
+
+            List<int> pending = new();
+            for (int column = startX / chunkSize; column <= endX / chunkSize; column++)
+            {
+                for (int row = startY / chunkSize; row <= endY / chunkSize; row++)
+                {
+                    int index = _pack.GetChunkIndex(column, row);
+                    if (index < 0 || _applied[index]) continue;
+                    pending.Add(index);
+                }
+            }
+            if (pending.Count == 0)
+            {
+                _lastCallSatisfied = true;
                 return;
             }
 
-            Point user = MapControl.User.Movement;
-            int startX = Math.Max(0, user.X - MapControl.ViewRangeX);
-            int endX = Math.Min(Width - 1, user.X + MapControl.ViewRangeX);
-            int startY = Math.Max(0, user.Y - MapControl.ViewRangeY);
-            int endY = Math.Min(Height - 1, user.Y + MapControl.ViewRangeY + 25);
+            pending.Sort((left, right) => DistanceSquared(left, user).CompareTo(DistanceSquared(right, user)));
 
-            bool visibleChanged = ApplyCachedChunks(map, GetChunks(startX, endX, startY, endY, user), out List<V3MapChunkRecord> missingVisible);
-            if (missingVisible.Count > 0)
+            bool changed = false;
+            int budget = Math.Min(MaxChunksPerCall, pending.Count);
+            _lastCallSatisfied = budget == pending.Count;
+            for (int i = 0; i < budget; i++)
             {
-                AssetManager.QueueMapChunks(_record, missingVisible);
-            }
-            else
-            {
-                int prefetchStartX = Math.Max(0, startX - _index.ChunkSize);
-                int prefetchEndX = Math.Min(Width - 1, endX + _index.ChunkSize);
-                int prefetchStartY = Math.Max(0, startY - _index.ChunkSize);
-                int prefetchEndY = Math.Min(Height - 1, endY + _index.ChunkSize);
-
-                List<V3MapChunkRecord> visible = GetChunks(startX, endX, startY, endY, user);
-                HashSet<string> visibleKeys = visible.Select(record => record.Key).ToHashSet();
-                List<V3MapChunkRecord> prefetch = GetChunks(prefetchStartX, prefetchEndX, prefetchStartY, prefetchEndY, user)
-                    .Where(record => !visibleKeys.Contains(record.Key))
-                    .ToList();
-
-                visibleChanged |= ApplyCachedChunks(map, prefetch, out List<V3MapChunkRecord> missingPrefetch);
-                if (missingPrefetch.Count > 0)
-                    AssetManager.QueueMapChunks(_record, missingPrefetch);
+                int index = pending[i];
+                try
+                {
+                    ApplyChunk(map, _pack.ReadChunk(index));
+                }
+                catch (Exception ex)
+                {
+                    CMain.SaveError($"Streaming map chunk {index} of '{_mapId}' failed: {ex.Message}");
+                }
+                _applied[index] = true;
+                _appliedCount++;
+                changed = true;
             }
 
-            if (visibleChanged)
+            if (changed)
             {
                 map.FloorValid = false;
                 map.LightsValid = false;
@@ -110,67 +134,36 @@ namespace Client.Streaming
             }
         }
 
-        private bool TryPromoteIndex()
+        private bool TryPromotePack()
         {
-            if (_index != null) return true;
-            if (!AssetManager.TryGetCachedMapIndex(_mapId, out V3MapIndex index)) return false;
-            SetIndex(index);
+            if (_pack != null) return true;
+            if (!AssetManager.TryGetCachedMapPack(_mapId, out StreamingMapPack pack)) return false;
+            SetPack(pack);
             return true;
         }
 
-        private void SetIndex(V3MapIndex index)
+        private void SetPack(StreamingMapPack pack)
         {
-            _index = index;
-            _chunks = index?.Chunks.ToDictionary(x => x.Key, x => x) ??
-                      new Dictionary<string, V3MapChunkRecord>();
+            _pack = pack;
+            _applied = pack == null ? Array.Empty<bool>() : new bool[pack.ChunkCount];
+            _appliedCount = 0;
+            _lastUserChunk = -1;
+            _lastCallSatisfied = false;
         }
 
-        private List<V3MapChunkRecord> GetChunks(int startX, int endX, int startY, int endY, Point user)
+        private int DistanceSquared(int chunkIndex, Point user)
         {
-            List<V3MapChunkRecord> records = new();
-            for (int chunkX = startX / _index.ChunkSize * _index.ChunkSize; chunkX <= endX; chunkX += _index.ChunkSize)
-            {
-                for (int chunkY = startY / _index.ChunkSize * _index.ChunkSize; chunkY <= endY; chunkY += _index.ChunkSize)
-                {
-                    if (_chunks.TryGetValue($"{chunkX}_{chunkY}", out V3MapChunkRecord record))
-                        records.Add(record);
-                }
-            }
-
-            return records.OrderBy(record => DistanceSquared(record, user)).ToList();
-        }
-
-        private bool ApplyCachedChunks(MapControl map, List<V3MapChunkRecord> records, out List<V3MapChunkRecord> missing)
-        {
-            bool changed = false;
-            missing = new List<V3MapChunkRecord>();
-
-            foreach (V3MapChunkRecord record in records)
-            {
-                if (_loadedChunks.Contains(record.Key)) continue;
-                if (!AssetManager.TryReadCachedMapChunk(record, out StreamingMapChunk chunk))
-                {
-                    missing.Add(record);
-                    continue;
-                }
-
-                ApplyChunk(map, chunk);
-                _loadedChunks.Add(record.Key);
-                changed = true;
-            }
-
-            return changed;
-        }
-
-        private int DistanceSquared(V3MapChunkRecord record, Point user)
-        {
-            int centerX = record.X + record.Width / 2;
-            int centerY = record.Y + record.Height / 2;
-            int dx = centerX - user.X;
-            int dy = centerY - user.Y;
+            int chunkX = chunkIndex / _pack.Rows * _pack.ChunkSize;
+            int chunkY = chunkIndex % _pack.Rows * _pack.ChunkSize;
+            int dx = chunkX + _pack.ChunkSize / 2 - user.X;
+            int dy = chunkY + _pack.ChunkSize / 2 - user.Y;
             return dx * dx + dy * dy;
         }
 
+        /// <summary>
+        /// Copies a chunk into the existing cells. <see cref="CellInfo"/> is a class, so mutating in place
+        /// both avoids an allocation per cell and keeps any <c>CellObjects</c> already standing there.
+        /// </summary>
         private static void ApplyChunk(MapControl map, StreamingMapChunk chunk)
         {
             for (int x = 0; x < chunk.Width; x++)
@@ -181,36 +174,33 @@ namespace Client.Streaming
                     int mapY = chunk.Y + y;
                     if (mapX < 0 || mapY < 0 || mapX >= map.Width || mapY >= map.Height) continue;
 
-                    List<MapObject> objects = map.M2CellInfo[mapX, mapY].CellObjects;
-                    map.M2CellInfo[mapX, mapY] = ToCellInfo(chunk.Cells[x * chunk.Height + y], objects);
+                    CellInfo cell = map.M2CellInfo[mapX, mapY];
+                    if (cell == null) map.M2CellInfo[mapX, mapY] = cell = new CellInfo();
+                    Copy(chunk.Cells[x * chunk.Height + y], cell);
                 }
             }
         }
 
-        private static CellInfo ToCellInfo(StreamingMapCell source, List<MapObject> objects)
+        private static void Copy(StreamingMapCell source, CellInfo target)
         {
-            return new CellInfo
-            {
-                BackIndex = source.BackIndex,
-                BackImage = source.BackImage,
-                MiddleIndex = source.MiddleIndex,
-                MiddleImage = source.MiddleImage,
-                FrontIndex = source.FrontIndex,
-                FrontImage = source.FrontImage,
-                DoorIndex = source.DoorIndex,
-                DoorOffset = source.DoorOffset,
-                FrontAnimationFrame = source.FrontAnimationFrame,
-                FrontAnimationTick = source.FrontAnimationTick,
-                MiddleAnimationFrame = source.MiddleAnimationFrame,
-                MiddleAnimationTick = source.MiddleAnimationTick,
-                TileAnimationImage = source.TileAnimationImage,
-                TileAnimationOffset = source.TileAnimationOffset,
-                TileAnimationFrames = source.TileAnimationFrames,
-                Light = source.Light,
-                Unknown = source.Unknown,
-                FishingCell = source.FishingCell,
-                CellObjects = objects
-            };
+            target.BackIndex = source.BackIndex;
+            target.BackImage = source.BackImage;
+            target.MiddleIndex = source.MiddleIndex;
+            target.MiddleImage = source.MiddleImage;
+            target.FrontIndex = source.FrontIndex;
+            target.FrontImage = source.FrontImage;
+            target.DoorIndex = source.DoorIndex;
+            target.DoorOffset = source.DoorOffset;
+            target.FrontAnimationFrame = source.FrontAnimationFrame;
+            target.FrontAnimationTick = source.FrontAnimationTick;
+            target.MiddleAnimationFrame = source.MiddleAnimationFrame;
+            target.MiddleAnimationTick = source.MiddleAnimationTick;
+            target.TileAnimationImage = source.TileAnimationImage;
+            target.TileAnimationOffset = source.TileAnimationOffset;
+            target.TileAnimationFrames = source.TileAnimationFrames;
+            target.Light = source.Light;
+            target.Unknown = source.Unknown;
+            target.FishingCell = source.FishingCell;
         }
     }
 }

@@ -502,7 +502,11 @@ namespace Client.MirGraphics
         private bool _streaming;
         private string _streamingId;
         private V3LibraryRecord _streamingRecord;
-        private V3LibraryIndex _streamingIndex;
+        private StreamingLibraryIndex _streamingIndex;
+        // Images already asked for; reset whenever AssetManager.RetryEpoch advances so a failed
+        // download is retried without queueing the same image on every frame in between.
+        private bool[] _requested;
+        private int _requestEpoch = -1;
 
         private BinaryReader _reader;
         private FileStream _fStream;
@@ -617,6 +621,8 @@ namespace Client.MirGraphics
             _streaming = false;
             _streamingRecord = null;
             _streamingIndex = null;
+            _requested = null;
+            _requestEpoch = -1;
             _images = null;
             _indexList = null;
             _frames = null;
@@ -658,8 +664,12 @@ namespace Client.MirGraphics
 
             _streamingId = AssetManager.ToLibraryId(_fileName);
             if (!AssetManager.TryGetLibraryRecord(_streamingId, out _streamingRecord)) return false;
+            // Blocking initialisation is only used for the startup UI libraries, which need every index
+            // segment resolved up front so one-shot layout sees the real sizes on the very first frame.
+            // StartupAssetBootstrapper has normally already prefetched these, so the wait returns at once.
             _streamingIndex = blocking
-                ? AssetManager.GetLibraryIndex(_streamingId)
+                ? AssetManager.WaitForLibraryIndex(_streamingId,
+                    TimeSpan.FromSeconds(Math.Max(5, Settings.AssetRequestTimeoutSeconds)))
                 : GetCachedOrQueueStreamingIndex(_streamingId);
 
             if (_streamingIndex == null) return false;
@@ -667,6 +677,8 @@ namespace Client.MirGraphics
             _streaming = true;
             _count = _streamingIndex.ImageCount;
             _images = new MImage[_count];
+            _requested = new bool[_count];
+            _requestEpoch = -1;
 
             if (_streamingIndex.Frames.Count > 0)
             {
@@ -684,9 +696,9 @@ namespace Client.MirGraphics
             return true;
         }
 
-        private static V3LibraryIndex GetCachedOrQueueStreamingIndex(string streamingId)
+        private static StreamingLibraryIndex GetCachedOrQueueStreamingIndex(string streamingId)
         {
-            if (AssetManager.TryGetCachedLibraryIndex(streamingId, out V3LibraryIndex index))
+            if (AssetManager.TryGetCachedLibraryIndex(streamingId, out StreamingLibraryIndex index))
                 return index;
 
             AssetManager.QueueLibraryIndex(streamingId);
@@ -722,40 +734,82 @@ namespace Client.MirGraphics
             return true;
         }
 
+        /// <summary>
+        /// Streaming draw path. Everything here is memory-only except the single positional read that
+        /// builds a texture: presence is one bit in the container's in-memory bitmap, so a miss costs
+        /// nothing and never touches the disk, a lock or the network on the render thread.
+        /// </summary>
         private bool CheckStreamingImage(int index)
         {
-            if (_images[index] == null)
+            MImage mi = _images[index];
+            if (mi == null)
             {
                 if (!TryGetStreamingImage(index, out V3LibraryImageRecord record) || !record.Exists)
                     return false;
 
-                if (!AssetManager.TryReadCachedLibraryImage(record, out V3LibraryImagePayload payload))
-                {
-                    AssetManager.QueueLibraryImage(_streamingRecord, record);
-                    return false;
-                }
-
-                _images[index] = new MImage(payload);
+                _images[index] = mi = new MImage(record);
             }
 
-            MImage mi = _images[index];
-            if (!mi.TextureValid)
+            if (mi.TextureValid) return true;
+            if (mi.Width == 0 || mi.Height == 0) return false;
+
+            V3LibraryImageRecord source = mi.StreamingRecord;
+            if (source == null) return false;
+
+            LibraryCacheContainer container = AssetManager.GetLibraryContainer(_streamingRecord);
+            if (container == null) return false;
+
+            WorkingSetRecorder.Record(_streamingRecord, source);
+
+            if (!container.IsPresent(index) || !container.TryRead(source, out byte[] bytes))
             {
-                if (mi.Width == 0 || mi.Height == 0)
-                    return false;
-
-                mi.CreateTexture();
+                RequestStreamingImage(index, source);
+                return false;
             }
 
-            return true;
+            try
+            {
+                mi.CreateTexture(bytes);
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Streaming image {index} of '{_streamingId}' failed to decode: {ex.Message}");
+                return false;
+            }
+
+            return mi.TextureValid;
         }
 
+        private void RequestStreamingImage(int index, V3LibraryImageRecord record)
+        {
+            if (_requested != null)
+            {
+                int epoch = AssetManager.RetryEpoch;
+                if (_requestEpoch != epoch)
+                {
+                    _requestEpoch = epoch;
+                    Array.Clear(_requested);
+                }
+
+                if (_requested[index]) return;
+                _requested[index] = true;
+            }
+
+            AssetManager.QueueLibraryImage(_streamingRecord, record);
+        }
+
+        /// <summary>
+        /// Resolves an image's catalog metadata. Index records live in per-segment compressed runs, so a
+        /// miss means the owning segment has not been fetched yet; the fetch is queued and rate limited by
+        /// the index itself, and the caller falls back to a transparent placeholder for this frame.
+        /// </summary>
         private bool TryGetStreamingImage(int index, out V3LibraryImageRecord record)
         {
             record = null;
-            if (_streamingIndex?.Images == null || index < 0 || index >= _streamingIndex.Images.Count) return false;
-            record = _streamingIndex.Images[index];
-            return record?.Index == index;
+            if (_streamingIndex == null) return false;
+            if (_streamingIndex.TryGetImage(index, out record, out _)) return record != null;
+            AssetManager.QueueLibrarySegment(_streamingIndex, index);
+            return false;
         }
 
         public Point GetOffSet(int index)
@@ -1087,8 +1141,10 @@ namespace Client.MirGraphics
         public Size TrueSize;
 
         public unsafe byte* Data;
-        private byte[] _streamingImageData;
-        private byte[] _streamingMaskData;
+        private V3LibraryImageRecord _streamingRecord;
+
+        /// <summary>Set for streamed images: the catalog record its pixels can be re-read from.</summary>
+        public V3LibraryImageRecord StreamingRecord => _streamingRecord;
 
         public MImage(BinaryReader reader)
         {
@@ -1115,24 +1171,23 @@ namespace Client.MirGraphics
             }
         }
 
-        public MImage(V3LibraryImagePayload chunk)
+        /// <summary>
+        /// Metadata-only construction from the streaming catalog. No pixel bytes are held: the texture is
+        /// built later from a single read of the library cache container, and can be rebuilt the same way
+        /// after <see cref="DisposeTexture"/>.
+        /// </summary>
+        public MImage(V3LibraryImageRecord record)
         {
-            Width = chunk.Width;
-            Height = chunk.Height;
-            X = chunk.X;
-            Y = chunk.Y;
-            ShadowX = chunk.ShadowX;
-            ShadowY = chunk.ShadowY;
-            Shadow = chunk.Shadow;
-            Length = chunk.ImageData.Length;
-            HasMask = chunk.HasMask;
-            MaskWidth = chunk.MaskWidth;
-            MaskHeight = chunk.MaskHeight;
-            MaskX = chunk.MaskX;
-            MaskY = chunk.MaskY;
-            MaskLength = chunk.MaskData?.Length ?? 0;
-            _streamingImageData = chunk.ImageData;
-            _streamingMaskData = chunk.MaskData;
+            Width = record.Width;
+            Height = record.Height;
+            X = record.X;
+            Y = record.Y;
+            ShadowX = record.ShadowX;
+            ShadowY = record.ShadowY;
+            Shadow = record.Shadow;
+            HasMask = (record.Shadow & 0x80) != 0;
+            TrueSize = new Size(record.TrueWidth, record.TrueHeight);
+            _streamingRecord = record;
         }
 
         public unsafe void CreateTexture(BinaryReader reader)
@@ -1170,28 +1225,44 @@ namespace Client.MirGraphics
             CleanTime = CMain.Time + Settings.CleanDelay;
         }
 
-        public unsafe void CreateTexture()
+        /// <summary>Builds the textures straight out of one raw Lib image record; nothing is retained.</summary>
+        public unsafe void CreateTexture(byte[] recordBytes)
         {
-            if (_streamingImageData == null) return;
+            V3LibraryImagePayload payload = StreamingAssetV3IO.ReadLibraryImageRecord(recordBytes);
+            if (payload.ImageData == null || payload.ImageData.Length == 0) return;
 
-            int w = Width;
-            int h = Height;
+            Width = payload.Width;
+            Height = payload.Height;
+            X = payload.X;
+            Y = payload.Y;
+            ShadowX = payload.ShadowX;
+            ShadowY = payload.ShadowY;
+            Shadow = payload.Shadow;
+            Length = payload.ImageData.Length;
+            HasMask = payload.HasMask;
+            MaskWidth = payload.MaskWidth;
+            MaskHeight = payload.MaskHeight;
+            MaskX = payload.MaskX;
+            MaskY = payload.MaskY;
+            MaskLength = payload.MaskData?.Length ?? 0;
 
-            Image = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
+            if (Width <= 0 || Height <= 0) return;
+
+            Image = new Texture(DXManager.Device, Width, Height, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
             DataRectangle stream = Image.LockRectangle(0, LockFlags.Discard);
             Data = (byte*)stream.Data.DataPointer;
 
-            DecompressImage(_streamingImageData, stream.Data);
+            DecompressImage(payload.ImageData, stream.Data);
 
             stream.Data.Dispose();
             Image.UnlockRectangle(0);
 
-            if (HasMask && _streamingMaskData != null)
+            if (HasMask && MaskLength > 0)
             {
-                MaskImage = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
+                MaskImage = new Texture(DXManager.Device, Width, Height, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
                 stream = MaskImage.LockRectangle(0, LockFlags.Discard);
 
-                DecompressImage(_streamingMaskData, stream.Data);
+                DecompressImage(payload.MaskData, stream.Data);
 
                 stream.Data.Dispose();
                 MaskImage.UnlockRectangle(0);

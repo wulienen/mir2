@@ -11,6 +11,7 @@ internal static class V3Builder
 {
     private const string StateFileName = ".assetbuilder-v3-state.json";
     private const string FailureReportFileName = "assetbuilder-v3-failures.log";
+    private const string DefaultUsageFileName = "workset-usage.txt";
     private const int BufferSize = 1024 * 1024;
     private const int LibraryFrameRecordSize = sizeof(byte) + (8 * sizeof(int)) + (2 * sizeof(byte));
 
@@ -60,8 +61,7 @@ internal static class V3Builder
 
         List<LibraryBuildItem> libraries = BuildLibraries(options, previousManifest, previousState,
             nextState, previousCatalogPath, progress);
-        List<MapBuildItem> maps = BuildMaps(options, previousManifest, previousState,
-            nextState, previousCatalogPath, progress);
+        List<V3MapRecord> maps = BuildMaps(options, previousManifest, previousState, nextState, progress);
         List<V3SoundRecord> sounds = BuildSounds(options, previousManifest, previousState, nextState, progress);
         progress.FinishStage();
 
@@ -77,21 +77,16 @@ internal static class V3Builder
         string catalogTemp = Path.Combine(options.Output, StreamingAssetV3Constants.CatalogsDirectory,
             $".{Environment.ProcessId}.{Guid.NewGuid():N}.tmp");
         Directory.CreateDirectory(Path.GetDirectoryName(catalogTemp)!);
+        // Only libraries need a catalog block: a map pack is self-describing and is fetched whole.
         using (FileStream catalog = File.Create(catalogTemp))
         {
             foreach (LibraryBuildItem item in libraries.OrderBy(item => item.Record.Id, StringComparer.Ordinal))
             {
                 item.Record.CatalogOffset = catalog.Position;
-                item.Record.CatalogLength = item.CatalogBlock.Length;
-                item.Record.CatalogBlockHash = StreamingAssetIO.ComputeSha256(item.CatalogBlock);
-                catalog.Write(item.CatalogBlock);
-            }
-            foreach (MapBuildItem item in maps.OrderBy(item => item.Record.Id, StringComparer.Ordinal))
-            {
-                item.Record.CatalogOffset = catalog.Position;
-                item.Record.CatalogLength = item.CatalogBlock.Length;
-                item.Record.CatalogBlockHash = StreamingAssetIO.ComputeSha256(item.CatalogBlock);
-                catalog.Write(item.CatalogBlock);
+                item.Record.CatalogLength = item.CatalogBlock.Bytes.Length;
+                item.Record.CatalogHeaderLength = item.CatalogBlock.HeaderLength;
+                item.Record.CatalogHeaderHash = item.CatalogBlock.HeaderHash;
+                catalog.Write(item.CatalogBlock.Bytes);
             }
         }
 
@@ -107,9 +102,10 @@ internal static class V3Builder
             CatalogHash = catalogHash,
             CatalogLength = catalogInfo.Length,
             Libraries = libraries.Select(item => item.Record).OrderBy(item => item.Id, StringComparer.Ordinal).ToList(),
-            Maps = maps.Select(item => item.Record).OrderBy(item => item.Id, StringComparer.Ordinal).ToList(),
+            Maps = maps.OrderBy(item => item.Id, StringComparer.Ordinal).ToList(),
             Sounds = sounds.OrderBy(item => item.Id, StringComparer.Ordinal).ToList()
         };
+        BuildWorkingSet(options, manifest, libraries);
 
         bool changed = previousManifest == null || !ManifestContentEquals(previousManifest, manifest) ||
                        (!string.IsNullOrWhiteSpace(options.Version) &&
@@ -128,7 +124,219 @@ internal static class V3Builder
         Console.WriteLine($"Libraries: {manifest.Libraries.Count}, Maps: {manifest.Maps.Count}, Sounds: {manifest.Sounds.Count}");
         Console.WriteLine($"Rebuilt: {progress.RebuiltCount}, Reused: {progress.ReusedCount}, Failed: {progress.FailedCount}");
         Console.WriteLine($"Manifest version: {manifest.Version}");
+        Prune(options, manifest);
         return 0;
+    }
+
+    /// <summary>
+    /// Publishes the first-run working set from a recorded usage file. The recording names the exact image
+    /// records a cold client touches between the login screen and standing in the first map; prefetching the
+    /// startup libraries wholesale was measured at 88.96 MB and rejected, while the recorded set is a small
+    /// fraction of that and arrives in one request instead of hundreds of ranged ones.
+    /// </summary>
+    private static void BuildWorkingSet(V3BuildOptions options, StreamingAssetV3Manifest manifest,
+        IReadOnlyList<LibraryBuildItem> libraries)
+    {
+        if (string.IsNullOrWhiteSpace(options.Usage)) return;
+        if (!File.Exists(options.Usage))
+        {
+            Console.Error.WriteLine($"Working set skipped: usage recording not found: {options.Usage}");
+            return;
+        }
+
+        Dictionary<string, SortedSet<int>> usage;
+        try { usage = StreamingWorkingSetPack.ReadUsage(File.ReadLines(options.Usage)); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Working set skipped: could not read '{options.Usage}': {ex.Message}");
+            return;
+        }
+        if (usage.Count == 0)
+        {
+            Console.WriteLine($"Working set skipped: '{options.Usage}' recorded no images.");
+            return;
+        }
+
+        Dictionary<string, LibraryBuildItem> byId = new(StringComparer.OrdinalIgnoreCase);
+        foreach (LibraryBuildItem item in libraries) byId[item.Record.Id] = item;
+
+        List<WorkingSetLibrary> packed = new();
+        long payload = 0;
+        int missingLibraries = 0;
+        int missingImages = 0;
+        int oversizedImages = 0;
+        long oversizedBytes = 0;
+        foreach ((string id, SortedSet<int> indexes) in usage.OrderBy(pair => pair.Key, StringComparer.Ordinal))
+        {
+            if (!byId.TryGetValue(id, out LibraryBuildItem item))
+            {
+                missingLibraries++;
+                continue;
+            }
+
+            V3LibraryIndex index;
+            try
+            {
+                index = StreamingAssetV3IO.ReadLibraryIndex(item.CatalogBlock.Bytes, item.Record.Id,
+                    item.Record.ImageCount, item.Record.FileLength);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Working set: skipping '{id}': {ex.Message}");
+                missingLibraries++;
+                continue;
+            }
+
+            List<V3LibraryImageRecord> wanted = new();
+            foreach (int imageIndex in indexes)
+            {
+                if (imageIndex >= index.Images.Count || !index.Images[imageIndex].Exists)
+                {
+                    missingImages++;
+                    continue;
+                }
+                // A record measured in megabytes gains nothing from being packed: its own transfer dwarfs the
+                // round-trip the pack would save, and packing it forces every cold client to take art it may
+                // never display. The pack exists to remove round-trips for the many small records.
+                if (index.Images[imageIndex].Length > options.WorkingSetMaxImageBytes)
+                {
+                    oversizedImages++;
+                    oversizedBytes += index.Images[imageIndex].Length;
+                    continue;
+                }
+                wanted.Add(index.Images[imageIndex]);
+            }
+            if (wanted.Count == 0) continue;
+
+            long wantedBytes = wanted.Sum(image => (long)image.Length);
+            if (payload + wantedBytes > options.WorkingSetMaxBytes)
+            {
+                Console.Error.WriteLine($"Working set truncated at '{id}': the recording exceeds " +
+                                        $"{options.WorkingSetMaxBytes / 1048576} MB.");
+                break;
+            }
+
+            string libraryPath = GetOutputPath(options.Output,
+                StreamingAssetV3IO.GetLibraryPath(item.Record.FileHash));
+            WorkingSetLibrary library = new() { Id = item.Record.Id, FileHash = item.Record.FileHash };
+            try
+            {
+                using FileStream source = File.Open(libraryPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                foreach (V3LibraryImageRecord image in wanted)
+                {
+                    byte[] bytes = new byte[image.Length];
+                    source.Position = image.Offset;
+                    source.ReadExactly(bytes, 0, bytes.Length);
+                    if (!StreamingAssetV3IO.IsLibraryImageRecordValid(image, bytes))
+                        throw new InvalidDataException($"Image {image.Index} does not match its catalog record.");
+                    library.Entries.Add(new WorkingSetEntry(image.Index, image.Offset, image.Length, bytes));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Working set: skipping '{id}': {ex.Message}");
+                missingLibraries++;
+                continue;
+            }
+
+            packed.Add(library);
+            payload += wantedBytes;
+        }
+
+        if (packed.Count == 0)
+        {
+            Console.Error.WriteLine("Working set skipped: the recording matched no published images.");
+            return;
+        }
+
+        byte[] pack;
+        try { pack = StreamingWorkingSetPack.Write(packed); }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Working set skipped: {ex.Message}");
+            return;
+        }
+
+        string hash = Convert.ToHexString(SHA256.HashData(pack)).ToLowerInvariant();
+        string path = GetOutputPath(options.Output, StreamingAssetV3IO.GetWorkingSetPath(hash));
+        if (!PublishedFileExists(options.Output, StreamingAssetV3IO.GetWorkingSetPath(hash), pack.Length))
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+            string temp = path + $".{Environment.ProcessId}.tmp";
+            File.WriteAllBytes(temp, pack);
+            PublishTemp(temp, path, pack.Length);
+        }
+
+        manifest.WorkingSetHash = hash;
+        manifest.WorkingSetLength = pack.Length;
+        manifest.WorkingSetImageCount = packed.Sum(library => library.Entries.Count);
+        Console.WriteLine($"Working set: {manifest.WorkingSetImageCount} image(s) from {packed.Count} " +
+                          $"library(ies), {pack.Length / 1048576.0:N1} MB" +
+                          (missingLibraries == 0 && missingImages == 0
+                              ? "."
+                              : $" ({missingLibraries} library(ies) and {missingImages} image(s) in the recording no longer exist)."));
+        if (oversizedImages > 0)
+            Console.WriteLine($"Working set: {oversizedImages} image(s) over " +
+                              $"{options.WorkingSetMaxImageBytes / 1024} KB left to ranged requests " +
+                              $"({oversizedBytes / 1048576.0:N1} MB).");
+    }
+
+    /// <summary>
+    /// Removes published files the freshly written manifest no longer references. Content addressing means
+    /// a format change or a rebuilt resource leaves the old file behind for ever, and those add up: the
+    /// segmented catalog plus the map pack rewrite left 295 MB of unreachable files. Pruning is opt-in
+    /// because it also removes the ability to serve a previously published manifest.
+    /// </summary>
+    private static void Prune(V3BuildOptions options, StreamingAssetV3Manifest manifest)
+    {
+        if (!options.Prune) return;
+
+        Dictionary<string, HashSet<string>> keep = new(StringComparer.OrdinalIgnoreCase)
+        {
+            [StreamingAssetV3Constants.CatalogsDirectory] = new(StringComparer.OrdinalIgnoreCase)
+                { manifest.CatalogHash + ".bin" },
+            [StreamingAssetV3Constants.LibrariesDirectory] = new(StringComparer.OrdinalIgnoreCase),
+            [StreamingAssetV3Constants.MapsDirectory] = new(StringComparer.OrdinalIgnoreCase),
+            [StreamingAssetV3Constants.SoundsDirectory] = new(StringComparer.OrdinalIgnoreCase),
+            [StreamingAssetV3Constants.WorkingSetsDirectory] = new(StringComparer.OrdinalIgnoreCase)
+        };
+        if (!string.IsNullOrEmpty(manifest.WorkingSetHash))
+            keep[StreamingAssetV3Constants.WorkingSetsDirectory].Add(manifest.WorkingSetHash + ".wsp");
+        foreach (V3LibraryRecord record in manifest.Libraries)
+            keep[StreamingAssetV3Constants.LibrariesDirectory].Add(record.FileHash + ".lib");
+        foreach (V3MapRecord record in manifest.Maps)
+            keep[StreamingAssetV3Constants.MapsDirectory].Add(record.FileHash + ".mappack");
+        foreach (V3SoundRecord record in manifest.Sounds)
+            keep[StreamingAssetV3Constants.SoundsDirectory].Add(record.Hash + record.Extension);
+
+        int deleted = 0;
+        long freed = 0;
+        foreach ((string directory, HashSet<string> referenced) in keep)
+        {
+            string path = Path.Combine(options.Output, directory);
+            if (!Directory.Exists(path)) continue;
+            foreach (string file in Directory.EnumerateFiles(path))
+            {
+                string name = Path.GetFileName(file);
+                // Another build's in-flight temporary file must survive; publishing renames it into place.
+                if (referenced.Contains(name) || name.StartsWith('.')) continue;
+                try
+                {
+                    long length = new FileInfo(file).Length;
+                    File.Delete(file);
+                    deleted++;
+                    freed += length;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine($"Could not prune '{file}': {ex.Message}");
+                }
+            }
+        }
+
+        Console.WriteLine(deleted == 0
+            ? "Pruned: nothing unreferenced."
+            : $"Pruned: {deleted} unreferenced file(s), {freed / 1048576.0:N1} MB freed.");
     }
 
     private static int Diagnose(V3DiagnosticOptions options)
@@ -226,8 +434,7 @@ internal static class V3Builder
             {
                 if (!options.Full && !source.Changed && previous.TryGetValue(id, out V3LibraryRecord old) &&
                     PublishedFileExists(options.Output, StreamingAssetV3IO.GetLibraryPath(old.FileHash), old.FileLength) &&
-                    TryReadCatalogBlock(previousCatalogPath, old.CatalogOffset, old.CatalogLength,
-                        old.CatalogBlockHash, out byte[] oldBlock))
+                    TryReadCatalogBlock(previousCatalogPath, old, out V3LibraryIndexBlock oldBlock))
                 {
                     output.Add(new LibraryBuildItem(Clone(old), oldBlock));
                     progress.Complete(file, false);
@@ -251,7 +458,7 @@ internal static class V3Builder
 
                 V3LibraryIndex index = ReadLibraryIndex(publishedPath, id,
                     (current, total) => progress.ReportSubItem(file, i, current, total));
-                byte[] block = StreamingAssetV3IO.WriteLibraryIndex(index);
+                V3LibraryIndexBlock block = StreamingAssetV3IO.WriteLibraryIndexBlock(index);
                 output.Add(new LibraryBuildItem(new V3LibraryRecord
                 {
                     Id = id,
@@ -269,16 +476,16 @@ internal static class V3Builder
         return output;
     }
 
-    private static List<MapBuildItem> BuildMaps(V3BuildOptions options,
+    private static List<V3MapRecord> BuildMaps(V3BuildOptions options,
         StreamingAssetV3Manifest previousManifest, V3BuildState previousState, V3BuildState nextState,
-        string previousCatalogPath, V3Progress progress)
+        V3Progress progress)
     {
         List<string> files = Directory.EnumerateFiles(options.MapRoot, "*.map", SearchOption.TopDirectoryOnly)
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToList();
         progress.StartStage("Maps", files);
         Dictionary<string, V3MapRecord> previous = previousManifest?.Maps
             .ToDictionary(record => record.Id, StringComparer.OrdinalIgnoreCase) ?? new(StringComparer.OrdinalIgnoreCase);
-        List<MapBuildItem> output = new(files.Count);
+        List<V3MapRecord> output = new(files.Count);
 
         for (int i = 0; i < files.Count; i++)
         {
@@ -289,16 +496,14 @@ internal static class V3Builder
             try
             {
                 if (!options.Full && !source.Changed && previous.TryGetValue(id, out V3MapRecord old) &&
-                    PublishedFileExists(options.Output, StreamingAssetV3IO.GetMapPath(old.FileHash), old.FileLength) &&
-                    TryReadCatalogBlock(previousCatalogPath, old.CatalogOffset, old.CatalogLength,
-                        old.CatalogBlockHash, out byte[] oldBlock))
+                    PublishedFileExists(options.Output, StreamingAssetV3IO.GetMapPath(old.FileHash), old.FileLength))
                 {
-                    output.Add(new MapBuildItem(Clone(old), oldBlock));
+                    output.Add(Clone(old));
                     progress.Complete(file, false);
                     continue;
                 }
 
-                (V3MapIndex index, string packTemp) = BuildMapPack(file, id,
+                (int width, int height, int chunkSize, string packTemp) = BuildMapPack(file,
                     StreamingAssetV3Constants.DefaultMapChunkSize,
                     (current, total) => progress.ReportSubItem(file, i, current, total), options.Output);
                 FileInfo packInfo = new(packTemp);
@@ -308,16 +513,15 @@ internal static class V3Builder
                 PublishTemp(packTemp, publishedPath, packInfo.Length);
                 source.SourceHash = ComputeFileHash(file);
 
-                byte[] block = StreamingAssetV3IO.WriteMapIndex(index);
-                output.Add(new MapBuildItem(new V3MapRecord
+                output.Add(new V3MapRecord
                 {
                     Id = id,
-                    Width = index.Width,
-                    Height = index.Height,
-                    ChunkSize = index.ChunkSize,
+                    Width = width,
+                    Height = height,
+                    ChunkSize = chunkSize,
                     FileHash = hash,
                     FileLength = packInfo.Length
-                }, block));
+                });
                 progress.Complete(file, true);
             }
             catch (Exception ex)
@@ -438,8 +642,7 @@ internal static class V3Builder
                 ShadowY = payload.ShadowY,
                 Shadow = payload.Shadow,
                 TrueWidth = trueWidth,
-                TrueHeight = trueHeight,
-                Hash = StreamingAssetIO.ComputeSha256(recordBytes)
+                TrueHeight = trueHeight
             });
             report?.Invoke(i + 1, count);
         }
@@ -504,18 +707,23 @@ internal static class V3Builder
         return bytes;
     }
 
-    private static (V3MapIndex Index, string TempPath) BuildMapPack(string file, string id, int chunkSize,
+    /// <summary>
+    /// Builds one self-describing <c>YMP3</c> pack per map: a header, a (compressedLength, uncompressedLength)
+    /// directory and the individually GZip'd chunks, in column-major order. The client fetches the whole pack
+    /// in a single request and inflates chunks on demand, so no per-chunk catalog is published.
+    /// </summary>
+    private static (int Width, int Height, int ChunkSize, string TempPath) BuildMapPack(string file, int chunkSize,
         Action<int, int> report, string output)
     {
         MapData map = MapData.Read(file);
-        V3MapIndex index = new() { Id = id, Width = map.Width, Height = map.Height, ChunkSize = chunkSize };
         string directory = Path.Combine(output, StreamingAssetV3Constants.MapsDirectory);
         Directory.CreateDirectory(directory);
         string temp = Path.Combine(directory, $".{Environment.ProcessId}.{Guid.NewGuid():N}.tmp");
         int total = ((map.Width + chunkSize - 1) / chunkSize) * ((map.Height + chunkSize - 1) / chunkSize);
+        List<byte[]> compressed = new(total);
+        List<int> uncompressed = new(total);
         int current = 0;
 
-        using FileStream pack = File.Create(temp);
         for (int chunkX = 0; chunkX < map.Width; chunkX += chunkSize)
         for (int chunkY = 0; chunkY < map.Height; chunkY += chunkSize)
         {
@@ -526,26 +734,17 @@ internal static class V3Builder
             for (int y = 0; y < height; y++)
                 cells[x * height + y] = map.Cells[chunkX + x, chunkY + y];
 
-            byte[] bytes = StreamingAssetIO.WriteMapChunk(new StreamingMapChunk
+            compressed.Add(StreamingAssetIO.WriteMapChunk(new StreamingMapChunk
             {
                 X = chunkX, Y = chunkY, Width = width, Height = height, Cells = cells
-            });
-            long offset = pack.Position;
-            pack.Write(bytes);
-            index.Chunks.Add(new V3MapChunkRecord
-            {
-                X = chunkX,
-                Y = chunkY,
-                Width = width,
-                Height = height,
-                Offset = offset,
-                Length = bytes.Length,
-                UncompressedLength = checked(20 + cells.Length * 32),
-                Hash = StreamingAssetIO.ComputeSha256(bytes)
-            });
+            }));
+            uncompressed.Add(checked(20 + cells.Length * 32));
             report?.Invoke(++current, total);
         }
-        return (index, temp);
+
+        File.WriteAllBytes(temp, StreamingAssetV3IO.WriteMapPack(map.Width, map.Height, chunkSize,
+            compressed, uncompressed));
+        return (map.Width, map.Height, chunkSize, temp);
     }
 
     private static V3SourceState CreateSourceState(string kind, string id, string root, string file,
@@ -575,20 +774,52 @@ internal static class V3Builder
         return state;
     }
 
-    private static bool TryReadCatalogBlock(string catalogPath, long offset, int length, string expectedHash,
-        out byte[] block)
+    /// <summary>
+    /// Re-reads an unchanged library's published block so it can be copied into the new catalog verbatim.
+    /// The block is no longer covered by a single hash, so the header hash from the old manifest is checked
+    /// first and every segment is then verified against the hash the header itself carries.
+    /// </summary>
+    private static bool TryReadCatalogBlock(string catalogPath, V3LibraryRecord record,
+        out V3LibraryIndexBlock block)
     {
         block = null;
-        if (string.IsNullOrEmpty(catalogPath) || !File.Exists(catalogPath) || offset < 0 || length <= 0 ||
-            !StreamingAssetIO.IsValidSha256(expectedHash)) return false;
+        if (string.IsNullOrEmpty(catalogPath) || !File.Exists(catalogPath) || record == null ||
+            record.CatalogOffset < 0 || record.CatalogLength <= 0 || record.CatalogHeaderLength <= 0 ||
+            record.CatalogHeaderLength > record.CatalogLength ||
+            !StreamingAssetIO.IsValidSha256(record.CatalogHeaderHash)) return false;
         try
         {
-            using FileStream stream = File.OpenRead(catalogPath);
-            if (offset > stream.Length || length > stream.Length - offset) return false;
-            stream.Position = offset;
-            block = new byte[length];
-            stream.ReadExactly(block);
-            return string.Equals(StreamingAssetIO.ComputeSha256(block), expectedHash, StringComparison.OrdinalIgnoreCase);
+            byte[] bytes;
+            using (FileStream stream = File.OpenRead(catalogPath))
+            {
+                if (record.CatalogOffset > stream.Length ||
+                    record.CatalogLength > stream.Length - record.CatalogOffset) return false;
+                stream.Position = record.CatalogOffset;
+                bytes = new byte[record.CatalogLength];
+                stream.ReadExactly(bytes);
+            }
+
+            if (!string.Equals(StreamingAssetIO.ComputeSha256(bytes.AsSpan(0, record.CatalogHeaderLength).ToArray()),
+                    record.CatalogHeaderHash, StringComparison.OrdinalIgnoreCase)) return false;
+
+            V3LibraryIndexHeader header = StreamingAssetV3IO.ReadLibraryIndexHeader(bytes, 0,
+                record.CatalogHeaderLength, record.Id, record.ImageCount);
+            long position = header.HeaderLength;
+            foreach (V3LibraryIndexSegment segment in header.Segments)
+            {
+                if (segment.Offset != position || segment.CompressedLength > bytes.Length - position) return false;
+                if (!string.Equals(StreamingAssetIO.ComputeSha256(
+                        bytes.AsSpan((int)position, segment.CompressedLength).ToArray()),
+                        segment.Hash, StringComparison.OrdinalIgnoreCase)) return false;
+                position += segment.CompressedLength;
+            }
+            if (position != bytes.Length) return false;
+
+            block = new V3LibraryIndexBlock
+            {
+                Bytes = bytes, HeaderLength = header.HeaderLength, HeaderHash = record.CatalogHeaderHash
+            };
+            return true;
         }
         catch
         {
@@ -664,6 +895,9 @@ internal static class V3Builder
     {
         if (!string.Equals(left.CatalogHash, right.CatalogHash, StringComparison.OrdinalIgnoreCase) ||
             left.CatalogLength != right.CatalogLength) return false;
+        if (!string.Equals(left.WorkingSetHash, right.WorkingSetHash, StringComparison.OrdinalIgnoreCase) ||
+            left.WorkingSetLength != right.WorkingSetLength ||
+            left.WorkingSetImageCount != right.WorkingSetImageCount) return false;
         string leftJson = JsonSerializer.Serialize(new { left.Libraries, left.Maps, left.Sounds }, StreamingAssetIO.JsonOptions);
         string rightJson = JsonSerializer.Serialize(new { right.Libraries, right.Maps, right.Sounds }, StreamingAssetIO.JsonOptions);
         return string.Equals(leftJson, rightJson, StringComparison.Ordinal);
@@ -733,7 +967,7 @@ internal static class V3Builder
 
     private static void PrintUsage()
     {
-        Console.Error.WriteLine("Usage: AssetBuilder build-v3 --library-root <dir> --map-root <dir> --sound-root <dir> --output <dir> [--version <v>] [--verify] [--full]");
+        Console.Error.WriteLine("Usage: AssetBuilder build-v3 --library-root <dir> --map-root <dir> --sound-root <dir> --output <dir> [--version <v>] [--verify] [--full] [--prune] [--usage <file>] [--workset-max-mb <n>] [--workset-max-image-kb <n>]");
         Console.Error.WriteLine("       AssetBuilder diagnose-v3 --library-root <dir> --map-root <dir> --sound-root <dir>");
         Console.Error.WriteLine("       AssetBuilder self-test-v3 [temp-dir]");
     }
@@ -771,10 +1005,53 @@ internal static class V3Builder
             V3LibraryRecord library = manifest.Libraries.Single();
             byte[] catalog = File.ReadAllBytes(GetOutputPath(output, StreamingAssetV3IO.GetCatalogPath(manifest.CatalogHash)));
             byte[] block = catalog.AsSpan((int)library.CatalogOffset, library.CatalogLength).ToArray();
+            if (library.CatalogHeaderLength <= 0 || library.CatalogHeaderLength > library.CatalogLength ||
+                !string.Equals(StreamingAssetIO.ComputeSha256(block.AsSpan(0, library.CatalogHeaderLength).ToArray()),
+                    library.CatalogHeaderHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("V3 catalog header hash self-test failed.");
+
+            // The client only ever fetches the header first, then the segments it draws from, so exercise
+            // exactly that path in addition to the builder's whole-block parse.
+            V3LibraryIndexHeader header = StreamingAssetV3IO.ReadLibraryIndexHeader(block, 0,
+                library.CatalogHeaderLength, library.Id, library.ImageCount);
+            if (header.SegmentCount != 1 || header.Segments[0].Offset != library.CatalogHeaderLength ||
+                header.Segments[0].Offset + header.Segments[0].CompressedLength != library.CatalogLength ||
+                header.GetSegmentImageCount(0) != 1)
+                throw new InvalidDataException("V3 library index segment directory self-test failed.");
+            byte[] compressedSegment = block
+                .AsSpan((int)header.Segments[0].Offset, header.Segments[0].CompressedLength).ToArray();
+            byte[] segment = StreamingAssetV3IO.ReadLibraryIndexSegment(header, 0, compressedSegment,
+                library.FileLength);
+            V3LibraryImageRecord decoded = StreamingAssetV3IO.DecodeLibraryImageRecord(segment, 0, 0);
+            if (!decoded.Exists || decoded.TrueWidth != 1 || decoded.TrueHeight != 1)
+                throw new InvalidDataException("V3 segmented true-size metadata self-test failed.");
+            try
+            {
+                byte[] corruptSegment = (byte[])compressedSegment.Clone();
+                corruptSegment[^1] ^= 0xFF;
+                StreamingAssetV3IO.ReadLibraryIndexSegment(header, 0, corruptSegment, library.FileLength);
+                throw new InvalidDataException("Corrupt library index segment was accepted.");
+            }
+            catch (Exception ex) when (ex is not InvalidDataException ||
+                                       ex.Message != "Corrupt library index segment was accepted.")
+            {
+            }
+            try
+            {
+                StreamingAssetV3IO.ReadLibraryIndexHeader(block, 0, library.CatalogHeaderLength, library.Id,
+                    library.ImageCount + 1);
+                throw new InvalidDataException("Mismatched library index image count was accepted.");
+            }
+            catch (InvalidDataException ex) when (ex.Message != "Mismatched library index image count was accepted.")
+            {
+            }
+
             V3LibraryIndex index = StreamingAssetV3IO.ReadLibraryIndex(block, library.Id,
                 library.ImageCount, library.FileLength);
             if (index.Images[0].TrueWidth != 1 || index.Images[0].TrueHeight != 1)
                 throw new InvalidDataException("V3 true-size metadata self-test failed.");
+            if (header.Frames.Count != index.Frames.Count)
+                throw new InvalidDataException("V3 library index frame count self-test failed.");
             LibraryFrameRecord frame = index.Frames.Single();
             if (frame.Action != 2 || frame.Start != 10 || frame.Count != 4 || frame.Skip != 1 ||
                 frame.Interval != 80 || frame.EffectStart != 20 || frame.EffectCount != 3 ||
@@ -801,14 +1078,26 @@ internal static class V3Builder
             }
 
             V3MapRecord mapRecord = manifest.Maps.Single();
-            block = catalog.AsSpan((int)mapRecord.CatalogOffset, mapRecord.CatalogLength).ToArray();
-            V3MapIndex mapIndex = StreamingAssetV3IO.ReadMapIndex(block, mapRecord.Id, mapRecord.FileLength);
-            V3MapChunkRecord chunkRecord = mapIndex.Chunks.Single();
             byte[] pack = File.ReadAllBytes(GetOutputPath(output, StreamingAssetV3IO.GetMapPath(mapRecord.FileHash)));
-            byte[] chunkBytes = pack.AsSpan((int)chunkRecord.Offset, chunkRecord.Length).ToArray();
-            StreamingMapChunk chunk = StreamingAssetV3IO.ReadMapChunk(chunkBytes, chunkRecord);
+            StreamingMapPack mapPack = StreamingMapPack.Parse(pack, mapRecord.Width, mapRecord.Height,
+                mapRecord.ChunkSize);
+            if (mapPack.ChunkCount != 1 || mapPack.Columns != 1 || mapPack.Rows != 1 ||
+                mapPack.GetChunkIndexForCell(0, 0) != 0)
+                throw new InvalidDataException("V3 map pack layout self-test failed.");
+            StreamingMapChunk chunk = mapPack.ReadChunk(0);
             if (chunk.Width != 1 || chunk.Height != 1 || chunk.Cells.Length != 1)
                 throw new InvalidDataException("V3 map pack self-test failed.");
+            try
+            {
+                byte[] corrupt = (byte[])pack.Clone();
+                corrupt[^1] ^= 0xFF;
+                StreamingMapPack.Parse(corrupt, mapRecord.Width, mapRecord.Height, mapRecord.ChunkSize)
+                    .ReadChunk(0);
+                throw new InvalidDataException("Corrupt map pack chunk was accepted.");
+            }
+            catch (InvalidDataException ex) when (ex.Message != "Corrupt map pack chunk was accepted.")
+            {
+            }
 
             DateTime manifestWrite = File.GetLastWriteTimeUtc(Path.Combine(output,
                 StreamingAssetV3Constants.ManifestFileName));
@@ -820,6 +1109,81 @@ internal static class V3Builder
             if (result != 0 || File.GetLastWriteTimeUtc(Path.Combine(output,
                     StreamingAssetV3Constants.ManifestFileName)) != manifestWrite)
                 throw new InvalidDataException("V3 incremental reuse self-test failed.");
+
+            // Pruning must drop an unreferenced file and keep every file the published manifest names.
+            string strayCatalog = GetOutputPath(output, StreamingAssetV3IO.GetCatalogPath(
+                StreamingAssetIO.ComputeSha256(new byte[] { 9, 9, 9 })));
+            Directory.CreateDirectory(Path.GetDirectoryName(strayCatalog)!);
+            File.WriteAllBytes(strayCatalog, new byte[] { 9, 9, 9 });
+            result = Build(new V3BuildOptions
+            {
+                LibraryRoot = libraries, MapRoot = maps, SoundRoot = sounds, Output = output,
+                Version = "self-test", Prune = true
+            });
+            StreamingAssetV3Manifest pruned = ReadJson<StreamingAssetV3Manifest>(Path.Combine(output,
+                StreamingAssetV3Constants.ManifestFileName));
+            if (result != 0 || File.Exists(strayCatalog) ||
+                !File.Exists(GetOutputPath(output, StreamingAssetV3IO.GetCatalogPath(pruned.CatalogHash))) ||
+                !File.Exists(GetOutputPath(output, StreamingAssetV3IO.GetLibraryPath(pruned.Libraries[0].FileHash))) ||
+                !File.Exists(GetOutputPath(output, StreamingAssetV3IO.GetMapPath(pruned.Maps[0].FileHash))) ||
+                !File.Exists(GetOutputPath(output, StreamingAssetV3IO.GetSoundPath(pruned.Sounds[0].Hash,
+                    pruned.Sounds[0].Extension))))
+                throw new InvalidDataException("V3 prune self-test failed.");
+
+            // A recording dropped next to the published tree is picked up without extra flags, and the
+            // resulting pack must survive pruning while a stale one does not.
+            File.WriteAllLines(Path.Combine(output, DefaultUsageFileName), new[]
+            {
+                "# recorded first-run working set",
+                StreamingWorkingSetPack.FormatUsageLine(pruned.Libraries[0].Id, 0),
+                StreamingWorkingSetPack.FormatUsageLine(pruned.Libraries[0].Id, 4096),
+                StreamingWorkingSetPack.FormatUsageLine("does/not/exist", 0)
+            });
+            string strayWorkingSet = GetOutputPath(output, StreamingAssetV3IO.GetWorkingSetPath(
+                StreamingAssetIO.ComputeSha256(new byte[] { 8, 8, 8 })));
+            Directory.CreateDirectory(Path.GetDirectoryName(strayWorkingSet)!);
+            File.WriteAllBytes(strayWorkingSet, new byte[] { 8, 8, 8 });
+            result = Build(V3BuildOptions.Parse(new[]
+            {
+                "build-v3", "--library-root", libraries, "--map-root", maps, "--sound-root", sounds,
+                "--output", output, "--version", "self-test-workset", "--prune"
+            }));
+            StreamingAssetV3Manifest withWorkingSet = ReadJson<StreamingAssetV3Manifest>(Path.Combine(output,
+                StreamingAssetV3Constants.ManifestFileName));
+            string workingSetPath = GetOutputPath(output,
+                StreamingAssetV3IO.GetWorkingSetPath(withWorkingSet.WorkingSetHash));
+            if (result != 0 || withWorkingSet.WorkingSetImageCount != 1 || File.Exists(strayWorkingSet) ||
+                !File.Exists(workingSetPath) ||
+                new FileInfo(workingSetPath).Length != withWorkingSet.WorkingSetLength)
+                throw new InvalidDataException("V3 working set publish self-test failed.");
+
+            byte[] workingSetBytes = File.ReadAllBytes(workingSetPath);
+            if (!string.Equals(StreamingAssetIO.ComputeSha256(workingSetBytes), withWorkingSet.WorkingSetHash,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("V3 working set hash self-test failed.");
+            StreamingWorkingSet workingSet = StreamingWorkingSetPack.Parse(workingSetBytes);
+            WorkingSetLibraryView view = workingSet.Libraries.Single();
+            WorkingSetPayload entry = view.Entries.Single();
+            byte[] published = File.ReadAllBytes(GetOutputPath(output,
+                StreamingAssetV3IO.GetLibraryPath(withWorkingSet.Libraries[0].FileHash)));
+            if (!string.Equals(view.Id, withWorkingSet.Libraries[0].Id, StringComparison.Ordinal) ||
+                !string.Equals(view.FileHash, withWorkingSet.Libraries[0].FileHash, StringComparison.OrdinalIgnoreCase) ||
+                entry.Index != 0 || workingSet.ImageCount != 1 ||
+                !workingSetBytes.AsSpan(entry.PayloadOffset, entry.Length)
+                    .SequenceEqual(published.AsSpan((int)entry.Offset, entry.Length)))
+                throw new InvalidDataException("V3 working set payload self-test failed.");
+            try
+            {
+                byte[] corrupt = (byte[])workingSetBytes.Clone();
+                corrupt[^1] ^= 0xFF;
+                corrupt = corrupt.AsSpan(0, corrupt.Length - 1).ToArray();
+                StreamingWorkingSetPack.Parse(corrupt);
+                throw new InvalidDataException("Truncated working set was accepted.");
+            }
+            catch (InvalidDataException ex) when (ex.Message != "Truncated working set was accepted.")
+            {
+            }
+            File.Delete(Path.Combine(output, DefaultUsageFileName));
 
             string badMap = Path.Combine(root, "truncated.map");
             File.WriteAllBytes(badMap, new byte[] { 1, 0, 0x43, 0x23, 1, 0, 1, 0 });
@@ -919,8 +1283,7 @@ internal static class V3Builder
         writer.Write((byte)0);
     }
 
-    private sealed record LibraryBuildItem(V3LibraryRecord Record, byte[] CatalogBlock);
-    private sealed record MapBuildItem(V3MapRecord Record, byte[] CatalogBlock);
+    private sealed record LibraryBuildItem(V3LibraryRecord Record, V3LibraryIndexBlock CatalogBlock);
 
     internal sealed class V3BuildOptions
     {
@@ -931,6 +1294,24 @@ internal static class V3Builder
         public string Version { get; set; }
         public bool Verify { get; set; }
         public bool Full { get; set; }
+        public bool Prune { get; set; }
+
+        /// <summary>
+        /// Recorded first-run usage: one <c>libraryId</c> plus image index per line. Defaults to
+        /// <c>&lt;output&gt;/workset-usage.txt</c> when that file exists, so a recording dropped next to the
+        /// published tree is picked up without extra flags.
+        /// </summary>
+        public string Usage { get; set; }
+
+        /// <summary>Upper bound for the published working set. A pack larger than this is a recording bug.</summary>
+        public long WorkingSetMaxBytes { get; set; } = 64L * 1024 * 1024;
+
+        /// <summary>
+        /// Records larger than this stay out of the pack. A megabyte-sized image costs more to transfer than
+        /// the round-trip packing it would save, and packing it makes every cold client take art it may never
+        /// display; the login backgrounds of <c>ChrSel</c> alone measured 40.3 MB of a 44.4 MB recording.
+        /// </summary>
+        public long WorkingSetMaxImageBytes { get; set; } = 256L * 1024;
 
         public static V3BuildOptions Parse(string[] args)
         {
@@ -948,6 +1329,21 @@ internal static class V3Builder
                     case "--version": options.Version = Next(args, ref index, arg); break;
                     case "--verify": options.Verify = true; break;
                     case "--full": options.Full = true; break;
+                    case "--prune": options.Prune = true; break;
+                    case "--usage": options.Usage = Next(args, ref index, arg); break;
+                    case "--workset-max-mb":
+                        string value = Next(args, ref index, arg);
+                        if (!int.TryParse(value, out int megabytes) || megabytes < 1 || megabytes > 4096)
+                            throw new ArgumentException($"--workset-max-mb must be between 1 and 4096: {value}");
+                        options.WorkingSetMaxBytes = megabytes * 1024L * 1024L;
+                        break;
+                    case "--workset-max-image-kb":
+                        string imageValue = Next(args, ref index, arg);
+                        if (!int.TryParse(imageValue, out int kilobytes) || kilobytes < 1 || kilobytes > 1048576)
+                            throw new ArgumentException(
+                                $"--workset-max-image-kb must be between 1 and 1048576: {imageValue}");
+                        options.WorkingSetMaxImageBytes = kilobytes * 1024L;
+                        break;
                     default: throw new ArgumentException($"Unknown argument: {arg}");
                 }
             }
@@ -958,6 +1354,12 @@ internal static class V3Builder
             options.MapRoot = Path.GetFullPath(options.MapRoot);
             options.SoundRoot = Path.GetFullPath(options.SoundRoot);
             options.Output = Path.GetFullPath(options.Output);
+            if (!string.IsNullOrWhiteSpace(options.Usage)) options.Usage = Path.GetFullPath(options.Usage);
+            else
+            {
+                string defaultUsage = Path.Combine(options.Output, DefaultUsageFileName);
+                if (File.Exists(defaultUsage)) options.Usage = defaultUsage;
+            }
             return options;
         }
 

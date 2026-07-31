@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.IO.Compression;
 
 namespace Shared.StreamingAssets;
@@ -7,42 +8,66 @@ public static class StreamingAssetV3IO
     private const int MaximumAssetCount = 10_000_000;
     private const int MaximumRecordLength = 256 * 1024 * 1024;
     private const int MaximumIdLength = 2048;
+    private const int RecordSize = StreamingAssetV3Constants.LibraryImageRecordSize;
 
-    public static byte[] WriteLibraryIndex(V3LibraryIndex index)
+    /// <summary>
+    /// Serialises one library index as an uncompressed header (segment directory and frames) followed by
+    /// Brotli-compressed segments of fixed-size image records. Clients fetch the header once and then only
+    /// the segments they draw from, so the published catalog no longer has to be read whole.
+    /// Layout (little-endian):
+    /// magic, formatVersion, id, imageCount, segmentSize, segmentCount, frameCount,
+    /// segmentCount * (compressedLength, uncompressedLength, 32 byte hash), frames, then the payloads.
+    /// </summary>
+    public static V3LibraryIndexBlock WriteLibraryIndexBlock(V3LibraryIndex index,
+        int segmentSize = StreamingAssetV3Constants.LibraryIndexSegmentSize)
     {
         ArgumentNullException.ThrowIfNull(index);
         if (index.Images.Count != index.ImageCount)
             throw new InvalidDataException("Library image count does not match its index.");
+        if (segmentSize <= 0 || segmentSize > MaximumAssetCount)
+            throw new InvalidDataException("Invalid library index segment size.");
+
+        int segmentCount = (index.ImageCount + segmentSize - 1) / segmentSize;
+        if (segmentCount > StreamingAssetV3Constants.MaxLibraryIndexSegments)
+            throw new InvalidDataException("Library index needs too many segments.");
+
+        byte[][] payloads = new byte[segmentCount][];
+        int[] rawLengths = new int[segmentCount];
+        string[] hashes = new string[segmentCount];
+        for (int segment = 0; segment < segmentCount; segment++)
+        {
+            int first = segment * segmentSize;
+            int count = Math.Min(segmentSize, index.ImageCount - first);
+            byte[] raw = new byte[count * RecordSize];
+            for (int i = 0; i < count; i++)
+            {
+                V3LibraryImageRecord image = index.Images[first + i];
+                if (image.Index != first + i)
+                    throw new InvalidDataException($"Library image index is not dense at {first + i}.");
+                EncodeLibraryImageRecord(image, raw.AsSpan(i * RecordSize, RecordSize));
+            }
+            payloads[segment] = Compress(raw);
+            rawLengths[segment] = raw.Length;
+            hashes[segment] = StreamingAssetIO.ComputeSha256(payloads[segment]);
+        }
 
         using MemoryStream output = new();
+        int headerLength;
         using (BinaryWriter writer = new(output, System.Text.Encoding.UTF8, true))
         {
             writer.Write(StreamingAssetV3Constants.LibraryIndexMagic);
             writer.Write(StreamingAssetV3Constants.FormatVersion);
             writer.Write(index.Id ?? string.Empty);
             writer.Write(index.ImageCount);
+            writer.Write(segmentSize);
+            writer.Write(segmentCount);
             writer.Write(index.Frames.Count);
 
-            for (int i = 0; i < index.Images.Count; i++)
+            for (int segment = 0; segment < segmentCount; segment++)
             {
-                V3LibraryImageRecord image = index.Images[i];
-                if (image.Index != i)
-                    throw new InvalidDataException($"Library image index is not dense at {i}.");
-
-                writer.Write(image.Index);
-                writer.Write(image.Exists);
-                writer.Write(image.Offset);
-                writer.Write(image.Length);
-                writer.Write(image.Width);
-                writer.Write(image.Height);
-                writer.Write(image.X);
-                writer.Write(image.Y);
-                writer.Write(image.ShadowX);
-                writer.Write(image.ShadowY);
-                writer.Write(image.Shadow);
-                writer.Write(image.TrueWidth);
-                writer.Write(image.TrueHeight);
-                writer.Write(image.Exists ? Convert.FromHexString(image.Hash) : new byte[32]);
+                writer.Write(payloads[segment].Length);
+                writer.Write(rawLengths[segment]);
+                writer.Write(Convert.FromHexString(hashes[segment]));
             }
 
             foreach (LibraryFrameRecord frame in index.Frames)
@@ -59,16 +84,28 @@ public static class StreamingAssetV3IO
                 writer.Write(frame.Reverse);
                 writer.Write(frame.Blend);
             }
+
+            writer.Flush();
+            headerLength = checked((int)output.Length);
+            foreach (byte[] payload in payloads) writer.Write(payload);
         }
 
-        return output.ToArray();
+        byte[] bytes = output.ToArray();
+        return new V3LibraryIndexBlock
+        {
+            Bytes = bytes,
+            HeaderLength = headerLength,
+            HeaderHash = StreamingAssetIO.ComputeSha256(bytes.AsSpan(0, headerLength).ToArray())
+        };
     }
 
-    public static V3LibraryIndex ReadLibraryIndex(byte[] data, string expectedId = null,
-        int expectedImageCount = -1, long libraryLength = -1)
+    /// <summary>Parses a block header. <paramref name="length"/> must be the published header length.</summary>
+    public static V3LibraryIndexHeader ReadLibraryIndexHeader(byte[] data, int offset, int length,
+        string expectedId = null, int expectedImageCount = -1)
     {
         ArgumentNullException.ThrowIfNull(data);
-        using MemoryStream input = new(data, false);
+        Require(offset >= 0 && length > 0 && length <= data.Length - offset, "Library index header range is invalid.");
+        using MemoryStream input = new(data, offset, length, false);
         using BinaryReader reader = new(input);
 
         Require(reader.ReadInt32() == StreamingAssetV3Constants.LibraryIndexMagic, "Invalid V3 library index magic.");
@@ -79,57 +116,46 @@ public static class StreamingAssetV3IO
             "Library id does not match the root manifest.");
 
         int imageCount = reader.ReadInt32();
+        int segmentSize = reader.ReadInt32();
+        int segmentCount = reader.ReadInt32();
         int frameCount = reader.ReadInt32();
         Require(imageCount >= 0 && imageCount <= MaximumAssetCount, "Invalid library image count.");
+        Require(segmentSize > 0 && segmentSize <= MaximumAssetCount, "Invalid library index segment size.");
+        Require(segmentCount >= 0 && segmentCount <= StreamingAssetV3Constants.MaxLibraryIndexSegments,
+            "Invalid library index segment count.");
+        Require(segmentCount == (imageCount + segmentSize - 1) / segmentSize,
+            "Library index segment count does not match its image count.");
         Require(frameCount >= 0 && frameCount <= MaximumAssetCount, "Invalid library frame count.");
         Require(expectedImageCount < 0 || imageCount == expectedImageCount,
             "Library image count does not match the root manifest.");
 
-        V3LibraryIndex index = new() { Id = NormalizeId(id), ImageCount = imageCount };
-        for (int i = 0; i < imageCount; i++)
+        V3LibraryIndexHeader header = new()
         {
-            V3LibraryImageRecord image = new()
-            {
-                Index = reader.ReadInt32()
-            };
-            bool exists = reader.ReadBoolean();
-            image.Offset = reader.ReadInt64();
-            image.Length = reader.ReadInt32();
-            image.Width = reader.ReadInt16();
-            image.Height = reader.ReadInt16();
-            image.X = reader.ReadInt16();
-            image.Y = reader.ReadInt16();
-            image.ShadowX = reader.ReadInt16();
-            image.ShadowY = reader.ReadInt16();
-            image.Shadow = reader.ReadByte();
-            image.TrueWidth = reader.ReadInt16();
-            image.TrueHeight = reader.ReadInt16();
-            byte[] hash = ReadExact(reader, 32);
-            image.Hash = exists ? Convert.ToHexString(hash).ToLowerInvariant() : string.Empty;
+            Id = NormalizeId(id), ImageCount = imageCount, SegmentSize = segmentSize
+        };
 
-            Require(image.Index == i, "Library image indexes are not dense.");
-            if (exists)
+        long payloadOffset = 0;
+        for (int segment = 0; segment < segmentCount; segment++)
+        {
+            int compressedLength = reader.ReadInt32();
+            int uncompressedLength = reader.ReadInt32();
+            string hash = Convert.ToHexString(ReadExact(reader, 32)).ToLowerInvariant();
+            Require(compressedLength > 0 && compressedLength <= MaximumRecordLength,
+                "Invalid library index segment length.");
+            Require(uncompressedLength == header.GetSegmentImageCount(segment) * RecordSize,
+                "Library index segment declares an unexpected record count.");
+            Require(StreamingAssetIO.IsValidSha256(hash), "Invalid library index segment hash.");
+            header.Segments.Add(new V3LibraryIndexSegment
             {
-                Require(image.Offset >= 0 && image.Length >= 17 && image.Length <= MaximumRecordLength,
-                    "Invalid library image range.");
-                Require(image.Width >= 0 && image.Height >= 0 && image.TrueWidth >= 0 && image.TrueHeight >= 0,
-                    "Invalid library image dimensions.");
-                Require(StreamingAssetIO.IsValidSha256(image.Hash), "Invalid library image hash.");
-                if (libraryLength >= 0)
-                    Require(image.Offset <= libraryLength && image.Length <= libraryLength - image.Offset,
-                        "Library image range exceeds the Lib file.");
-            }
-            else
-            {
-                Require(image.Offset == -1 && image.Length == 0 && hash.All(value => value == 0),
-                    "Invalid empty library image record.");
-            }
-            index.Images.Add(image);
+                Index = segment, Offset = payloadOffset, CompressedLength = compressedLength,
+                UncompressedLength = uncompressedLength, Hash = hash
+            });
+            payloadOffset = checked(payloadOffset + compressedLength);
         }
 
         for (int i = 0; i < frameCount; i++)
         {
-            index.Frames.Add(new LibraryFrameRecord
+            header.Frames.Add(new LibraryFrameRecord
             {
                 Action = reader.ReadByte(),
                 Start = reader.ReadInt32(),
@@ -145,117 +171,256 @@ public static class StreamingAssetV3IO
             });
         }
 
-        Require(input.Position == input.Length, "Trailing data in V3 library index.");
+        Require(input.Position == input.Length, "Trailing data in V3 library index header.");
+        header.HeaderLength = length;
+        // Payload offsets are relative to the block, so shift them past the header.
+        foreach (V3LibraryIndexSegment segment in header.Segments) segment.Offset += length;
+        return header;
+    }
+
+    /// <summary>Inflates one segment and validates every record it contains against the Lib file length.</summary>
+    public static byte[] ReadLibraryIndexSegment(V3LibraryIndexHeader header, int segmentIndex,
+        byte[] compressed, long libraryLength = -1)
+    {
+        ArgumentNullException.ThrowIfNull(header);
+        ArgumentNullException.ThrowIfNull(compressed);
+        Require(segmentIndex >= 0 && segmentIndex < header.SegmentCount, "Library index segment is out of range.");
+        V3LibraryIndexSegment segment = header.Segments[segmentIndex];
+        Require(compressed.Length == segment.CompressedLength, "Library index segment length does not match its header.");
+
+        byte[] raw = Decompress(compressed, segment.UncompressedLength);
+        int first = header.GetSegmentFirstImage(segmentIndex);
+        int count = header.GetSegmentImageCount(segmentIndex);
+        for (int i = 0; i < count; i++)
+            ValidateLibraryImageRecord(DecodeLibraryImageRecord(raw, i, first + i), libraryLength);
+        return raw;
+    }
+
+    public static V3LibraryImageRecord DecodeLibraryImageRecord(byte[] segment, int indexInSegment, int imageIndex)
+    {
+        ArgumentNullException.ThrowIfNull(segment);
+        int start = indexInSegment * RecordSize;
+        if (indexInSegment < 0 || start > segment.Length - RecordSize)
+            throw new InvalidDataException("Library image record is out of range.");
+        ReadOnlySpan<byte> span = segment.AsSpan(start, RecordSize);
+
+        uint offset = BinaryPrimitives.ReadUInt32LittleEndian(span);
+        uint length = BinaryPrimitives.ReadUInt32LittleEndian(span[4..]);
+        return new V3LibraryImageRecord
+        {
+            Index = imageIndex,
+            Offset = length == 0 ? -1 : offset,
+            Length = length == 0 ? 0 : checked((int)length),
+            Width = BinaryPrimitives.ReadInt16LittleEndian(span[8..]),
+            Height = BinaryPrimitives.ReadInt16LittleEndian(span[10..]),
+            X = BinaryPrimitives.ReadInt16LittleEndian(span[12..]),
+            Y = BinaryPrimitives.ReadInt16LittleEndian(span[14..]),
+            ShadowX = BinaryPrimitives.ReadInt16LittleEndian(span[16..]),
+            ShadowY = BinaryPrimitives.ReadInt16LittleEndian(span[18..]),
+            Shadow = span[20],
+            TrueWidth = BinaryPrimitives.ReadInt16LittleEndian(span[21..]),
+            TrueHeight = BinaryPrimitives.ReadInt16LittleEndian(span[23..])
+        };
+    }
+
+    private static void EncodeLibraryImageRecord(V3LibraryImageRecord image, Span<byte> span)
+    {
+        if (image.Exists)
+        {
+            if (image.Offset < 0 || image.Offset > uint.MaxValue)
+                throw new InvalidDataException($"Library image {image.Index} offset does not fit in 32 bits.");
+            if (image.Length <= 0 || image.Length > MaximumRecordLength)
+                throw new InvalidDataException($"Library image {image.Index} has an invalid record length.");
+            BinaryPrimitives.WriteUInt32LittleEndian(span, (uint)image.Offset);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[4..], (uint)image.Length);
+        }
+        else
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(span, 0);
+            BinaryPrimitives.WriteUInt32LittleEndian(span[4..], 0);
+        }
+
+        BinaryPrimitives.WriteInt16LittleEndian(span[8..], image.Width);
+        BinaryPrimitives.WriteInt16LittleEndian(span[10..], image.Height);
+        BinaryPrimitives.WriteInt16LittleEndian(span[12..], image.X);
+        BinaryPrimitives.WriteInt16LittleEndian(span[14..], image.Y);
+        BinaryPrimitives.WriteInt16LittleEndian(span[16..], image.ShadowX);
+        BinaryPrimitives.WriteInt16LittleEndian(span[18..], image.ShadowY);
+        span[20] = image.Shadow;
+        BinaryPrimitives.WriteInt16LittleEndian(span[21..], image.TrueWidth);
+        BinaryPrimitives.WriteInt16LittleEndian(span[23..], image.TrueHeight);
+    }
+
+    private static void ValidateLibraryImageRecord(V3LibraryImageRecord image, long libraryLength)
+    {
+        if (!image.Exists)
+        {
+            Require(image.Offset == -1 && image.Length == 0, "Invalid empty library image record.");
+            return;
+        }
+        Require(image.Length >= 17 && image.Length <= MaximumRecordLength, "Invalid library image range.");
+        Require(image.Width >= 0 && image.Height >= 0 && image.TrueWidth >= 0 && image.TrueHeight >= 0,
+            "Invalid library image dimensions.");
+        if (libraryLength >= 0)
+            Require(image.Offset <= libraryLength && image.Length <= libraryLength - image.Offset,
+                "Library image range exceeds the Lib file.");
+    }
+
+    /// <summary>
+    /// Checks downloaded Lib bytes against their catalog metadata. This replaces the per-image SHA-256 the
+    /// catalog used to carry: a record only passes if it parses exactly and its header matches the index.
+    /// </summary>
+    public static bool IsLibraryImageRecordValid(V3LibraryImageRecord image, byte[] bytes)
+    {
+        if (image == null || bytes == null || bytes.Length != image.Length) return false;
+        try
+        {
+            V3LibraryImagePayload payload = ReadLibraryImageRecord(bytes);
+            return payload.Width == image.Width && payload.Height == image.Height && payload.X == image.X &&
+                   payload.Y == image.Y && payload.ShadowX == image.ShadowX && payload.ShadowY == image.ShadowY &&
+                   payload.Shadow == image.Shadow;
+        }
+        catch (InvalidDataException) { return false; }
+        catch (EndOfStreamException) { return false; }
+    }
+
+    /// <summary>Materialises a whole block. Used by the builder; clients only ever read single segments.</summary>
+    public static V3LibraryIndex ReadLibraryIndex(byte[] data, string expectedId = null,
+        int expectedImageCount = -1, long libraryLength = -1)
+    {
+        ArgumentNullException.ThrowIfNull(data);
+        V3LibraryIndexHeader header = ReadLibraryIndexHeader(data, 0, PeekHeaderLength(data),
+            expectedId, expectedImageCount);
+        V3LibraryIndex index = new() { Id = header.Id, ImageCount = header.ImageCount };
+        long expectedEnd = header.HeaderLength;
+
+        for (int segmentIndex = 0; segmentIndex < header.SegmentCount; segmentIndex++)
+        {
+            V3LibraryIndexSegment segment = header.Segments[segmentIndex];
+            Require(segment.Offset == expectedEnd, "Library index segments are not contiguous.");
+            Require(segment.Offset + segment.CompressedLength <= data.Length,
+                "Library index segment exceeds its block.");
+            byte[] compressed = data.AsSpan((int)segment.Offset, segment.CompressedLength).ToArray();
+            byte[] raw = ReadLibraryIndexSegment(header, segmentIndex, compressed, libraryLength);
+            int first = header.GetSegmentFirstImage(segmentIndex);
+            int count = header.GetSegmentImageCount(segmentIndex);
+            for (int i = 0; i < count; i++) index.Images.Add(DecodeLibraryImageRecord(raw, i, first + i));
+            expectedEnd += segment.CompressedLength;
+        }
+
+        Require(expectedEnd == data.Length, "Trailing data in V3 library index block.");
+        index.Frames.AddRange(header.Frames);
         return index;
     }
 
-    public static byte[] WriteMapIndex(V3MapIndex index)
-    {
-        ArgumentNullException.ThrowIfNull(index);
-        using MemoryStream output = new();
-        using (BinaryWriter writer = new(output, System.Text.Encoding.UTF8, true))
-        {
-            writer.Write(StreamingAssetV3Constants.MapIndexMagic);
-            writer.Write(StreamingAssetV3Constants.FormatVersion);
-            writer.Write(index.Id ?? string.Empty);
-            writer.Write(index.Width);
-            writer.Write(index.Height);
-            writer.Write(index.ChunkSize);
-            writer.Write(index.Chunks.Count);
-            foreach (V3MapChunkRecord chunk in index.Chunks)
-            {
-                writer.Write(chunk.X);
-                writer.Write(chunk.Y);
-                writer.Write(chunk.Width);
-                writer.Write(chunk.Height);
-                writer.Write(chunk.Offset);
-                writer.Write(chunk.Length);
-                writer.Write(chunk.UncompressedLength);
-                writer.Write(Convert.FromHexString(chunk.Hash));
-            }
-        }
-        return output.ToArray();
-    }
-
-    public static V3MapIndex ReadMapIndex(byte[] data, string expectedId = null, long packLength = -1)
+    /// <summary>
+    /// Reads the header length of a block that is already in memory, so a whole published block can be
+    /// parsed without consulting the manifest.
+    /// </summary>
+    public static int PeekHeaderLength(byte[] data)
     {
         ArgumentNullException.ThrowIfNull(data);
         using MemoryStream input = new(data, false);
         using BinaryReader reader = new(input);
-
-        Require(reader.ReadInt32() == StreamingAssetV3Constants.MapIndexMagic, "Invalid V3 map index magic.");
-        Require(reader.ReadInt32() == StreamingAssetV3Constants.FormatVersion, "Unsupported V3 map index version.");
+        Require(reader.ReadInt32() == StreamingAssetV3Constants.LibraryIndexMagic, "Invalid V3 library index magic.");
+        Require(reader.ReadInt32() == StreamingAssetV3Constants.FormatVersion, "Unsupported V3 library index version.");
         string id = reader.ReadString();
-        Require(id.Length <= MaximumIdLength, "Map id is too long.");
-        Require(expectedId == null || string.Equals(NormalizeId(id), NormalizeId(expectedId), StringComparison.Ordinal),
-            "Map id does not match the root manifest.");
-
-        V3MapIndex index = new()
-        {
-            Id = NormalizeId(id),
-            Width = reader.ReadInt32(),
-            Height = reader.ReadInt32(),
-            ChunkSize = reader.ReadInt32()
-        };
-        int count = reader.ReadInt32();
-        Require(index.Width > 0 && index.Height > 0 && index.Width <= 100_000 && index.Height <= 100_000,
-            "Invalid map dimensions.");
-        Require(index.ChunkSize > 0 && index.ChunkSize <= 1024, "Invalid map chunk size.");
-        Require(count >= 0 && count <= MaximumAssetCount, "Invalid map chunk count.");
-
-        int columns = (index.Width + index.ChunkSize - 1) / index.ChunkSize;
-        int rows = (index.Height + index.ChunkSize - 1) / index.ChunkSize;
-        Require((long)columns * rows == count, "Map chunk count does not cover the complete map.");
-
-        HashSet<string> keys = new(StringComparer.Ordinal);
-        long expectedOffset = 0;
-        for (int i = 0; i < count; i++)
-        {
-            V3MapChunkRecord chunk = new()
-            {
-                X = reader.ReadInt32(),
-                Y = reader.ReadInt32(),
-                Width = reader.ReadInt32(),
-                Height = reader.ReadInt32(),
-                Offset = reader.ReadInt64(),
-                Length = reader.ReadInt32(),
-                UncompressedLength = reader.ReadInt32(),
-                Hash = Convert.ToHexString(ReadExact(reader, 32)).ToLowerInvariant()
-            };
-            Require(chunk.X >= 0 && chunk.Y >= 0 && chunk.Width > 0 && chunk.Height > 0 &&
-                    chunk.X + chunk.Width <= index.Width && chunk.Y + chunk.Height <= index.Height,
-                "Invalid map chunk bounds.");
-            int expectedX = i / rows * index.ChunkSize;
-            int expectedY = i % rows * index.ChunkSize;
-            Require(chunk.X == expectedX && chunk.Y == expectedY &&
-                    chunk.Width == Math.Min(index.ChunkSize, index.Width - expectedX) &&
-                    chunk.Height == Math.Min(index.ChunkSize, index.Height - expectedY),
-                "Map chunks are missing, misordered or not aligned to the chunk grid.");
-            Require(chunk.Offset >= 0 && chunk.Length > 0 && chunk.Length <= MaximumRecordLength &&
-                    chunk.UncompressedLength > 0 && chunk.UncompressedLength <= MaximumRecordLength,
-                "Invalid map chunk range.");
-            Require(chunk.Offset == expectedOffset, "Map chunk ranges are not contiguous.");
-            Require(chunk.UncompressedLength == checked(20 + chunk.Width * chunk.Height * 32),
-                "Invalid map chunk uncompressed length.");
-            Require(StreamingAssetIO.IsValidSha256(chunk.Hash), "Invalid map chunk hash.");
-            Require(keys.Add(chunk.Key), "Duplicate map chunk coordinates.");
-            if (packLength >= 0)
-                Require(chunk.Offset <= packLength && chunk.Length <= packLength - chunk.Offset,
-                    "Map chunk range exceeds its pack.");
-            index.Chunks.Add(chunk);
-            expectedOffset += chunk.Length;
-        }
-
-        if (packLength >= 0) Require(expectedOffset == packLength, "Map pack has trailing or missing data.");
-        Require(input.Position == input.Length, "Trailing data in V3 map index.");
-        return index;
+        Require(id.Length <= MaximumIdLength, "Library id is too long.");
+        _ = reader.ReadInt32();
+        int segmentSize = reader.ReadInt32();
+        int segmentCount = reader.ReadInt32();
+        int frameCount = reader.ReadInt32();
+        Require(segmentSize > 0 && segmentCount >= 0 &&
+                segmentCount <= StreamingAssetV3Constants.MaxLibraryIndexSegments &&
+                frameCount >= 0 && frameCount <= MaximumAssetCount, "Invalid V3 library index header.");
+        long length = input.Position + (long)segmentCount * 40 + (long)frameCount * 35;
+        Require(length > 0 && length <= data.Length, "V3 library index header exceeds its block.");
+        return (int)length;
     }
 
-    public static StreamingMapChunk ReadMapChunk(byte[] data, V3MapChunkRecord expected)
+    private static byte[] Compress(byte[] raw)
+    {
+        using MemoryStream output = new();
+        using (BrotliStream brotli = new(output, CompressionLevel.Optimal, true)) brotli.Write(raw);
+        return output.ToArray();
+    }
+
+    private static byte[] Decompress(byte[] compressed, int expectedLength)
+    {
+        if (expectedLength < 0 || expectedLength > MaximumRecordLength)
+            throw new InvalidDataException("Invalid library index segment length.");
+        byte[] output = new byte[expectedLength];
+        using MemoryStream input = new(compressed, false);
+        using BrotliStream brotli = new(input, CompressionMode.Decompress);
+        int total = 0;
+        while (total < output.Length)
+        {
+            int read = brotli.Read(output, total, output.Length - total);
+            if (read == 0) break;
+            total += read;
+        }
+        Require(total == output.Length && brotli.ReadByte() == -1, "Unexpected library index segment size.");
+        return output;
+    }
+
+    /// <summary>
+    /// Builds a self-describing map pack. Layout (little-endian):
+    /// magic, formatVersion, width, height, chunkSize, chunkCount,
+    /// chunkCount * (compressedLength, uncompressedLength), then the payloads back to back.
+    /// Chunks are stored column-major: chunk i covers X = i / rows * chunkSize, Y = i % rows * chunkSize.
+    /// </summary>
+    public static byte[] WriteMapPack(int width, int height, int chunkSize,
+        IReadOnlyList<byte[]> compressedChunks, IReadOnlyList<int> uncompressedLengths)
+    {
+        ArgumentNullException.ThrowIfNull(compressedChunks);
+        ArgumentNullException.ThrowIfNull(uncompressedLengths);
+        if (width <= 0 || height <= 0 || width > 100_000 || height > 100_000)
+            throw new InvalidDataException("Invalid map dimensions.");
+        if (chunkSize <= 0 || chunkSize > 1024) throw new InvalidDataException("Invalid map chunk size.");
+        if (compressedChunks.Count != uncompressedLengths.Count)
+            throw new InvalidDataException("Map chunk payload and length counts differ.");
+
+        int columns = (width + chunkSize - 1) / chunkSize;
+        int rows = (height + chunkSize - 1) / chunkSize;
+        if ((long)columns * rows != compressedChunks.Count)
+            throw new InvalidDataException("Map chunks do not cover the complete map.");
+
+        using MemoryStream output = new();
+        using (BinaryWriter writer = new(output, System.Text.Encoding.UTF8, true))
+        {
+            writer.Write(StreamingAssetV3Constants.MapPackMagic);
+            writer.Write(StreamingAssetV3Constants.FormatVersion);
+            writer.Write(width);
+            writer.Write(height);
+            writer.Write(chunkSize);
+            writer.Write(compressedChunks.Count);
+
+            for (int i = 0; i < compressedChunks.Count; i++)
+            {
+                byte[] payload = compressedChunks[i] ?? throw new InvalidDataException($"Missing map chunk payload at {i}.");
+                int chunkX = i / rows * chunkSize;
+                int chunkY = i % rows * chunkSize;
+                int expected = checked(20 + Math.Min(chunkSize, width - chunkX) * Math.Min(chunkSize, height - chunkY) * 32);
+                if (uncompressedLengths[i] != expected)
+                    throw new InvalidDataException($"Map chunk {i} declares an unexpected uncompressed length.");
+                if (payload.Length <= 0 || payload.Length > MaximumRecordLength)
+                    throw new InvalidDataException($"Map chunk {i} has an invalid payload length.");
+                writer.Write(payload.Length);
+                writer.Write(uncompressedLengths[i]);
+            }
+
+            foreach (byte[] payload in compressedChunks) writer.Write(payload);
+        }
+
+        return output.ToArray();
+    }
+
+    public static StreamingMapChunk ReadMapChunk(byte[] data, int offset, int length,
+        int expectedX, int expectedY, int expectedWidth, int expectedHeight, int uncompressedLength)
     {
         ArgumentNullException.ThrowIfNull(data);
-        ArgumentNullException.ThrowIfNull(expected);
-        byte[] raw = DecompressExact(data, expected.UncompressedLength);
+        Require(offset >= 0 && length > 0 && length <= data.Length - offset, "Map chunk range exceeds its pack.");
+        byte[] raw = DecompressExact(data, offset, length, uncompressedLength);
         using MemoryStream input = new(raw, false);
         using BinaryReader reader = new(input);
 
@@ -267,9 +432,9 @@ public static class StreamingAssetV3IO
             Height = reader.ReadInt32()
         };
         int count = reader.ReadInt32();
-        Require(chunk.X == expected.X && chunk.Y == expected.Y && chunk.Width == expected.Width &&
-                chunk.Height == expected.Height && count == checked(expected.Width * expected.Height),
-            "Map chunk header does not match its index.");
+        Require(chunk.X == expectedX && chunk.Y == expectedY && chunk.Width == expectedWidth &&
+                chunk.Height == expectedHeight && count == checked(expectedWidth * expectedHeight),
+            "Map chunk header does not match its pack directory.");
 
         chunk.Cells = new StreamingMapCell[count];
         for (int i = 0; i < count; i++)
@@ -415,11 +580,19 @@ public static class StreamingAssetV3IO
     public static byte[] DecompressExact(byte[] compressed, int expectedLength)
     {
         ArgumentNullException.ThrowIfNull(compressed);
+        return DecompressExact(compressed, 0, compressed.Length, expectedLength);
+    }
+
+    public static byte[] DecompressExact(byte[] compressed, int offset, int count, int expectedLength)
+    {
+        ArgumentNullException.ThrowIfNull(compressed);
+        if (offset < 0 || count < 0 || count > compressed.Length - offset)
+            throw new InvalidDataException("Invalid compressed payload range.");
         if (expectedLength < 0 || expectedLength > MaximumRecordLength)
             throw new InvalidDataException("Invalid decompressed image length.");
 
         byte[] output = new byte[expectedLength];
-        using MemoryStream input = new(compressed, false);
+        using MemoryStream input = new(compressed, offset, count, false);
         using GZipStream gzip = new(input, CompressionMode.Decompress);
         int total = 0;
         while (total < output.Length)
@@ -435,6 +608,9 @@ public static class StreamingAssetV3IO
     public static string GetCatalogPath(string hash) => GetHashedPath(StreamingAssetV3Constants.CatalogsDirectory, hash, ".bin");
     public static string GetLibraryPath(string hash) => GetHashedPath(StreamingAssetV3Constants.LibrariesDirectory, hash, ".lib");
     public static string GetMapPath(string hash) => GetHashedPath(StreamingAssetV3Constants.MapsDirectory, hash, ".mappack");
+
+    public static string GetWorkingSetPath(string hash) =>
+        GetHashedPath(StreamingAssetV3Constants.WorkingSetsDirectory, hash, ".wsp");
 
     public static string GetSoundPath(string hash, string extension)
     {
