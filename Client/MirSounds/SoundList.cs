@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Client.Streaming;
 
 namespace Client.MirSounds
 {
@@ -14,9 +15,19 @@ namespace Client.MirSounds
         {
             string fileName = Path.Combine(Settings.SoundPath, "SoundList.lst");
 
-            if (!File.Exists(fileName)) return;
-
-            string[] lines = File.ReadAllLines(fileName);
+            string[] lines;
+            if (File.Exists(fileName))
+            {
+                lines = File.ReadAllLines(fileName);
+            }
+            else if (AssetManager.GetSoundBytes("soundlist.lst", out byte[] bytes, out _))
+            {
+                lines = Encoding.UTF8.GetString(bytes).Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            }
+            else
+            {
+                return;
+            }
 
             for (int i = 0; i < lines.Length; i++)
             {

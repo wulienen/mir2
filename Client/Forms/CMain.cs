@@ -10,6 +10,7 @@ using Client.MirGraphics;
 using Client.MirNetwork;
 using Client.MirScenes;
 using Client.MirSounds;
+using Client.Streaming;
 using SlimDX.Direct3D9;
 using SlimDX.Windows;
 using Font = System.Drawing.Font;
@@ -356,6 +357,8 @@ namespace Client
 
         private static void UpdateEnviroment()
         {
+            AssetManager.ProcessNotifications();
+
             if (Time >= _cleanTime)
             {
                 _cleanTime = Time + 1000;

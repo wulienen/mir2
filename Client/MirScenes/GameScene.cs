@@ -10411,6 +10411,10 @@ namespace Client.MirScenes
 
         public long OutputDelay;
         private StreamingMapState _streamingMap;
+        private bool _streamingMapUnavailable;
+        private long _nextStreamingMapRetry;
+
+        public bool StreamingMapUnavailable => _streamingMapUnavailable;
 
         private static bool _awakeningAction;
         public static bool AwakeningAction
@@ -10495,20 +10499,33 @@ namespace Client.MirScenes
             MapObject.MagicObjectID = 0;
 
             _streamingMap = null;
+            _streamingMapUnavailable = false;
             bool useLocalMap = File.Exists(FileName) && Settings.PreferLocalAssets;
-            if (useLocalMap || !StreamingMapState.TryCreate(FileName, out _streamingMap))
+            try
             {
-                MapReader Map = new MapReader(FileName);
-                M2CellInfo = Map.MapCells;
-                Width = Map.Width;
-                Height = Map.Height;
+                if (useLocalMap)
+                {
+                    LoadLocalMap();
+                }
+                else if (StreamingMapState.TryCreate(FileName, out _streamingMap))
+                {
+                    Width = _streamingMap.Width;
+                    Height = _streamingMap.Height;
+                    M2CellInfo = _streamingMap.CreatePlaceholderCells();
+                    _streamingMap.EnsureVisibleChunks(this);
+                }
+                else if (File.Exists(FileName))
+                {
+                    LoadLocalMap();
+                }
+                else
+                {
+                    SetStreamingMapUnavailable("manifest or map record is not available");
+                }
             }
-            else
+            catch (Exception ex)
             {
-                Width = _streamingMap.Width;
-                Height = _streamingMap.Height;
-                M2CellInfo = _streamingMap.CreatePlaceholderCells();
-                _streamingMap.EnsureVisibleChunks(this);
+                SetStreamingMapUnavailable(ex.Message);
             }
 
             PathFinder = new PathFinder(this);
@@ -10536,6 +10553,7 @@ namespace Client.MirScenes
         public void Process()
         {
             Processdoors();
+            RetryStreamingMap();
             _streamingMap?.EnsureVisibleChunks(this);
             User.Process();
             for (int i = ObjectsList.Count - 1; i >= 0; i--)
@@ -10598,6 +10616,50 @@ namespace Client.MirScenes
                 MapObject.MouseObjectID = 0;
                 Redraw();
             }
+        }
+
+        public void RetryStreamingMap()
+        {
+            if (!_streamingMapUnavailable || CMain.Time < _nextStreamingMapRetry) return;
+            _nextStreamingMapRetry = CMain.Time + 5000;
+            if (!StreamingMapState.TryCreate(FileName, out StreamingMapState state))
+            {
+                AssetManager.RequestManifest();
+                return;
+            }
+
+            _streamingMap = state;
+            _streamingMapUnavailable = false;
+            Width = state.Width;
+            Height = state.Height;
+            M2CellInfo = state.CreatePlaceholderCells();
+            PathFinder = new PathFinder(this);
+            if (User != null) AddObject(User);
+            state.EnsureVisibleChunks(this);
+            FloorValid = false;
+            LightsValid = false;
+            Redraw();
+        }
+
+        private void LoadLocalMap()
+        {
+            MapReader map = new MapReader(FileName);
+            M2CellInfo = map.MapCells;
+            Width = map.Width;
+            Height = map.Height;
+        }
+
+        private void SetStreamingMapUnavailable(string reason)
+        {
+            _streamingMap = null;
+            _streamingMapUnavailable = true;
+            _nextStreamingMapRetry = CMain.Time + 1000;
+            Width = 1;
+            Height = 1;
+            M2CellInfo = new CellInfo[1, 1];
+            M2CellInfo[0, 0] = new CellInfo();
+            AssetManager.RequestManifest();
+            CMain.SaveError($"Streaming map unavailable '{FileName}': {reason}. Retrying in background.");
         }
 
         public static MapObject GetObject(uint targetID)
@@ -12287,7 +12349,7 @@ namespace Client.MirScenes
             if (M2CellInfo == null || p.X < 0 || p.Y < 0 || p.X >= Width || p.Y >= Height)
                 return false;
 
-            return _streamingMap == null || _streamingMap.IsLoaded(p);
+            return !_streamingMapUnavailable && (_streamingMap == null || _streamingMap.IsLoaded(p));
         }
         public bool HasTarget(Point p)
         {
@@ -12530,20 +12592,27 @@ namespace Client.MirScenes
 
         public void RemoveObject(MapObject ob)
         {
+            if (!ContainsCell(ob?.MapLocation ?? Point.Empty)) return;
             M2CellInfo[ob.MapLocation.X, ob.MapLocation.Y].RemoveObject(ob);
         }
         public void AddObject(MapObject ob)
         {
+            if (!ContainsCell(ob?.MapLocation ?? Point.Empty)) return;
             M2CellInfo[ob.MapLocation.X, ob.MapLocation.Y].AddObject(ob);
         }
         public MapObject FindObject(uint ObjectID, int x, int y)
         {
+            if (!ContainsCell(new Point(x, y))) return null;
             return M2CellInfo[x, y].FindObject(ObjectID);
         }
         public void SortObject(MapObject ob)
         {
+            if (!ContainsCell(ob?.MapLocation ?? Point.Empty)) return;
             M2CellInfo[ob.MapLocation.X, ob.MapLocation.Y].Sort();
         }
+
+        private bool ContainsCell(Point point) => M2CellInfo != null && point.X >= 0 && point.Y >= 0 &&
+                                                  point.X < Width && point.Y < Height;
 
         public Door GetDoor(byte Index)
         {

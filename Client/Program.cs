@@ -3,6 +3,7 @@ using Launcher;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using Client.Resolution;
+using Client.Streaming;
 
 namespace Client
 {
@@ -17,6 +18,21 @@ namespace Client
         [STAThread]
         private static void Main(string[] args)
         {
+            if (args.Any(arg => string.Equals(arg, "--asset-cache-self-test", StringComparison.OrdinalIgnoreCase)))
+            {
+                try
+                {
+                    AssetCacheDatabase.SelfTest();
+                    Console.WriteLine("Asset cache self-test passed.");
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine(ex);
+                    Environment.ExitCode = 1;
+                }
+                return;
+            }
+
             if (args.Length > 0)
             {
                 foreach (var arg in args)
@@ -37,6 +53,11 @@ namespace Client
 
                 Packet.IsServer = false;
                 Settings.Load();
+
+                if (AssetManager.Enabled && !AssetManager.StartupMetadataReady)
+                {
+                    CMain.SaveError("启动界面资源索引暂时不可用，客户端继续使用透明占位并在后台重试。");
+                }
 
                 Application.EnableVisualStyles();
                 Application.SetCompatibleTextRenderingDefault(false);

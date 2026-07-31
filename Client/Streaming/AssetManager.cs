@@ -1,66 +1,105 @@
-using Client.MirControls;
-using Client.MirScenes;
 using Shared.StreamingAssets;
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text.Json;
 
 namespace Client.Streaming
 {
     public static class AssetManager
     {
+        private const int CacheKindCatalog = 1;
+        private const int CacheKindLibraryImage = 2;
+        private const int CacheKindMapChunk = 3;
+        private const int CacheKindSound = 4;
+
+        private static readonly string[] StartupLibraryIds =
+        {
+            "chrsel", "prguse", "prguse2", "prguse3", "xiayiui", "ui_32bit", "title"
+        };
+
         private static readonly HttpClient Client = new(new SocketsHttpHandler
         {
             AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate | DecompressionMethods.Brotli,
             PooledConnectionLifetime = TimeSpan.FromMinutes(5)
         });
-        private static readonly ConcurrentDictionary<string, Lazy<Task<byte[]>>> ObjectLoads = new();
-        private static readonly ConcurrentDictionary<string, byte> BackgroundLoads = new();
-        private static readonly ConcurrentDictionary<string, RetryState> RetryStates = new();
-        private static readonly ConcurrentDictionary<string, LibraryManifestPage> PageCache = new();
-        private static readonly ConcurrentDictionary<string, long> VerifiedObjects = new();
-        private static readonly ConcurrentDictionary<string, byte> PendingBatchObjects = new();
+        private static readonly ConcurrentDictionary<string, Lazy<Task<byte[]>>> Loads = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, byte> BackgroundLoads = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, RetryState> RetryStates = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, V3LibraryIndex> LibraryIndexes = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, V3MapIndex> MapIndexes = new(StringComparer.OrdinalIgnoreCase);
         private static readonly object ManifestLock = new();
         private static SemaphoreSlim DownloadSemaphore = new(4);
-        private static readonly SemaphoreSlim BatchDownloadSemaphore = new(1);
-
-        private static AssetManifest _manifest;
-        private static Dictionary<string, AssetLibraryRecord> _libraries;
-        private static Dictionary<string, AssetMapRecord> _maps;
-        private static Dictionary<string, AssetSoundRecord> _sounds;
+        private static AssetCacheDatabase _cache;
+        private static StreamingAssetV3Manifest _manifest;
+        private static Dictionary<string, V3LibraryRecord> _libraries;
+        private static Dictionary<string, V3MapRecord> _maps;
+        private static Dictionary<string, V3SoundRecord> _sounds;
         private static Task _manifestTask;
         private static DateTime _nextManifestAttemptUtc = DateTime.MinValue;
+        private static int _notificationPending;
 
         public static event Action AssetsUpdated;
-
         public static bool Enabled => Settings.StreamingEnabled && !string.IsNullOrWhiteSpace(Settings.AssetBaseUrl);
-        public static string CacheRoot => Settings.AssetCachePath;
-
-        public static string NormalizeId(string id)
-        {
-            return (id ?? string.Empty).Replace('\\', '/').TrimStart('.', '/').ToLowerInvariant();
-        }
+        public static bool StartupMetadataReady { get; private set; }
 
         public static void Initialize()
         {
             if (!Enabled) return;
-
             Client.Timeout = TimeSpan.FromSeconds(Math.Max(5, Settings.AssetRequestTimeoutSeconds));
             DownloadSemaphore = new SemaphoreSlim(Math.Max(1, Settings.AssetDownloadConcurrency));
-            _ = Task.Run(CleanupCache);
+            _cache = new AssetCacheDatabase(Settings.AssetCachePath, Settings.AssetCacheMaxMB);
+            _ = Task.Run(_cache.Cleanup);
+            StartupMetadataReady = PreloadStartupMetadata();
         }
 
-        public static AssetManifest Manifest
+        public static bool PreloadStartupMetadata()
+        {
+            if (!Enabled) return true;
+            List<string> required = StartupLibraryIds.Where(id =>
+            {
+                string local = Path.Combine(Settings.DataPath, id + ".Lib");
+                return !Settings.PreferLocalAssets || !HasUsableLocalLibrary(local);
+            }).ToList();
+            if (required.Count == 0) return true;
+
+            try
+            {
+                if (Manifest == null) return false;
+                Task<V3LibraryIndex>[] tasks = required.Select(GetLibraryIndexAsync).ToArray();
+                Task.WhenAll(tasks).GetAwaiter().GetResult();
+                bool ready = tasks.All(task => task.Result != null);
+                if (!ready) CMain.SaveError("Streaming startup metadata is incomplete.");
+                return ready;
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Streaming startup metadata failed: {ex.Message}");
+                return false;
+            }
+        }
+
+        public static StreamingAssetV3Manifest Manifest
         {
             get
             {
-                if (!Enabled) return null;
+                if (!Enabled || _cache == null) return null;
                 EnsureManifestAsync().GetAwaiter().GetResult();
                 return _manifest;
             }
         }
 
-        public static bool TryGetLibraryRecord(string id, out AssetLibraryRecord record)
+        public static void RequestManifest()
+        {
+            if (!Enabled || _manifest != null) return;
+            QueueBackground("manifest-v3", async () =>
+            {
+                await EnsureManifestAsync().ConfigureAwait(false);
+                if (_manifest != null) PostAssetsUpdated();
+            });
+        }
+
+        public static bool TryGetLibraryRecord(string id, out V3LibraryRecord record)
         {
             record = null;
             if (Manifest == null) return false;
@@ -68,7 +107,7 @@ namespace Client.Streaming
             return _libraries.TryGetValue(NormalizeId(id), out record);
         }
 
-        public static bool TryGetMapRecord(string id, out AssetMapRecord record)
+        public static bool TryGetMapRecord(string id, out V3MapRecord record)
         {
             record = null;
             if (Manifest == null) return false;
@@ -76,7 +115,19 @@ namespace Client.Streaming
             return _maps.TryGetValue(NormalizeId(id), out record);
         }
 
-        public static bool TryGetSoundRecord(string id, out AssetSoundRecord record)
+        public static bool TryGetLoadedMapRecord(string id, out V3MapRecord record)
+        {
+            record = null;
+            if (_manifest == null)
+            {
+                RequestManifest();
+                return false;
+            }
+            EnsureIndexes();
+            return _maps.TryGetValue(NormalizeId(id), out record);
+        }
+
+        public static bool TryGetSoundRecord(string id, out V3SoundRecord record)
         {
             record = null;
             if (Manifest == null) return false;
@@ -88,16 +139,14 @@ namespace Client.Streaming
         {
             if (Manifest == null) return 0;
             EnsureIndexes();
-
             string dataRoot = Path.GetFullPath(Settings.DataPath);
             string directory = Path.GetFullPath(localDirectory);
             string prefix = directory.StartsWith(dataRoot, StringComparison.OrdinalIgnoreCase)
                 ? NormalizeId(Path.GetRelativePath(dataRoot, directory))
                 : NormalizeId(new DirectoryInfo(directory).Name);
             prefix = prefix.TrimEnd('/');
-
             string normalizedSuffix = (suffix ?? string.Empty).ToLowerInvariant();
-            int maxIndex = -1;
+            int maximum = -1;
             foreach (string id in _libraries.Keys)
             {
                 if (!id.StartsWith(prefix + "/", StringComparison.OrdinalIgnoreCase)) continue;
@@ -108,582 +157,395 @@ namespace Client.Streaming
                     if (!name.EndsWith(normalizedSuffix, StringComparison.OrdinalIgnoreCase)) continue;
                     name = name[..^normalizedSuffix.Length];
                 }
-
-                if (int.TryParse(name, out int index) && index > maxIndex) maxIndex = index;
+                if (int.TryParse(name, out int value) && value > maximum) maximum = value;
             }
-
-            return maxIndex + 1;
+            return maximum + 1;
         }
 
-        public static async Task<LibraryManifest> GetLibraryManifestAsync(string libraryId)
+        public static async Task<V3LibraryIndex> GetLibraryIndexAsync(string libraryId)
         {
-            if (!TryGetLibraryRecord(libraryId, out AssetLibraryRecord record)) return null;
-            byte[] bytes = await GetObjectBytesAsync(record.Hash, record.Length).ConfigureAwait(false);
+            string id = NormalizeId(libraryId);
+            if (LibraryIndexes.TryGetValue(id, out V3LibraryIndex cached)) return cached;
+            if (!TryGetLibraryRecord(id, out V3LibraryRecord record)) return null;
+            byte[] bytes = await GetCatalogBlockAsync(record.CatalogOffset, record.CatalogLength,
+                record.CatalogBlockHash).ConfigureAwait(false);
             if (bytes == null) return null;
-
             try
             {
-                LibraryManifest manifest = JsonSerializer.Deserialize<LibraryManifest>(bytes, StreamingAssetIO.JsonOptions);
-                return IsValidLibraryManifest(manifest, libraryId, record.ImageCount) ? manifest : null;
+                V3LibraryIndex index = StreamingAssetV3IO.ReadLibraryIndex(bytes, id,
+                    record.ImageCount, record.FileLength);
+                LibraryIndexes[id] = index;
+                return index;
             }
             catch (Exception ex)
             {
-                CMain.SaveError($"Invalid library manifest {libraryId}: {ex.Message}");
+                CMain.SaveError($"Invalid V3 library index '{id}': {ex.Message}");
                 return null;
             }
         }
 
-        public static LibraryManifest GetLibraryManifest(string libraryId)
-        {
-            return GetLibraryManifestAsync(libraryId).GetAwaiter().GetResult();
-        }
+        public static V3LibraryIndex GetLibraryIndex(string libraryId) =>
+            GetLibraryIndexAsync(libraryId).GetAwaiter().GetResult();
 
-        public static bool TryGetCachedLibraryManifest(string libraryId, out LibraryManifest manifest)
-        {
-            manifest = null;
-            if (!TryGetLibraryRecord(libraryId, out AssetLibraryRecord record) ||
-                !TryReadValidObject(record.Hash, record.Length, null, out byte[] bytes)) return false;
+        public static bool TryGetCachedLibraryIndex(string libraryId, out V3LibraryIndex index) =>
+            LibraryIndexes.TryGetValue(NormalizeId(libraryId), out index);
 
-            try
+        public static void QueueLibraryIndex(string libraryId)
+        {
+            string id = NormalizeId(libraryId);
+            QueueBackground("library-index:" + id, async () =>
             {
-                manifest = JsonSerializer.Deserialize<LibraryManifest>(bytes, StreamingAssetIO.JsonOptions);
-                return IsValidLibraryManifest(manifest, libraryId, record.ImageCount);
-            }
-            catch
-            {
-                manifest = null;
-                return false;
-            }
-        }
-
-        public static void QueueLibraryManifest(string libraryId)
-        {
-            if (TryGetLibraryRecord(libraryId, out AssetLibraryRecord record))
-                QueueObject(record.Hash, record.Length);
-        }
-
-        public static bool TryGetCachedLibraryPage(string libraryId, LibraryManifest manifest, int imageIndex,
-            out LibraryManifestPage page)
-        {
-            page = null;
-            if (!TryGetPageRecord(manifest, imageIndex, out int pageIndex, out LibraryManifestPageRecord record))
-                return false;
-            if (PageCache.TryGetValue(record.Hash, out page)) return true;
-            if (!TryReadValidObject(record.Hash, record.Length, null, out byte[] bytes)) return false;
-
-            page = ParseLibraryPage(bytes, pageIndex, record);
-            if (page == null) return false;
-            PageCache.TryAdd(record.Hash, page);
-            return true;
-        }
-
-        public static void QueueLibraryPage(string libraryId, LibraryManifest manifest, int imageIndex)
-        {
-            if (!TryGetPageRecord(manifest, imageIndex, out int pageIndex, out LibraryManifestPageRecord record) ||
-                PageCache.ContainsKey(record.Hash) || !CanAttempt(record.Hash) ||
-                !BackgroundLoads.TryAdd("page:" + record.Hash, 0)) return;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    byte[] bytes = await GetObjectBytesAsync(record.Hash, record.Length).ConfigureAwait(false);
-                    LibraryManifestPage page = bytes == null ? null : ParseLibraryPage(bytes, pageIndex, record);
-                    if (page != null)
-                    {
-                        PageCache[record.Hash] = page;
-                        NotifyAssetsUpdated();
-                    }
-                }
-                finally
-                {
-                    BackgroundLoads.TryRemove("page:" + record.Hash, out _);
-                }
+                if (await GetLibraryIndexAsync(id).ConfigureAwait(false) != null) PostAssetsUpdated();
             });
         }
 
-        public static List<LibraryImageRecord> GetAllLibraryImages(LibraryManifest manifest)
+        public static async Task<V3MapIndex> GetMapIndexAsync(string mapId)
         {
-            if (manifest == null) return null;
-            Task<LibraryManifestPage>[] tasks = manifest.Pages.Select(record =>
-                GetLibraryPageAsync(record.Start / manifest.PageSize, record)).ToArray();
-            Task.WhenAll(tasks).GetAwaiter().GetResult();
-            if (tasks.Any(task => task.Result == null)) return null;
-            return tasks.SelectMany(task => task.Result.Images).ToList();
-        }
-
-        public static async Task<MapManifest> GetMapManifestAsync(string mapId)
-        {
-            if (!TryGetMapRecord(mapId, out AssetMapRecord record)) return null;
-            byte[] bytes = await GetObjectBytesAsync(record.Hash, record.Length).ConfigureAwait(false);
+            string id = NormalizeId(mapId);
+            if (MapIndexes.TryGetValue(id, out V3MapIndex cached)) return cached;
+            if (!TryGetMapRecord(id, out V3MapRecord record)) return null;
+            byte[] bytes = await GetCatalogBlockAsync(record.CatalogOffset, record.CatalogLength,
+                record.CatalogBlockHash).ConfigureAwait(false);
             if (bytes == null) return null;
-
             try
             {
-                MapManifest manifest = JsonSerializer.Deserialize<MapManifest>(bytes, StreamingAssetIO.JsonOptions);
-                return manifest?.FormatVersion == StreamingAssetConstants.CurrentFormatVersion &&
-                       string.Equals(NormalizeId(manifest.Id), NormalizeId(mapId), StringComparison.Ordinal)
-                    ? manifest
-                    : null;
+                V3MapIndex index = StreamingAssetV3IO.ReadMapIndex(bytes, id, record.FileLength);
+                if (index.Width != record.Width || index.Height != record.Height || index.ChunkSize != record.ChunkSize)
+                    throw new InvalidDataException("Map dimensions do not match the root manifest.");
+                MapIndexes[id] = index;
+                return index;
             }
             catch (Exception ex)
             {
-                CMain.SaveError($"Invalid map manifest {mapId}: {ex.Message}");
+                CMain.SaveError($"Invalid V3 map index '{id}': {ex.Message}");
                 return null;
             }
         }
 
-        public static MapManifest GetMapManifest(string mapId)
-        {
-            return GetMapManifestAsync(mapId).GetAwaiter().GetResult();
-        }
+        public static V3MapIndex GetMapIndex(string mapId) => GetMapIndexAsync(mapId).GetAwaiter().GetResult();
 
-        public static bool TryReadCachedLibraryImage(string libraryId, LibraryImageRecord image,
-            out StreamingLibraryImageChunk chunk)
-        {
-            chunk = null;
-            if (image == null || !image.Exists ||
-                !TryReadValidObject(image.Hash, image.Length, null, out byte[] bytes)) return false;
+        public static bool TryGetCachedMapIndex(string mapId, out V3MapIndex index) =>
+            MapIndexes.TryGetValue(NormalizeId(mapId), out index);
 
-            try
+        public static void QueueMapIndex(string mapId)
+        {
+            string id = NormalizeId(mapId);
+            QueueBackground("map-index:" + id, async () =>
             {
-                chunk = StreamingAssetIO.ReadLibraryImageChunk(bytes);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public static void QueueLibraryImage(string libraryId, LibraryImageRecord image)
-        {
-            if (image?.Exists == true) QueueObject(image.Hash, image.Length);
-        }
-
-        public static bool TryReadCachedMapChunk(string mapId, MapChunkRecord record, out StreamingMapChunk chunk)
-        {
-            chunk = null;
-            if (record == null || !StreamingAssetIO.IsValidSha256(record.Hash) ||
-                !TryReadValidObject(record.Hash, record.Length, null, out byte[] bytes)) return false;
-            try
-            {
-                chunk = StreamingAssetIO.ReadMapChunk(bytes);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        public static void QueueMapChunk(string mapId, MapChunkRecord record)
-        {
-            if (record != null) QueueObject(record.Hash, record.Length);
-        }
-
-        public static void QueueMapChunks(string mapId, IEnumerable<MapChunkRecord> records)
-        {
-            if (records == null) return;
-            List<MapChunkRecord> pending = records.Where(record => record != null &&
-                    StreamingAssetIO.IsValidSha256(record.Hash) && CanAttempt(record.Hash) &&
-                    !IsValidCachedObject(record.Hash, record.Length, null))
-                .GroupBy(record => record.Hash).Select(group => group.First())
-                .Where(record => PendingBatchObjects.TryAdd(record.Hash, 0))
-                .Take(64)
-                .ToList();
-            if (pending.Count == 0) return;
-
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await BatchDownloadSemaphore.WaitAsync().ConfigureAwait(false);
-                    try
-                    {
-                        if (!await DownloadObjectBatchAsync(pending).ConfigureAwait(false))
-                            foreach (MapChunkRecord record in pending) QueueObject(record.Hash, record.Length);
-                        else
-                            NotifyAssetsUpdated();
-                    }
-                    finally
-                    {
-                        BatchDownloadSemaphore.Release();
-                    }
-                }
-                finally
-                {
-                    foreach (MapChunkRecord record in pending) PendingBatchObjects.TryRemove(record.Hash, out _);
-                }
+                if (await GetMapIndexAsync(id).ConfigureAwait(false) != null) PostAssetsUpdated();
             });
         }
 
-        public static bool TryGetCachedSoundPath(string soundId, out string path)
+        public static bool TryReadCachedLibraryImage(V3LibraryImageRecord image, out V3LibraryImagePayload payload)
         {
-            path = null;
-            if (!TryGetSoundRecord(soundId, out AssetSoundRecord record)) return false;
-            string extension = NormalizeSoundExtension(record.Extension);
-            if (!IsValidCachedObject(record.Hash, record.Length, extension)) return false;
-            path = GetObjectCachePath(record.Hash, extension);
+            payload = null;
+            if (image?.Exists != true || _cache == null || !_cache.TryGet(image.Hash, image.Length, out byte[] bytes))
+                return false;
+            try
+            {
+                payload = StreamingAssetV3IO.ReadLibraryImageRecord(bytes);
+                return payload.Width == image.Width && payload.Height == image.Height &&
+                       payload.X == image.X && payload.Y == image.Y;
+            }
+            catch { return false; }
+        }
+
+        public static void QueueLibraryImage(V3LibraryRecord library, V3LibraryImageRecord image)
+        {
+            if (library == null || image?.Exists != true) return;
+            string path = StreamingAssetV3IO.GetLibraryPath(library.FileHash);
+            QueueRange(image.Hash, image.Length, CacheKindLibraryImage, path,
+                library.FileLength, image.Offset);
+        }
+
+        public static bool TryReadCachedMapChunk(V3MapChunkRecord chunk, out StreamingMapChunk value)
+        {
+            value = null;
+            if (chunk == null || _cache == null || !_cache.TryGet(chunk.Hash, chunk.Length, out byte[] bytes))
+                return false;
+            try
+            {
+                value = StreamingAssetV3IO.ReadMapChunk(bytes, chunk);
+                return true;
+            }
+            catch { return false; }
+        }
+
+        public static void QueueMapChunks(V3MapRecord map, IEnumerable<V3MapChunkRecord> chunks)
+        {
+            if (map == null || chunks == null) return;
+            string path = StreamingAssetV3IO.GetMapPath(map.FileHash);
+            foreach (V3MapChunkRecord chunk in chunks.Where(item => item != null).DistinctBy(item => item.Hash))
+                QueueRange(chunk.Hash, chunk.Length, CacheKindMapChunk, path, map.FileLength, chunk.Offset);
+        }
+
+        public static bool TryGetCachedSoundBytes(string soundId, out byte[] bytes, out string extension)
+        {
+            bytes = null;
+            extension = null;
+            if (!TryGetSoundRecord(soundId, out V3SoundRecord record) || _cache == null ||
+                !_cache.TryGet(record.Hash, record.Length, out bytes)) return false;
+            extension = record.Extension;
             return true;
         }
 
-        public static bool TryGetCachedSoundPath(string soundName, IEnumerable<string> extensions, out string path)
+        public static bool TryGetCachedSoundBytes(string soundName, IEnumerable<string> extensions,
+            out byte[] bytes, out string extension)
         {
-            foreach (string soundId in GetSoundIdCandidates(soundName, extensions))
-                if (TryGetCachedSoundPath(soundId, out path)) return true;
-            path = null;
+            foreach (string id in GetSoundIdCandidates(soundName, extensions))
+                if (TryGetCachedSoundBytes(id, out bytes, out extension)) return true;
+            bytes = null;
+            extension = null;
             return false;
+        }
+
+        public static bool GetSoundBytes(string soundId, out byte[] bytes, out string extension)
+        {
+            if (TryGetCachedSoundBytes(soundId, out bytes, out extension)) return true;
+            bytes = null;
+            extension = null;
+            if (!TryGetSoundRecord(soundId, out V3SoundRecord record)) return false;
+            bytes = GetFullFileAsync(record.Hash, record.Length, CacheKindSound,
+                StreamingAssetV3IO.GetSoundPath(record.Hash, record.Extension)).GetAwaiter().GetResult();
+            extension = bytes == null ? null : record.Extension;
+            return bytes != null;
         }
 
         public static void QueueSound(string soundId)
         {
-            if (TryGetSoundRecord(soundId, out AssetSoundRecord record))
-                QueueObject(record.Hash, record.Length, NormalizeSoundExtension(record.Extension));
+            if (!TryGetSoundRecord(soundId, out V3SoundRecord record)) return;
+            QueueBackground("sound:" + record.Hash, async () =>
+            {
+                byte[] bytes = await GetFullFileAsync(record.Hash, record.Length, CacheKindSound,
+                    StreamingAssetV3IO.GetSoundPath(record.Hash, record.Extension)).ConfigureAwait(false);
+                if (bytes != null) PostAssetsUpdated();
+            });
         }
 
         public static void QueueSound(string soundName, IEnumerable<string> extensions)
         {
-            foreach (string soundId in GetSoundIdCandidates(soundName, extensions))
+            foreach (string id in GetSoundIdCandidates(soundName, extensions))
             {
-                if (!TryGetSoundRecord(soundId, out _)) continue;
-                QueueSound(soundId);
+                if (!TryGetSoundRecord(id, out _)) continue;
+                QueueSound(id);
                 return;
             }
         }
 
         public static string ToLibraryId(string localFileName)
         {
-            string data = Path.GetFullPath(Settings.DataPath);
+            string root = Path.GetFullPath(Settings.DataPath);
             string path = Path.GetFullPath(localFileName);
-            string id = path.StartsWith(data, StringComparison.OrdinalIgnoreCase)
-                ? Path.GetRelativePath(data, Path.ChangeExtension(path, null))
+            string id = path.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+                ? Path.GetRelativePath(root, Path.ChangeExtension(path, null))
                 : Path.GetFileNameWithoutExtension(path);
             return NormalizeId(id);
         }
 
-        public static string ToMapId(string localFileName)
-        {
-            return NormalizeId(Path.GetFileNameWithoutExtension(localFileName));
-        }
+        public static string ToMapId(string localFileName) =>
+            NormalizeId(Path.GetFileNameWithoutExtension(localFileName));
 
-        private static async Task<LibraryManifestPage> GetLibraryPageAsync(int pageIndex,
-            LibraryManifestPageRecord record)
-        {
-            if (PageCache.TryGetValue(record.Hash, out LibraryManifestPage cached)) return cached;
-            byte[] bytes = await GetObjectBytesAsync(record.Hash, record.Length).ConfigureAwait(false);
-            LibraryManifestPage page = bytes == null ? null : ParseLibraryPage(bytes, pageIndex, record);
-            if (page != null) PageCache[record.Hash] = page;
-            return page;
-        }
+        public static string NormalizeId(string id) =>
+            (id ?? string.Empty).Replace('\\', '/').TrimStart('.', '/').ToLowerInvariant();
 
-        private static LibraryManifestPage ParseLibraryPage(byte[] bytes, int pageIndex,
-            LibraryManifestPageRecord record)
+        public static bool HasUsableLocalLibrary(string path)
         {
             try
             {
-                LibraryManifestPage page = StreamingAssetIO.ReadLibraryIndexPage(bytes);
-                if (page.PageIndex != pageIndex || page.Start != record.Start || page.Images.Count != record.Count)
-                    return null;
-                for (int i = 0; i < page.Images.Count; i++)
-                    if (page.Images[i].Index != record.Start + i) return null;
-                return page;
-            }
-            catch (Exception ex)
-            {
-                CMain.SaveError($"Invalid library index page {record.Hash}: {ex.Message}");
-                return null;
-            }
-        }
-
-        private static bool TryGetPageRecord(LibraryManifest manifest, int imageIndex, out int pageIndex,
-            out LibraryManifestPageRecord record)
-        {
-            pageIndex = -1;
-            record = null;
-            if (manifest == null || manifest.PageSize != StreamingAssetConstants.LibraryIndexPageSize ||
-                imageIndex < 0 || imageIndex >= manifest.ImageCount) return false;
-            pageIndex = imageIndex / manifest.PageSize;
-            if (pageIndex < 0 || pageIndex >= manifest.Pages.Count) return false;
-            record = manifest.Pages[pageIndex];
-            return record.Start <= imageIndex && imageIndex < record.Start + record.Count &&
-                   StreamingAssetIO.IsValidSha256(record.Hash);
-        }
-
-        private static bool IsValidLibraryManifest(LibraryManifest manifest, string libraryId, int imageCount)
-        {
-            if (manifest == null || manifest.FormatVersion != StreamingAssetConstants.CurrentFormatVersion ||
-                manifest.PageSize != StreamingAssetConstants.LibraryIndexPageSize ||
-                manifest.ImageCount != imageCount ||
-                !string.Equals(NormalizeId(manifest.Id), NormalizeId(libraryId), StringComparison.Ordinal)) return false;
-
-            int expectedStart = 0;
-            foreach (LibraryManifestPageRecord page in manifest.Pages)
-            {
-                if (page.Start != expectedStart || page.Count <= 0 || page.Count > manifest.PageSize ||
-                    page.Length <= 0 || !StreamingAssetIO.IsValidSha256(page.Hash)) return false;
-                expectedStart += page.Count;
-            }
-            return expectedStart == imageCount;
-        }
-
-        private static void QueueObject(string hash, long length, string extension = null)
-        {
-            if (!Enabled || !StreamingAssetIO.IsValidSha256(hash) || length < 0 ||
-                IsValidCachedObject(hash, length, extension) || !CanAttempt(hash) ||
-                !BackgroundLoads.TryAdd("object:" + hash + extension, 0)) return;
-
-            _ = Task.Run(async () =>
-            {
-                try
+                using FileStream stream = File.OpenRead(path);
+                using BinaryReader reader = new(stream);
+                if (stream.Length < 8) return false;
+                int version = reader.ReadInt32();
+                int count = reader.ReadInt32();
+                if (version < 2 || version > 3 || count < 0 || count > 10_000_000) return false;
+                long tableStart = version >= 3 ? 12 : 8;
+                long tableLength = (long)count * 4;
+                if (tableStart > stream.Length || tableLength > stream.Length - tableStart) return false;
+                if (version >= 3)
                 {
-                    if (await GetObjectBytesAsync(hash, length, extension).ConfigureAwait(false) != null)
-                        NotifyAssetsUpdated();
+                    int frameSeek = reader.ReadInt32();
+                    if (frameSeek != 0 && (frameSeek < tableStart + tableLength || frameSeek > stream.Length - 4))
+                        return false;
                 }
-                finally
+                for (int i = 0; i < count; i++)
                 {
-                    BackgroundLoads.TryRemove("object:" + hash + extension, out _);
+                    int offset = reader.ReadInt32();
+                    if (offset > 0 && (offset < tableStart + tableLength || offset > stream.Length - 17)) return false;
                 }
+                return true;
+            }
+            catch { return false; }
+        }
+
+        public static void ProcessNotifications()
+        {
+            if (Interlocked.Exchange(ref _notificationPending, 0) == 0) return;
+            try
+            {
+                AssetsUpdated?.Invoke();
+                MirControls.MirScene.ActiveScene?.Redraw();
+                MirScenes.GameScene scene = MirScenes.GameScene.Scene;
+                if (scene?.MapControl != null && !scene.MapControl.IsDisposed)
+                {
+                    scene.MapControl.FloorValid = false;
+                    scene.MapControl.LightsValid = false;
+                    scene.MapControl.Redraw();
+                }
+            }
+            catch (Exception ex) { CMain.SaveError($"Asset notification failed: {ex.Message}"); }
+        }
+
+        private static async Task<byte[]> GetCatalogBlockAsync(long offset, int length, string blockHash)
+        {
+            StreamingAssetV3Manifest manifest = Manifest;
+            if (manifest == null) return null;
+            return await GetRangeAsync(blockHash, length, CacheKindCatalog,
+                StreamingAssetV3IO.GetCatalogPath(manifest.CatalogHash), manifest.CatalogLength, offset)
+                .ConfigureAwait(false);
+        }
+
+        private static void QueueRange(string hash, int length, int kind, string path, long totalLength, long offset)
+        {
+            if (_cache?.TryGet(hash, length, out _) == true || !CanAttempt(hash)) return;
+            QueueBackground("range:" + hash, async () =>
+            {
+                if (await GetRangeAsync(hash, length, kind, path, totalLength, offset).ConfigureAwait(false) != null)
+                    PostAssetsUpdated();
             });
         }
 
-        private static async Task<byte[]> GetObjectBytesAsync(string hash, long length, string extension = null)
+        private static Task<byte[]> GetRangeAsync(string hash, int length, int kind,
+            string relativePath, long totalLength, long offset)
         {
-            if (!StreamingAssetIO.IsValidSha256(hash) || length < 0) return null;
-            if (TryReadValidObject(hash, length, extension, out byte[] cached)) return cached;
-
-            string key = GetObjectCachePath(hash, extension);
-            Lazy<Task<byte[]>> lazy = ObjectLoads.GetOrAdd(key,
-                _ => new Lazy<Task<byte[]>>(() => DownloadObjectAsync(hash, length, extension), true));
-            try
-            {
-                return await lazy.Value.ConfigureAwait(false);
-            }
-            finally
-            {
-                ObjectLoads.TryRemove(new KeyValuePair<string, Lazy<Task<byte[]>>>(key, lazy));
-            }
+            if (_cache != null && _cache.TryGet(hash, length, out byte[] cached)) return Task.FromResult(cached);
+            if (!StreamingAssetIO.IsValidSha256(hash) || length <= 0 || offset < 0 ||
+                totalLength < 0 || offset > totalLength || length > totalLength - offset) return Task.FromResult<byte[]>(null);
+            return GetSingleFlightAsync(hash, () => DownloadRangeAsync(hash, length, kind, relativePath, totalLength, offset));
         }
 
-        private static async Task<byte[]> DownloadObjectAsync(string hash, long length, string extension)
+        private static Task<byte[]> GetFullFileAsync(string hash, long length, int kind, string relativePath)
+        {
+            if (length > int.MaxValue || length < 0) return Task.FromResult<byte[]>(null);
+            if (_cache != null && _cache.TryGet(hash, length, out byte[] cached)) return Task.FromResult(cached);
+            return GetSingleFlightAsync(hash, () => DownloadFullAsync(hash, (int)length, kind, relativePath));
+        }
+
+        private static async Task<byte[]> GetSingleFlightAsync(string hash, Func<Task<byte[]>> factory)
+        {
+            Lazy<Task<byte[]>> lazy = Loads.GetOrAdd(hash, _ => new Lazy<Task<byte[]>>(factory, true));
+            try { return await lazy.Value.ConfigureAwait(false); }
+            finally { Loads.TryRemove(new KeyValuePair<string, Lazy<Task<byte[]>>>(hash, lazy)); }
+        }
+
+        private static async Task<byte[]> DownloadRangeAsync(string hash, int length, int kind,
+            string relativePath, long totalLength, long offset)
         {
             if (!CanAttempt(hash)) return null;
             await DownloadSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
-                if (TryReadValidObject(hash, length, extension, out byte[] cached)) return cached;
-
-                string relative = StreamingAssetIO.GetObjectRelativePath(hash);
-                using HttpResponseMessage response = await Client.GetAsync(MakeUrl(relative)).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                {
-                    RecordFailure(hash);
-                    return null;
-                }
-
+                if (_cache.TryGet(hash, length, out byte[] cached)) return cached;
+                using HttpRequestMessage request = new(HttpMethod.Get, MakeUrl(relativePath));
+                request.Headers.Range = new RangeHeaderValue(offset, offset + length - 1);
+                using HttpResponseMessage response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead)
+                    .ConfigureAwait(false);
+                ContentRangeHeaderValue range = response.Content.Headers.ContentRange;
+                if (response.StatusCode != HttpStatusCode.PartialContent || range?.From != offset ||
+                    range.To != offset + length - 1 || range.Length != totalLength)
+                    throw new InvalidDataException($"Invalid HTTP range response for {relativePath}.");
                 byte[] bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                if (bytes.LongLength != length || StreamingAssetIO.ComputeSha256(bytes) != hash)
-                {
-                    CMain.SaveError($"Streaming asset validation failed: {hash}");
-                    RecordFailure(hash);
-                    return null;
-                }
-
-                WriteCacheFile(GetObjectCachePath(hash, extension), bytes);
+                ValidatePayload(hash, length, bytes);
+                _cache.Put(hash, kind, bytes);
                 RetryStates.TryRemove(hash, out _);
                 return bytes;
             }
             catch (Exception ex)
             {
-                CMain.SaveError(ex.ToString());
+                CMain.SaveError($"Streaming range failed '{relativePath}': {ex.Message}");
                 RecordFailure(hash);
                 return null;
             }
-            finally
-            {
-                DownloadSemaphore.Release();
-            }
+            finally { DownloadSemaphore.Release(); }
         }
 
-        private static async Task<bool> DownloadObjectBatchAsync(List<MapChunkRecord> records)
+        private static async Task<byte[]> DownloadFullAsync(string hash, int length, int kind, string relativePath)
         {
+            if (!CanAttempt(hash)) return null;
+            await DownloadSemaphore.WaitAsync().ConfigureAwait(false);
             try
             {
-                string hashes = string.Join(',', records.Select(record => record.Hash));
-                using HttpResponseMessage response = await Client.GetAsync(
-                    MakeUrl($"{StreamingAssetConstants.ObjectsDirectory}/batch?hashes={Uri.EscapeDataString(hashes)}"))
-                    .ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode) return false;
-
-                byte[] data = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                Dictionary<string, MapChunkRecord> expected = records.ToDictionary(record => record.Hash);
-                using MemoryStream input = new(data, false);
-                using BinaryReader reader = new(input);
-                int count = reader.ReadInt32();
-                if (count != records.Count) return false;
-
-                for (int i = 0; i < count; i++)
-                {
-                    string hash = reader.ReadString();
-                    int length = reader.ReadInt32();
-                    if (!expected.TryGetValue(hash, out MapChunkRecord record) || length < 0 ||
-                        length != record.Length || input.Length - input.Position < length) return false;
-                    byte[] bytes = reader.ReadBytes(length);
-                    if (StreamingAssetIO.ComputeSha256(bytes) != hash) return false;
-                    WriteCacheFile(GetObjectCachePath(hash), bytes);
-                    RetryStates.TryRemove(hash, out _);
-                }
-
-                return input.Position == input.Length;
+                if (_cache.TryGet(hash, length, out byte[] cached)) return cached;
+                using HttpResponseMessage response = await Client.GetAsync(MakeUrl(relativePath)).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode) throw new HttpRequestException($"HTTP {(int)response.StatusCode}");
+                byte[] bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+                ValidatePayload(hash, length, bytes);
+                _cache.Put(hash, kind, bytes);
+                RetryStates.TryRemove(hash, out _);
+                return bytes;
             }
             catch (Exception ex)
             {
-                CMain.SaveError($"Streaming batch download failed: {ex.Message}");
-                foreach (MapChunkRecord record in records) RecordFailure(record.Hash);
-                return false;
+                CMain.SaveError($"Streaming download failed '{relativePath}': {ex.Message}");
+                RecordFailure(hash);
+                return null;
             }
+            finally { DownloadSemaphore.Release(); }
         }
 
-        private static bool TryReadValidObject(string hash, long length, string extension, out byte[] bytes)
+        private static void ValidatePayload(string hash, int length, byte[] bytes)
         {
-            bytes = null;
-            string path = GetObjectCachePath(hash, extension);
-            try
-            {
-                FileInfo info = new(path);
-                if (!info.Exists || info.Length != length) return false;
-                bytes = File.ReadAllBytes(path);
-                if (VerifiedObjects.TryGetValue(path, out long verifiedLength) && verifiedLength == length)
-                    return true;
-                if (StreamingAssetIO.ComputeSha256(bytes) == hash)
-                {
-                    VerifiedObjects[path] = length;
-                    TryTouch(path);
-                    return true;
-                }
-                bytes = null;
-                VerifiedObjects.TryRemove(path, out _);
-                File.Delete(path);
-            }
-            catch
-            {
-                bytes = null;
-            }
-            return false;
-        }
-
-        private static bool IsValidCachedObject(string hash, long length, string extension)
-        {
-            string path = GetObjectCachePath(hash, extension);
-            try
-            {
-                FileInfo info = new(path);
-                if (!info.Exists || info.Length != length) return false;
-                if (VerifiedObjects.TryGetValue(path, out long verifiedLength) && verifiedLength == length)
-                    return true;
-                using FileStream stream = File.OpenRead(path);
-                if (StreamingAssetIO.ComputeSha256(stream) != hash) return false;
-                VerifiedObjects[path] = length;
-                TryTouch(path);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static string GetObjectCachePath(string hash, string extension = null)
-        {
-            string suffix = string.IsNullOrWhiteSpace(extension) ? ".bin" : extension.ToLowerInvariant();
-            return Path.Combine(CacheRoot, StreamingAssetConstants.ObjectsDirectory, hash[..2], hash + suffix);
-        }
-
-        private static string NormalizeSoundExtension(string extension)
-        {
-            string normalized = (extension ?? string.Empty).ToLowerInvariant();
-            return normalized is ".wav" or ".mp3" ? normalized : ".bin";
-        }
-
-        private static bool CanAttempt(string hash)
-        {
-            return !RetryStates.TryGetValue(hash, out RetryState state) || DateTime.UtcNow >= state.NextAttemptUtc;
-        }
-
-        private static void RecordFailure(string hash)
-        {
-            RetryStates.AddOrUpdate(hash,
-                _ => new RetryState(1, DateTime.UtcNow.AddSeconds(1)),
-                (_, old) =>
-                {
-                    int failures = Math.Min(old.Failures + 1, 6);
-                    int seconds = Math.Min(30, 1 << Math.Min(failures - 1, 5));
-                    return new RetryState(failures, DateTime.UtcNow.AddSeconds(seconds));
-                });
+            if (bytes == null || bytes.Length != length ||
+                !string.Equals(StreamingAssetIO.ComputeSha256(bytes), hash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException($"SHA-256 or length validation failed for {hash}.");
         }
 
         private static async Task EnsureManifestAsync()
         {
             if (_manifest != null) return;
-            Task manifestTask;
+            Task task;
             lock (ManifestLock)
             {
                 if (_manifest != null) return;
-                if (_manifestTask != null) manifestTask = _manifestTask;
+                if (_manifestTask != null) task = _manifestTask;
                 else
                 {
                     if (DateTime.UtcNow < _nextManifestAttemptUtc) return;
                     _manifestTask = LoadManifestAsync();
-                    manifestTask = _manifestTask;
+                    task = _manifestTask;
                 }
             }
-
-            try
-            {
-                await manifestTask.ConfigureAwait(false);
-            }
+            try { await task.ConfigureAwait(false); }
             finally
             {
                 lock (ManifestLock)
-                    if (ReferenceEquals(_manifestTask, manifestTask)) _manifestTask = null;
+                    if (ReferenceEquals(_manifestTask, task)) _manifestTask = null;
             }
         }
 
         private static async Task LoadManifestAsync()
         {
-            string cachePath = Path.Combine(CacheRoot, StreamingAssetConstants.ManifestFileName);
             byte[] bytes = null;
             try
             {
-                using HttpResponseMessage response = await Client.GetAsync(MakeUrl(StreamingAssetConstants.ManifestFileName))
+                using HttpResponseMessage response = await Client.GetAsync(MakeUrl(StreamingAssetV3Constants.ManifestFileName))
                     .ConfigureAwait(false);
                 if (response.IsSuccessStatusCode)
                 {
                     byte[] downloaded = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                    if (TryParseRootManifest(downloaded, out _))
+                    if (TryParseManifest(downloaded, out _))
                     {
                         bytes = downloaded;
-                        WriteCacheFile(cachePath, bytes);
+                        _cache?.PutMetadata("manifest-v3", bytes);
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                CMain.SaveError(ex.ToString());
-            }
-
-            if (bytes == null && File.Exists(cachePath))
-            {
-                try { bytes = await File.ReadAllBytesAsync(cachePath).ConfigureAwait(false); }
-                catch { }
-            }
-
-            if (!TryParseRootManifest(bytes, out AssetManifest manifest))
+            catch (Exception ex) { CMain.SaveError($"Streaming manifest download failed: {ex.Message}"); }
+            bytes ??= _cache?.GetMetadata("manifest-v3");
+            if (!TryParseManifest(bytes, out StreamingAssetV3Manifest manifest))
             {
                 lock (ManifestLock) _nextManifestAttemptUtc = DateTime.UtcNow.AddSeconds(30);
                 return;
             }
-
             lock (ManifestLock)
             {
                 _manifest = manifest;
@@ -694,24 +556,49 @@ namespace Client.Streaming
             }
         }
 
-        private static bool TryParseRootManifest(byte[] bytes, out AssetManifest manifest)
+        private static bool TryParseManifest(byte[] bytes, out StreamingAssetV3Manifest manifest)
         {
             manifest = null;
             if (bytes == null) return false;
             try
             {
-                manifest = JsonSerializer.Deserialize<AssetManifest>(bytes, StreamingAssetIO.JsonOptions);
-                return manifest?.FormatVersion == StreamingAssetConstants.CurrentFormatVersion &&
-                       manifest.Libraries.All(record => StreamingAssetIO.IsValidSha256(record.Hash)) &&
-                       manifest.Maps.All(record => StreamingAssetIO.IsValidSha256(record.Hash)) &&
-                       manifest.Sounds.All(record => StreamingAssetIO.IsValidSha256(record.Hash));
+                manifest = JsonSerializer.Deserialize<StreamingAssetV3Manifest>(bytes, StreamingAssetIO.JsonOptions);
+                if (manifest?.FormatVersion != StreamingAssetV3Constants.FormatVersion ||
+                    !StreamingAssetIO.IsValidSha256(manifest.CatalogHash) || manifest.CatalogLength <= 0) return false;
+                HashSet<string> ids = new(StringComparer.OrdinalIgnoreCase);
+                foreach (V3LibraryRecord item in manifest.Libraries)
+                {
+                    if (!ids.Add("l:" + NormalizeId(item.Id)) || item.ImageCount < 0 ||
+                        !ValidFile(item.FileHash, item.FileLength) || !ValidCatalogRange(manifest, item.CatalogOffset,
+                            item.CatalogLength, item.CatalogBlockHash)) return false;
+                }
+                foreach (V3MapRecord item in manifest.Maps)
+                {
+                    if (!ids.Add("m:" + NormalizeId(item.Id)) || !ValidMapDimensions(item) ||
+                        item.ChunkSize <= 0 || !ValidFile(item.FileHash, item.FileLength) ||
+                        !ValidCatalogRange(manifest, item.CatalogOffset, item.CatalogLength,
+                            item.CatalogBlockHash)) return false;
+                }
+                foreach (V3SoundRecord item in manifest.Sounds)
+                {
+                    if (!ids.Add("s:" + NormalizeId(item.Id)) || !ValidFile(item.Hash, item.Length) ||
+                        item.Extension is not ".wav" and not ".mp3" and not ".lst") return false;
+                }
+                return true;
             }
-            catch
-            {
-                manifest = null;
-                return false;
-            }
+            catch { manifest = null; return false; }
         }
+
+        private static bool ValidFile(string hash, long length) =>
+            StreamingAssetIO.IsValidSha256(hash) && length >= 0;
+
+        private static bool ValidMapDimensions(V3MapRecord item) =>
+            item.Width > 0 && item.Height > 0 && item.Width <= 100_000 && item.Height <= 100_000 &&
+            (long)item.Width * item.Height <= 25_000_000;
+
+        private static bool ValidCatalogRange(StreamingAssetV3Manifest manifest, long offset, int length, string hash) =>
+            offset >= 0 && length > 0 && offset <= manifest.CatalogLength &&
+            length <= manifest.CatalogLength - offset && StreamingAssetIO.IsValidSha256(hash);
 
         private static void EnsureIndexes()
         {
@@ -724,61 +611,15 @@ namespace Client.Streaming
             }
         }
 
-        private static string MakeUrl(string relativePath)
+        private static void QueueBackground(string key, Func<Task> operation)
         {
-            return Settings.AssetBaseUrl.TrimEnd('/') + "/" + relativePath.Replace('\\', '/').TrimStart('/');
-        }
-
-        private static void WriteCacheFile(string path, byte[] bytes)
-        {
-            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-            string temp = path + $".{Environment.ProcessId}.tmp";
-            File.WriteAllBytes(temp, bytes);
-            File.Move(temp, path, true);
-            VerifiedObjects[path] = bytes.LongLength;
-            TryTouch(path);
-        }
-
-        private static void TryTouch(string path)
-        {
-            try { File.SetLastAccessTimeUtc(path, DateTime.UtcNow); }
-            catch { }
-        }
-
-        private static void CleanupCache()
-        {
-            try
+            if (!Enabled || !BackgroundLoads.TryAdd(key, 0)) return;
+            _ = Task.Run(async () =>
             {
-                Directory.CreateDirectory(CacheRoot);
-                string objectsRoot = Path.GetFullPath(Path.Combine(CacheRoot, StreamingAssetConstants.ObjectsDirectory));
-                foreach (string directory in Directory.EnumerateDirectories(CacheRoot))
-                {
-                    if (string.Equals(Path.GetFullPath(directory), objectsRoot, StringComparison.OrdinalIgnoreCase)) continue;
-                    Directory.Delete(directory, true);
-                }
-
-                long maximumBytes = Math.Max(256, Settings.AssetCacheMaxMB) * 1024L * 1024L;
-                List<FileInfo> files = Directory.Exists(objectsRoot)
-                    ? Directory.EnumerateFiles(objectsRoot, "*", SearchOption.AllDirectories)
-                        .Select(path => new FileInfo(path)).Where(info => !info.Name.EndsWith(".tmp")).ToList()
-                    : new();
-                long total = files.Sum(info => info.Length);
-                foreach (FileInfo file in files.OrderBy(info => info.LastAccessTimeUtc))
-                {
-                    if (total <= maximumBytes) break;
-                    try
-                    {
-                        long length = file.Length;
-                        file.Delete();
-                        total -= length;
-                    }
-                    catch { }
-                }
-            }
-            catch (Exception ex)
-            {
-                CMain.SaveError($"Streaming cache cleanup failed: {ex.Message}");
-            }
+                try { await operation().ConfigureAwait(false); }
+                catch (Exception ex) { CMain.SaveError($"Streaming background operation failed: {ex.Message}"); }
+                finally { BackgroundLoads.TryRemove(key, out _); }
+            });
         }
 
         private static IEnumerable<string> GetSoundIdCandidates(string soundName, IEnumerable<string> extensions)
@@ -788,37 +629,38 @@ namespace Client.Streaming
             string soundRoot = Path.GetFullPath(Settings.SoundPath);
             try
             {
-                string fullPath = Path.GetFullPath(soundName);
-                if (fullPath.StartsWith(soundRoot, StringComparison.OrdinalIgnoreCase))
-                    candidate = Path.GetRelativePath(soundRoot, fullPath).Replace('\\', '/');
+                string full = Path.GetFullPath(soundName);
+                if (full.StartsWith(soundRoot, StringComparison.OrdinalIgnoreCase))
+                    candidate = Path.GetRelativePath(soundRoot, full).Replace('\\', '/');
             }
             catch { }
-
             if (!string.IsNullOrEmpty(Path.GetExtension(candidate)))
             {
                 yield return NormalizeId(candidate);
                 yield break;
             }
-
             foreach (string extension in extensions ?? Array.Empty<string>())
                 yield return NormalizeId(candidate + extension);
         }
 
-        private static void NotifyAssetsUpdated()
+        private static string MakeUrl(string relativePath) =>
+            Settings.AssetBaseUrl.TrimEnd('/') + "/" + relativePath.Replace('\\', '/').TrimStart('/');
+
+        private static bool CanAttempt(string hash) =>
+            !RetryStates.TryGetValue(hash, out RetryState state) || DateTime.UtcNow >= state.NextAttemptUtc;
+
+        private static void RecordFailure(string hash)
         {
-            try
-            {
-                AssetsUpdated?.Invoke();
-                MirScene.ActiveScene?.Redraw();
-                if (GameScene.Scene?.MapControl != null && !GameScene.Scene.MapControl.IsDisposed)
+            RetryStates.AddOrUpdate(hash,
+                _ => new RetryState(1, DateTime.UtcNow.AddSeconds(1)),
+                (_, old) =>
                 {
-                    GameScene.Scene.MapControl.FloorValid = false;
-                    GameScene.Scene.MapControl.Redraw();
-                }
-            }
-            catch { }
+                    int failures = Math.Min(old.Failures + 1, 6);
+                    return new RetryState(failures, DateTime.UtcNow.AddSeconds(Math.Min(30, 1 << (failures - 1))));
+                });
         }
 
+        private static void PostAssetsUpdated() => Interlocked.Exchange(ref _notificationPending, 1);
         private sealed record RetryState(int Failures, DateTime NextAttemptUtc);
     }
 }

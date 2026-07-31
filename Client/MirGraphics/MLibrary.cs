@@ -501,8 +501,8 @@ namespace Client.MirGraphics
         private bool _initialized;
         private bool _streaming;
         private string _streamingId;
-        private LibraryManifest _streamingManifest;
-        private Dictionary<int, LibraryImageRecord> _streamingImages;
+        private V3LibraryRecord _streamingRecord;
+        private V3LibraryIndex _streamingIndex;
 
         private BinaryReader _reader;
         private FileStream _fStream;
@@ -607,15 +607,7 @@ namespace Client.MirGraphics
 
         private bool HasUsableLocalFile()
         {
-            try
-            {
-                FileInfo info = new FileInfo(_fileName);
-                return info.Exists && info.Length >= 8;
-            }
-            catch
-            {
-                return false;
-            }
+            return AssetManager.HasUsableLocalLibrary(_fileName);
         }
 
         private bool TryFallbackToStreaming(bool blockingStreaming)
@@ -623,8 +615,8 @@ namespace Client.MirGraphics
             CloseLocalReader();
 
             _streaming = false;
-            _streamingManifest = null;
-            _streamingImages = null;
+            _streamingRecord = null;
+            _streamingIndex = null;
             _images = null;
             _indexList = null;
             _frames = null;
@@ -665,37 +657,21 @@ namespace Client.MirGraphics
             if (!AssetManager.Enabled) return false;
 
             _streamingId = AssetManager.ToLibraryId(_fileName);
-            _streamingManifest = blocking
-                ? AssetManager.GetLibraryManifest(_streamingId)
-                : GetCachedOrQueueStreamingManifest(_streamingId);
+            if (!AssetManager.TryGetLibraryRecord(_streamingId, out _streamingRecord)) return false;
+            _streamingIndex = blocking
+                ? AssetManager.GetLibraryIndex(_streamingId)
+                : GetCachedOrQueueStreamingIndex(_streamingId);
 
-            if (_streamingManifest == null) return false;
+            if (_streamingIndex == null) return false;
 
             _streaming = true;
-            _count = _streamingManifest.ImageCount;
+            _count = _streamingIndex.ImageCount;
             _images = new MImage[_count];
 
-            _streamingImages = new Dictionary<int, LibraryImageRecord>();
-            if (blocking)
-            {
-                List<LibraryImageRecord> images = AssetManager.GetAllLibraryImages(_streamingManifest);
-                if (images == null)
-                {
-                    _streaming = false;
-                    _streamingManifest = null;
-                    _streamingImages = null;
-                    _images = null;
-                    return false;
-                }
-
-                foreach (LibraryImageRecord image in images)
-                    _streamingImages[image.Index] = image;
-            }
-
-            if (_streamingManifest.Frames.Count > 0)
+            if (_streamingIndex.Frames.Count > 0)
             {
                 _frames = new FrameSet();
-                foreach (LibraryFrameRecord record in _streamingManifest.Frames)
+                foreach (LibraryFrameRecord record in _streamingIndex.Frames)
                 {
                     _frames.Add((MirAction)record.Action, new Frame(record.Start, record.Count, record.Skip, record.Interval, record.EffectStart, record.EffectCount, record.EffectSkip, record.EffectInterval)
                     {
@@ -708,12 +684,12 @@ namespace Client.MirGraphics
             return true;
         }
 
-        private static LibraryManifest GetCachedOrQueueStreamingManifest(string streamingId)
+        private static V3LibraryIndex GetCachedOrQueueStreamingIndex(string streamingId)
         {
-            if (AssetManager.TryGetCachedLibraryManifest(streamingId, out LibraryManifest manifest))
-                return manifest;
+            if (AssetManager.TryGetCachedLibraryIndex(streamingId, out V3LibraryIndex index))
+                return index;
 
-            AssetManager.QueueLibraryManifest(streamingId);
+            AssetManager.QueueLibraryIndex(streamingId);
             return null;
         }
 
@@ -730,6 +706,7 @@ namespace Client.MirGraphics
 
             if (_images[index] == null)
             {
+                if (_indexList[index] <= 0) return false;
                 _fStream.Position = _indexList[index];
                 _images[index] = new MImage(_reader);
             }
@@ -749,16 +726,16 @@ namespace Client.MirGraphics
         {
             if (_images[index] == null)
             {
-                if (!EnsureStreamingRecord(index, out LibraryImageRecord record) || !record.Exists)
+                if (!TryGetStreamingImage(index, out V3LibraryImageRecord record) || !record.Exists)
                     return false;
 
-                if (!AssetManager.TryReadCachedLibraryImage(_streamingId, record, out StreamingLibraryImageChunk chunk))
+                if (!AssetManager.TryReadCachedLibraryImage(record, out V3LibraryImagePayload payload))
                 {
-                    AssetManager.QueueLibraryImage(_streamingId, record);
+                    AssetManager.QueueLibraryImage(_streamingRecord, record);
                     return false;
                 }
 
-                _images[index] = new MImage(chunk);
+                _images[index] = new MImage(payload);
             }
 
             MImage mi = _images[index];
@@ -773,20 +750,12 @@ namespace Client.MirGraphics
             return true;
         }
 
-        private bool EnsureStreamingRecord(int index, out LibraryImageRecord record)
+        private bool TryGetStreamingImage(int index, out V3LibraryImageRecord record)
         {
-            if (_streamingImages.TryGetValue(index, out record)) return true;
-
-            if (AssetManager.TryGetCachedLibraryPage(_streamingId, _streamingManifest, index, out LibraryManifestPage page))
-            {
-                foreach (LibraryImageRecord image in page.Images) _streamingImages[image.Index] = image;
-            }
-            else
-            {
-                AssetManager.QueueLibraryPage(_streamingId, _streamingManifest, index);
-            }
-
-            return _streamingImages.TryGetValue(index, out record);
+            record = null;
+            if (_streamingIndex?.Images == null || index < 0 || index >= _streamingIndex.Images.Count) return false;
+            record = _streamingIndex.Images[index];
+            return record?.Index == index;
         }
 
         public Point GetOffSet(int index)
@@ -801,7 +770,7 @@ namespace Client.MirGraphics
                 if (_images[index] != null)
                     return new Point(_images[index].X, _images[index].Y);
 
-                if (EnsureStreamingRecord(index, out LibraryImageRecord record))
+                if (TryGetStreamingImage(index, out V3LibraryImageRecord record))
                     return new Point(record.X, record.Y);
 
                 return Point.Empty;
@@ -809,6 +778,7 @@ namespace Client.MirGraphics
 
             if (_images[index] == null)
             {
+                if (_indexList[index] <= 0) return Point.Empty;
                 _fStream.Seek(_indexList[index], SeekOrigin.Begin);
                 _images[index] = new MImage(_reader);
             }
@@ -826,7 +796,7 @@ namespace Client.MirGraphics
                 if (_images[index] != null)
                     return new Size(_images[index].Width, _images[index].Height);
 
-                if (EnsureStreamingRecord(index, out LibraryImageRecord record))
+                if (TryGetStreamingImage(index, out V3LibraryImageRecord record))
                     return new Size(record.Width, record.Height);
 
                 return Size.Empty;
@@ -834,6 +804,7 @@ namespace Client.MirGraphics
 
             if (_images[index] == null)
             {
+                if (_indexList[index] <= 0) return Size.Empty;
                 _fStream.Seek(_indexList[index], SeekOrigin.Begin);
                 _images[index] = new MImage(_reader);
             }
@@ -850,24 +821,14 @@ namespace Client.MirGraphics
 
             if (_streaming)
             {
-                EnsureStreamingRecord(index, out _);
-                if (!CheckImage(index))
-                {
-                    // Layout is calculated while controls are constructed. On a cold
-                    // streaming cache the pixels are not available yet, but the
-                    // library manifest already contains the canvas dimensions.
-                    // Returning them prevents one-time Size.Empty based misalignment.
-                    if (_streamingImages.TryGetValue(index, out LibraryImageRecord record))
-                        return new Size(record.Width, record.Height);
-
+                if (!TryGetStreamingImage(index, out V3LibraryImageRecord record) || !record.Exists)
                     return Size.Empty;
-                }
-
-                return _images[index].TrueSize.IsEmpty ? _images[index].GetTrueSize() : _images[index].TrueSize;
+                return new Size(record.TrueWidth, record.TrueHeight);
             }
 
             if (_images[index] == null)
             {
+                if (_indexList[index] <= 0) return Size.Empty;
                 _fStream.Position = _indexList[index];
                 _images[index] = new MImage(_reader);
             }
@@ -1154,7 +1115,7 @@ namespace Client.MirGraphics
             }
         }
 
-        public MImage(StreamingLibraryImageChunk chunk)
+        public MImage(V3LibraryImagePayload chunk)
         {
             Width = chunk.Width;
             Height = chunk.Height;
@@ -1197,7 +1158,7 @@ namespace Client.MirGraphics
                 MaskImage = new Texture(DXManager.Device, w, h, 1, Usage.None, Format.A8R8G8B8, Pool.Managed);
                 stream = MaskImage.LockRectangle(0, LockFlags.Discard);
 
-                DecompressImage(reader.ReadBytes(Length), stream.Data);
+                DecompressImage(reader.ReadBytes(MaskLength), stream.Data);
 
                 stream.Data.Dispose();
                 MaskImage.UnlockRectangle(0);

@@ -14,7 +14,8 @@ namespace Client.MirSounds.Libraries
         public long ExpireTime { get; set; }
 
         private WaveOutEvent outputDevice;
-        private AudioFileReader audioFile;
+        private WaveStream audioFile;
+        private Stream assetStream;
 
         private int _unscaledVolume;
         private string _fileName;
@@ -47,9 +48,10 @@ namespace Client.MirSounds.Libraries
                 return new LoopProvider(index, fileName, volume, loop);
             }
 
-            if (AssetManager.TryGetCachedSoundPath(fileName, SoundManager.SupportedFileTypes, out string cachedFileName))
+            if (AssetManager.TryGetCachedSoundBytes(fileName, SoundManager.SupportedFileTypes,
+                    out byte[] cachedBytes, out string cachedExtension))
             {
-                return new LoopProvider(index, cachedFileName, volume, loop);
+                return new LoopProvider(index, cachedBytes, cachedExtension, volume, loop);
             }
 
             AssetManager.QueueSound(fileName, SoundManager.SupportedFileTypes);
@@ -64,6 +66,19 @@ namespace Client.MirSounds.Libraries
 
             Play(volume);
         }
+
+        private LoopProvider(int index, byte[] bytes, string extension, int volume, bool loop)
+        {
+            Index = index;
+            _loop = loop;
+            _fileName = null;
+            _assetBytes = bytes;
+            _assetExtension = extension;
+            Play(volume);
+        }
+
+        private byte[] _assetBytes;
+        private string _assetExtension;
 
         public bool IsPlaying()
         {
@@ -87,7 +102,7 @@ namespace Client.MirSounds.Libraries
 
             if (audioFile == null)
             {
-                audioFile = new AudioFileReader(_fileName);
+                audioFile = CreateAudioFile();
                 outputDevice.Init(audioFile);
             }
 
@@ -100,7 +115,9 @@ namespace Client.MirSounds.Libraries
                 }
                 catch
                 {
-                    audioFile = new AudioFileReader(_fileName);
+                    audioFile?.Dispose();
+                    assetStream?.Dispose();
+                    audioFile = CreateAudioFile();
                     outputDevice.Init(audioFile);
                 }
             }
@@ -134,6 +151,7 @@ namespace Client.MirSounds.Libraries
 
             outputDevice?.Dispose();
             audioFile?.Dispose();
+            assetStream?.Dispose();
         }
 
         private float ScaleVolume(int volume)
@@ -142,6 +160,13 @@ namespace Client.MirSounds.Libraries
 
             float scaled = 0.0f + (float)(volume - 0) / (100 - 0) * (1.0f - 0.0f);
             return scaled;
+        }
+
+        private WaveStream CreateAudioFile()
+        {
+            if (_assetBytes == null) return new AudioFileReader(_fileName);
+            assetStream = new MemoryStream(_assetBytes, false);
+            return AudioStreamFactory.Create(assetStream, _assetExtension);
         }
     }
 }

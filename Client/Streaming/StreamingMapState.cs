@@ -7,19 +7,21 @@ namespace Client.Streaming
     public sealed class StreamingMapState
     {
         private readonly string _mapId;
-        private readonly MapManifest _manifest;
-        private readonly Dictionary<string, MapChunkRecord> _chunks;
+        private readonly V3MapRecord _record;
+        private V3MapIndex _index;
+        private Dictionary<string, V3MapChunkRecord> _chunks;
         private readonly HashSet<string> _loadedChunks = new HashSet<string>();
 
-        private StreamingMapState(string mapId, MapManifest manifest)
+        private StreamingMapState(string mapId, V3MapRecord record, V3MapIndex index)
         {
             _mapId = mapId;
-            _manifest = manifest;
-            _chunks = manifest.Chunks.ToDictionary(x => x.Key, x => x);
+            _record = record;
+            _index = index;
+            SetIndex(index);
         }
 
-        public int Width => _manifest.Width;
-        public int Height => _manifest.Height;
+        public int Width => _index?.Width ?? _record.Width;
+        public int Height => _index?.Height ?? _record.Height;
 
         public static bool TryCreate(string localMapFile, out StreamingMapState state)
         {
@@ -27,10 +29,11 @@ namespace Client.Streaming
             if (!AssetManager.Enabled) return false;
 
             string mapId = AssetManager.ToMapId(localMapFile);
-            MapManifest manifest = AssetManager.GetMapManifest(mapId);
-            if (manifest == null) return false;
+            if (!AssetManager.TryGetLoadedMapRecord(mapId, out V3MapRecord record)) return false;
+            AssetManager.TryGetCachedMapIndex(mapId, out V3MapIndex index);
 
-            state = new StreamingMapState(mapId, manifest);
+            state = new StreamingMapState(mapId, record, index);
+            if (index == null) AssetManager.QueueMapIndex(mapId);
             return true;
         }
 
@@ -55,14 +58,20 @@ namespace Client.Streaming
                 return false;
             }
 
-            int chunkX = point.X / _manifest.ChunkSize * _manifest.ChunkSize;
-            int chunkY = point.Y / _manifest.ChunkSize * _manifest.ChunkSize;
+            if (_index == null) return false;
+            int chunkX = point.X / _index.ChunkSize * _index.ChunkSize;
+            int chunkY = point.Y / _index.ChunkSize * _index.ChunkSize;
             return _loadedChunks.Contains($"{chunkX}_{chunkY}");
         }
 
         public void EnsureVisibleChunks(MapControl map)
         {
             if (MapControl.User == null || map.M2CellInfo == null) return;
+            if (_index == null && !TryPromoteIndex())
+            {
+                AssetManager.QueueMapIndex(_mapId);
+                return;
+            }
 
             Point user = MapControl.User.Movement;
             int startX = Math.Max(0, user.X - MapControl.ViewRangeX);
@@ -70,27 +79,27 @@ namespace Client.Streaming
             int startY = Math.Max(0, user.Y - MapControl.ViewRangeY);
             int endY = Math.Min(Height - 1, user.Y + MapControl.ViewRangeY + 25);
 
-            bool visibleChanged = ApplyCachedChunks(map, GetChunks(startX, endX, startY, endY, user), out List<MapChunkRecord> missingVisible);
+            bool visibleChanged = ApplyCachedChunks(map, GetChunks(startX, endX, startY, endY, user), out List<V3MapChunkRecord> missingVisible);
             if (missingVisible.Count > 0)
             {
-                AssetManager.QueueMapChunks(_mapId, missingVisible);
+                AssetManager.QueueMapChunks(_record, missingVisible);
             }
             else
             {
-                int prefetchStartX = Math.Max(0, startX - _manifest.ChunkSize);
-                int prefetchEndX = Math.Min(Width - 1, endX + _manifest.ChunkSize);
-                int prefetchStartY = Math.Max(0, startY - _manifest.ChunkSize);
-                int prefetchEndY = Math.Min(Height - 1, endY + _manifest.ChunkSize);
+                int prefetchStartX = Math.Max(0, startX - _index.ChunkSize);
+                int prefetchEndX = Math.Min(Width - 1, endX + _index.ChunkSize);
+                int prefetchStartY = Math.Max(0, startY - _index.ChunkSize);
+                int prefetchEndY = Math.Min(Height - 1, endY + _index.ChunkSize);
 
-                List<MapChunkRecord> visible = GetChunks(startX, endX, startY, endY, user);
+                List<V3MapChunkRecord> visible = GetChunks(startX, endX, startY, endY, user);
                 HashSet<string> visibleKeys = visible.Select(record => record.Key).ToHashSet();
-                List<MapChunkRecord> prefetch = GetChunks(prefetchStartX, prefetchEndX, prefetchStartY, prefetchEndY, user)
+                List<V3MapChunkRecord> prefetch = GetChunks(prefetchStartX, prefetchEndX, prefetchStartY, prefetchEndY, user)
                     .Where(record => !visibleKeys.Contains(record.Key))
                     .ToList();
 
-                visibleChanged |= ApplyCachedChunks(map, prefetch, out List<MapChunkRecord> missingPrefetch);
+                visibleChanged |= ApplyCachedChunks(map, prefetch, out List<V3MapChunkRecord> missingPrefetch);
                 if (missingPrefetch.Count > 0)
-                    AssetManager.QueueMapChunks(_mapId, missingPrefetch);
+                    AssetManager.QueueMapChunks(_record, missingPrefetch);
             }
 
             if (visibleChanged)
@@ -101,14 +110,29 @@ namespace Client.Streaming
             }
         }
 
-        private List<MapChunkRecord> GetChunks(int startX, int endX, int startY, int endY, Point user)
+        private bool TryPromoteIndex()
         {
-            List<MapChunkRecord> records = new();
-            for (int chunkX = startX / _manifest.ChunkSize * _manifest.ChunkSize; chunkX <= endX; chunkX += _manifest.ChunkSize)
+            if (_index != null) return true;
+            if (!AssetManager.TryGetCachedMapIndex(_mapId, out V3MapIndex index)) return false;
+            SetIndex(index);
+            return true;
+        }
+
+        private void SetIndex(V3MapIndex index)
+        {
+            _index = index;
+            _chunks = index?.Chunks.ToDictionary(x => x.Key, x => x) ??
+                      new Dictionary<string, V3MapChunkRecord>();
+        }
+
+        private List<V3MapChunkRecord> GetChunks(int startX, int endX, int startY, int endY, Point user)
+        {
+            List<V3MapChunkRecord> records = new();
+            for (int chunkX = startX / _index.ChunkSize * _index.ChunkSize; chunkX <= endX; chunkX += _index.ChunkSize)
             {
-                for (int chunkY = startY / _manifest.ChunkSize * _manifest.ChunkSize; chunkY <= endY; chunkY += _manifest.ChunkSize)
+                for (int chunkY = startY / _index.ChunkSize * _index.ChunkSize; chunkY <= endY; chunkY += _index.ChunkSize)
                 {
-                    if (_chunks.TryGetValue($"{chunkX}_{chunkY}", out MapChunkRecord record))
+                    if (_chunks.TryGetValue($"{chunkX}_{chunkY}", out V3MapChunkRecord record))
                         records.Add(record);
                 }
             }
@@ -116,15 +140,15 @@ namespace Client.Streaming
             return records.OrderBy(record => DistanceSquared(record, user)).ToList();
         }
 
-        private bool ApplyCachedChunks(MapControl map, List<MapChunkRecord> records, out List<MapChunkRecord> missing)
+        private bool ApplyCachedChunks(MapControl map, List<V3MapChunkRecord> records, out List<V3MapChunkRecord> missing)
         {
             bool changed = false;
-            missing = new List<MapChunkRecord>();
+            missing = new List<V3MapChunkRecord>();
 
-            foreach (MapChunkRecord record in records)
+            foreach (V3MapChunkRecord record in records)
             {
                 if (_loadedChunks.Contains(record.Key)) continue;
-                if (!AssetManager.TryReadCachedMapChunk(_mapId, record, out StreamingMapChunk chunk))
+                if (!AssetManager.TryReadCachedMapChunk(record, out StreamingMapChunk chunk))
                 {
                     missing.Add(record);
                     continue;
@@ -138,7 +162,7 @@ namespace Client.Streaming
             return changed;
         }
 
-        private int DistanceSquared(MapChunkRecord record, Point user)
+        private int DistanceSquared(V3MapChunkRecord record, Point user)
         {
             int centerX = record.X + record.Width / 2;
             int centerY = record.Y + record.Height / 2;
