@@ -145,6 +145,7 @@ CacheMaxMB=4096
 RecordWorkingSet=False
 ```
 
+- `ConcurrentDownloads` 是所有流式请求的总并发上限（1–32，默认 16）。客户端内部分两条通道：地图包、Catalog 索引和首启工作集走优先通道，图片批量和声音走普通通道，普通通道最多只能占用其中的 3/4，另外 1/4 永远留给优先通道。这样进图时地图包不会排在几百个图片请求后面——`GameScene.IsCellLoaded` 在地图包应用完之前一直拦着走路，本机看不出来，真实线路上就是"进图卡几秒"。
 - `PreferLocalAssets=True`：本地存在结构完整的 `Data\*.Lib` 或 `Map\*.map` 时优先使用本地文件，完整客户端不依赖资源服。
 - 本地 Lib 会覆盖资源服同名 Lib。要让某个本地 Lib 使用资源服新版本，应替换/删除这个完整 Lib，或把 `PreferLocalAssets` 改为 `False`。
 - 微端不要把部分下载的 Lib 放进 `Data`。流式字节只进入 `Cache\AssetsV3`，避免半个 Lib 被误判为完整资源。
@@ -222,7 +223,7 @@ V3 的处理方式是：
 dotnet run --project Tools\AssetBuilder\AssetBuilder.csproj -- self-test-v3
 ```
 
-客户端侧的本地缓存自测（稀疏容器、位图跨重启、LRU 淘汰、工作集解包），同样不需要资源服：
+客户端侧的本地缓存自测（稀疏容器、位图跨重启、非正常退出后的结构校验、LRU 淘汰、工作集解包、下载优先通道），同样不需要资源服：
 
 ```powershell
 .\Build\Client\Debug\Client.exe --asset-cache-self-test

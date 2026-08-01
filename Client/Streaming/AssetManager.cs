@@ -46,7 +46,12 @@ namespace Client.Streaming
         private static readonly ConcurrentDictionary<string, LibraryFetchQueue> LibraryQueues = new(StringComparer.OrdinalIgnoreCase);
         private static readonly object ManifestLock = new();
 
-        private static SemaphoreSlim DownloadSemaphore = new(16);
+        /// <summary>
+        /// Shared limiter for every streaming request. Two lanes: the map pack, the catalog ranges the
+        /// layout depends on and the first-run working set take the priority lane, bulk image batches and
+        /// sounds take the other, so a map pack can never sit behind hundreds of image spans.
+        /// </summary>
+        private static DownloadGate Downloads = new(16);
         private static AssetCacheStore _store;
         private static StreamingAssetV3Manifest _manifest;
         private static Dictionary<string, V3LibraryRecord> _libraries;
@@ -76,7 +81,7 @@ namespace Client.Streaming
         {
             if (!Enabled) return;
             Client.Timeout = TimeSpan.FromSeconds(Math.Max(5, Settings.AssetRequestTimeoutSeconds));
-            DownloadSemaphore = new SemaphoreSlim(Math.Max(1, Settings.AssetDownloadConcurrency));
+            Downloads = new DownloadGate(Math.Max(1, Settings.AssetDownloadConcurrency));
             _store = new AssetCacheStore(Settings.AssetCachePath, Settings.AssetCacheMaxMB, StartupLibraryIds);
             WorkingSetRecorder.Initialize();
             StartupAssetBootstrapper.Begin();
@@ -362,8 +367,9 @@ namespace Client.Streaming
             string id = NormalizeId(mapId);
             if (MapPacks.TryGetValue(id, out StreamingMapPack cached)) return cached;
             if (!TryGetMapRecord(id, out V3MapRecord record)) return null;
+            // Priority: nothing the player does in a map works until this pack is applied.
             byte[] bytes = await GetFullFileAsync(record.FileHash, record.FileLength,
-                StreamingAssetV3IO.GetMapPath(record.FileHash)).ConfigureAwait(false);
+                StreamingAssetV3IO.GetMapPath(record.FileHash), priority: true).ConfigureAwait(false);
             if (bytes == null) return null;
             try
             {
@@ -527,7 +533,8 @@ namespace Client.Streaming
         {
             string relativePath = StreamingAssetV3IO.GetWorkingSetPath(hash);
             if (!CanAttempt(hash)) return null;
-            await DownloadSemaphore.WaitAsync().ConfigureAwait(false);
+            // Priority: the whole point of the pack is to land before the ranged requests it replaces.
+            await Downloads.WaitAsync(priority: true).ConfigureAwait(false);
             try
             {
                 using HttpResponseMessage response = await Client.GetAsync(MakeUrl(relativePath)).ConfigureAwait(false);
@@ -545,7 +552,7 @@ namespace Client.Streaming
                 RecordFailure(hash);
                 return null;
             }
-            finally { DownloadSemaphore.Release(); }
+            finally { Downloads.Release(priority: true); }
         }
 
         /// <summary>Downloads one sound into the blob cache. Used by the startup phase for the sound list.</summary>
@@ -553,7 +560,8 @@ namespace Client.Streaming
         {
             if (!TryGetSoundRecord(soundId, out V3SoundRecord record)) return false;
             return await GetFullFileAsync(record.Hash, record.Length,
-                StreamingAssetV3IO.GetSoundPath(record.Hash, record.Extension)).ConfigureAwait(false) != null;
+                StreamingAssetV3IO.GetSoundPath(record.Hash, record.Extension), priority: false)
+                .ConfigureAwait(false) != null;
         }
 
         public static void QueueSound(string soundId)
@@ -562,7 +570,8 @@ namespace Client.Streaming
             QueueBackground("sound:" + record.Hash, async () =>
             {
                 byte[] bytes = await GetFullFileAsync(record.Hash, record.Length,
-                    StreamingAssetV3IO.GetSoundPath(record.Hash, record.Extension)).ConfigureAwait(false);
+                    StreamingAssetV3IO.GetSoundPath(record.Hash, record.Extension), priority: false)
+                    .ConfigureAwait(false);
                 if (bytes != null) PostAssetsUpdated();
             });
         }
@@ -655,6 +664,10 @@ namespace Client.Streaming
             }
             catch (Exception ex) { CMain.SaveError($"Asset notification failed: {ex.Message}"); }
         }
+        /// <summary>
+        /// Fetches one content-addressed range. Every caller is a catalog read - the index metadata layout
+        /// depends on - so these go in the priority lane.
+        /// </summary>
         private static Task<byte[]> GetRangeAsync(string hash, int length, string relativePath,
             long totalLength, long offset)
         {
@@ -665,7 +678,8 @@ namespace Client.Streaming
             return GetSingleFlightAsync(hash, async () =>
             {
                 if (!CanAttempt(hash)) return null;
-                byte[] bytes = await DownloadSpanAsync(relativePath, totalLength, offset, length).ConfigureAwait(false);
+                byte[] bytes = await DownloadSpanAsync(relativePath, totalLength, offset, length, priority: true)
+                    .ConfigureAwait(false);
                 if (bytes == null) { RecordFailure(hash); return null; }
                 if (!string.Equals(StreamingAssetIO.ComputeSha256(bytes), hash, StringComparison.OrdinalIgnoreCase))
                 {
@@ -680,13 +694,13 @@ namespace Client.Streaming
             });
         }
 
-        private static Task<byte[]> GetFullFileAsync(string hash, long length, string relativePath)
+        private static Task<byte[]> GetFullFileAsync(string hash, long length, string relativePath, bool priority)
         {
             if (length > int.MaxValue || length < 0 || !StreamingAssetIO.IsValidSha256(hash))
                 return Task.FromResult<byte[]>(null);
             AssetCacheStore store = _store;
             if (store != null && store.Blobs.TryGet(hash, length, out byte[] cached)) return Task.FromResult(cached);
-            return GetSingleFlightAsync(hash, () => DownloadFullAsync(hash, (int)length, relativePath));
+            return GetSingleFlightAsync(hash, () => DownloadFullAsync(hash, (int)length, relativePath, priority));
         }
 
         private static async Task<byte[]> GetSingleFlightAsync(string hash, Func<Task<byte[]>> factory)
@@ -695,9 +709,10 @@ namespace Client.Streaming
             try { return await lazy.Value.ConfigureAwait(false); }
             finally { Loads.TryRemove(new KeyValuePair<string, Lazy<Task<byte[]>>>(hash, lazy)); }
         }
-        private static async Task<byte[]> DownloadSpanAsync(string relativePath, long totalLength, long offset, int length)
+        private static async Task<byte[]> DownloadSpanAsync(string relativePath, long totalLength, long offset,
+            int length, bool priority)
         {
-            await DownloadSemaphore.WaitAsync().ConfigureAwait(false);
+            await Downloads.WaitAsync(priority).ConfigureAwait(false);
             try
             {
                 using HttpRequestMessage request = new(HttpMethod.Get, MakeUrl(relativePath));
@@ -717,13 +732,13 @@ namespace Client.Streaming
                 CMain.SaveError($"Streaming range failed '{relativePath}': {ex.Message}");
                 return null;
             }
-            finally { DownloadSemaphore.Release(); }
+            finally { Downloads.Release(priority); }
         }
 
-        private static async Task<byte[]> DownloadFullAsync(string hash, int length, string relativePath)
+        private static async Task<byte[]> DownloadFullAsync(string hash, int length, string relativePath, bool priority)
         {
             if (!CanAttempt(hash)) return null;
-            await DownloadSemaphore.WaitAsync().ConfigureAwait(false);
+            await Downloads.WaitAsync(priority).ConfigureAwait(false);
             try
             {
                 using HttpResponseMessage response = await Client.GetAsync(MakeUrl(relativePath)).ConfigureAwait(false);
@@ -743,7 +758,7 @@ namespace Client.Streaming
                 RecordFailure(hash);
                 return null;
             }
-            finally { DownloadSemaphore.Release(); }
+            finally { Downloads.Release(priority); }
         }
         /// <summary>
         /// Fetches a batch of image records from one published Lib. Records are sorted by offset and
@@ -864,19 +879,21 @@ namespace Client.Streaming
         private static async Task<Dictionary<long, byte[]>> DownloadSingleSpanAsync(string relativePath,
             long totalLength, LibrarySpan span)
         {
-            byte[] bytes = await DownloadSpanAsync(relativePath, totalLength, span.Offset, span.Length)
+            byte[] bytes = await DownloadSpanAsync(relativePath, totalLength, span.Offset, span.Length,
+                    priority: false)
                 .ConfigureAwait(false);
             return bytes == null ? null : new Dictionary<long, byte[]> { [span.Offset] = bytes };
         }
 
         /// <summary>
         /// Requests several disjoint spans of one file in a single round trip. The response body is a
-        /// sequence of [int64 offset][int32 length][bytes] records.
+        /// sequence of [int64 offset][int32 length][bytes] records. Bulk lane: these are the batches a map
+        /// pack or a catalog read must be able to overtake.
         /// </summary>
         private static async Task<Dictionary<long, byte[]>> DownloadSegmentsAsync(string relativePath,
             long totalLength, List<LibrarySpan> spans)
         {
-            await DownloadSemaphore.WaitAsync().ConfigureAwait(false);
+            await Downloads.WaitAsync(priority: false).ConfigureAwait(false);
             try
             {
                 StringBuilder query = new();
@@ -918,7 +935,7 @@ namespace Client.Streaming
                 CMain.SaveError($"Streaming segment batch failed '{relativePath}': {ex.Message}");
                 return null;
             }
-            finally { DownloadSemaphore.Release(); }
+            finally { Downloads.Release(priority: false); }
         }
         private static async Task EnsureManifestAsync()
         {

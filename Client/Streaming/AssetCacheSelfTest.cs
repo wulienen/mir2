@@ -96,6 +96,7 @@ public static class AssetCacheSelfTest
             RunEvictionChecks(image, payload);
             RunWorkingSetChecks();
             RunUncleanShutdownChecks(image, payload);
+            RunDownloadGateChecks();
         }
         finally
         {
@@ -315,6 +316,53 @@ public static class AssetCacheSelfTest
         {
             try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch (IOException) { }
         }
+    }
+
+    /// <summary>
+    /// The two download lanes. Entering a map queues hundreds of image spans, so the ordering rule - a
+    /// waiting map pack or catalog read is served before any bulk waiter, and bulk traffic can never hold
+    /// the reserved permits - is what keeps map entry off the back of that queue. Every assertion here is
+    /// synchronous: <c>SetResult</c> completes the waiter's task before <c>Release</c> returns.
+    /// </summary>
+    private static void RunDownloadGateChecks()
+    {
+        DownloadGate gate = new(4);
+        if (gate.Permits != 4 || gate.BulkLimit != 3)
+            throw new InvalidDataException("The gate sized its lanes wrong.");
+
+        for (int i = 0; i < gate.BulkLimit; i++)
+            if (!gate.WaitAsync(priority: false).IsCompleted)
+                throw new InvalidDataException("Bulk was refused a permit inside its own limit.");
+
+        // A permit is still free, but it is not the bulk lane's to take.
+        Task blockedBulk = gate.WaitAsync(priority: false);
+        if (blockedBulk.IsCompleted)
+            throw new InvalidDataException("Bulk took more permits than its limit allows.");
+        if (!gate.WaitAsync(priority: true).IsCompleted)
+            throw new InvalidDataException("Priority could not use the reserved permit.");
+
+        // Fully occupied now, so a second priority request has to queue - behind a bulk waiter that
+        // arrived first, and it must still be served first.
+        Task queuedPriority = gate.WaitAsync(priority: true);
+        if (queuedPriority.IsCompleted)
+            throw new InvalidDataException("The gate handed out more permits than it has.");
+
+        gate.Release(priority: false);
+        if (!queuedPriority.IsCompleted)
+            throw new InvalidDataException("A freed permit did not go to the waiting priority request.");
+        if (blockedBulk.IsCompleted)
+            throw new InvalidDataException("A bulk waiter overtook a priority waiter.");
+
+        gate.Release(priority: true);
+        if (!blockedBulk.IsCompleted)
+            throw new InvalidDataException("The bulk waiter was never served.");
+
+        // One permit degrades to a plain mutex rather than reserving away the only slot.
+        DownloadGate single = new(1);
+        if (single.Permits != 1 || single.BulkLimit != 1)
+            throw new InvalidDataException("A single-permit gate left the bulk lane no permits.");
+        if (!single.WaitAsync(priority: false).IsCompleted || single.WaitAsync(priority: true).IsCompleted)
+            throw new InvalidDataException("A single-permit gate did not serialise its callers.");
     }
 
     private static string BitsPath(string root, string id)
