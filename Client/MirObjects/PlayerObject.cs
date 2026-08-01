@@ -833,10 +833,13 @@ namespace Client.MirObjects
                             break;
                     }
 
+                    // Shadows are baked into the art as a two pixel checkerboard of dark pixels, so the
+                    // scroll offset has to stay on even pixels. An odd offset inverts the checkerboard's
+                    // phase and every shadow in view flickers, which is why this snap exists at all.
+                    OffSetMove = new Point(OffSetMove.X % 2 + OffSetMove.X, OffSetMove.Y % 2 + OffSetMove.Y);
+
                     if (Settings.SmoothMove)
                         SmoothMoveRedraw();
-                    else
-                        OffSetMove = new Point(OffSetMove.X % 2 + OffSetMove.X, OffSetMove.Y % 2 + OffSetMove.Y);
                     break;
                 default:
                     OffSetMove = Point.Empty;

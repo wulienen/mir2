@@ -422,10 +422,12 @@ namespace Client.MirObjects
                             break;
                     }
 
+                    // Keep the scroll offset on even pixels: shadows are a two pixel checkerboard in the art
+                    // and an odd offset inverts their phase, which reads as flickering shadows.
+                    OffSetMove = new Point(OffSetMove.X % 2 + OffSetMove.X, OffSetMove.Y % 2 + OffSetMove.Y);
+
                     if (Settings.SmoothMove)
                         SmoothMoveRedraw();
-                    else
-                        OffSetMove = new Point(OffSetMove.X % 2 + OffSetMove.X, OffSetMove.Y % 2 + OffSetMove.Y);
                     break;
                 default:
                     OffSetMove = Point.Empty;
