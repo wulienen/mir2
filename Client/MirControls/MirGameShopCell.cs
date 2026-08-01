@@ -270,10 +270,11 @@ namespace Client.MirControls
                 goldLabel.Text = (Item.GoldPrice * Quantity).ToString("###,###,##0");
             if (Item.CanBuyCredit)
                 gpLabel.Text = (Item.CreditPrice * Quantity).ToString("###,###,##0");
-            if (Item.Stock >= 99) stockLabel.Text = "99+";
             if (Item.Stock == 0) stockLabel.Text = "∞";
+            else if (Item.Stock >= 99) stockLabel.Text = "99+";
             else stockLabel.Text = Item.Stock.ToString();
             countLabel.Text = Item.Count.ToString();
+            quantity.Text = Quantity.ToString();
 
             if (Item.Info.Type == ItemType.Mount || Item.Info.Type == ItemType.Weapon || Item.Info.Type == ItemType.Armour || Item.Info.Type == ItemType.Transform)
             {
