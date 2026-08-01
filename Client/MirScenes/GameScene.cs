@@ -42,6 +42,17 @@ namespace Client.MirScenes
         public static long MoveTime, AttackTime, NextRunTime, LogTime, LastRunTime, ChangePModeTime, ChangeAModeTime, HeroSpellTime, IntelligentCreaturePickupTime;
         public static bool CanMove, CanRun;
 
+        /// <summary>Length of one movement tick in milliseconds. Every mover advances one frame per tick.</summary>
+        public const int MoveTickLength = 100;
+
+        /// <summary>
+        /// How far the current movement tick has progressed, 0 at the tick that advanced the walk frame and
+        /// approaching 1 just before the next one. Smooth movement uses it to place movers between the two
+        /// frames instead of snapping them to the frame the tick landed on; it stays at 1 (the classic
+        /// end-of-frame position) while <see cref="Settings.SmoothMove"/> is off.
+        /// </summary>
+        public static float MoveProgress = 1f;
+
         private bool hasHero;
         public bool HasHero
         {
@@ -1238,13 +1249,17 @@ namespace Client.MirScenes
 
             if (CMain.Time >= MoveTime)
             {
-                MoveTime = CMain.Time + 100; //Move Speed
+                MoveTime = CMain.Time + MoveTickLength; //Move Speed
                 CanMove = true;
                 MapControl.AnimationCount++;
                 MapControl.TextureValid = false;
             }
             else
                 CanMove = false;
+
+            MoveProgress = Settings.SmoothMove
+                ? Math.Clamp(1f - (MoveTime - CMain.Time) / (float)MoveTickLength, 0f, 1f)
+                : 1f;
 
             if (CMain.Time >= CMain.NextPing)
             {

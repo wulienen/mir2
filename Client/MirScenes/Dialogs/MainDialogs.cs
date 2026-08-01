@@ -2851,6 +2851,8 @@ namespace Client.MirScenes.Dialogs
         public MirButton NameViewOn, NameViewOff;
         public MirButton HPViewOn, HPViewOff;
         public MirButton NewMoveOn, NewMoveOff;
+        public MirButton SmoothMoveOn, SmoothMoveOff;
+        public MirLabel SmoothMoveLabel;
         public MirButton ObserveOn, ObserveOff;
         public MirImageControl SoundBar, MusicSoundBar;
         public MirImageControl VolumeBar, MusicVolumeBar;
@@ -3122,6 +3124,46 @@ namespace Client.MirScenes.Dialogs
                 PressedIndex = 460
             };
             ObserveOff.Click += (o, e) => ToggleObserve(false);
+
+            // The panel art has no row below NewMove, so this one brings its own caption.
+            SmoothMoveLabel = new MirLabel
+            {
+                Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SmoothMovement),
+                Location = new Point(22, 322),
+                Size = new Size(130, 17),
+                Parent = this,
+                NotControl = true,
+            };
+
+            SmoothMoveOn = new MirButton
+            {
+                Library = Libraries.Prguse2,
+                Location = new Point(159, 321),
+                Parent = this,
+                Sound = SoundList.ButtonA,
+                Size = new Size(36, 17),
+                PressedIndex = 457,
+            };
+            SmoothMoveOn.Click += (o, e) =>
+            {
+                Settings.SmoothMove = true;
+                GameScene.Scene.ChatDialog.ReceiveChat(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SmoothMovementOn), ChatType.Hint);
+            };
+
+            SmoothMoveOff = new MirButton
+            {
+                Library = Libraries.Prguse2,
+                Location = new Point(201, 321),
+                Parent = this,
+                Sound = SoundList.ButtonA,
+                Size = new Size(36, 17),
+                PressedIndex = 460
+            };
+            SmoothMoveOff.Click += (o, e) =>
+            {
+                Settings.SmoothMove = false;
+                GameScene.Scene.ChatDialog.ReceiveChat(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SmoothMovementOff), ChatType.Hint);
+            };
         }
 
         private void ToggleObserve(bool allow)
@@ -3318,6 +3360,17 @@ namespace Client.MirScenes.Dialogs
             {
                 ObserveOn.Index = 456;
                 ObserveOff.Index = 461;
+            }
+
+            if (Settings.SmoothMove)
+            {
+                SmoothMoveOn.Index = 458;
+                SmoothMoveOff.Index = 459;
+            }
+            else
+            {
+                SmoothMoveOn.Index = 456;
+                SmoothMoveOff.Index = 461;
             }
         }
 

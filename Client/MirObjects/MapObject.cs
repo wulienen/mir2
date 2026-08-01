@@ -137,6 +137,39 @@ namespace Client.MirObjects
             get { return new Point(0, 0); }
         }
 
+        private Point _smoothOffSetMove;
+
+        /// <summary>
+        /// Sub-cell position of a mover inside its current walk/run frame, as a multiple of one frame's
+        /// distance. Classic movement uses <c>index + 1</c>, so a step lands on one of <c>Frame.Count</c>
+        /// fixed positions and only ever changes on the 100 ms movement tick. Smooth movement adds the
+        /// fraction of the tick already elapsed instead, which covers exactly the same distance in the same
+        /// time but yields a new position on every rendered frame.
+        /// </summary>
+        protected static float MoveFrameOffSet(int index)
+        {
+            return Settings.SmoothMove ? index + GameScene.MoveProgress : index + 1;
+        }
+
+        /// <summary>
+        /// Called after an interpolated <see cref="OffSetMove"/> is computed. The world is drawn once into a
+        /// cached texture that is normally only rebuilt on the movement tick, which would freeze the
+        /// interpolation at 10 positions per second; the cache therefore has to be dropped whenever the
+        /// offset actually changes. The floor is cached separately and only depends on the user's own offset.
+        /// Redraws still happen at most once per rendered frame, so the cost stays bounded by MaxFPS.
+        /// </summary>
+        protected void SmoothMoveRedraw()
+        {
+            if (OffSetMove == _smoothOffSetMove) return;
+            _smoothOffSetMove = OffSetMove;
+
+            MapControl map = GameScene.Scene?.MapControl;
+            if (map == null || map.IsDisposed) return;
+
+            map.TextureValid = false;
+            if (this == User) map.FloorValid = false;
+        }
+
         protected MapObject() { }
 
         protected MapObject(uint objectID)

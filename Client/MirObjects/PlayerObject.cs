@@ -803,35 +803,40 @@ namespace Client.MirObjects
                         index %= 3;
                     }
 
+                    float step = MoveFrameOffSet(index);
+
                     switch (Direction)
                     {
                         case MirDirection.Up:
-                            OffSetMove = new Point(0, (int)((MapControl.CellHeight * i / (float)(count)) * (index + 1)));
+                            OffSetMove = new Point(0, (int)((MapControl.CellHeight * i / (float)(count)) * step));
                             break;
                         case MirDirection.UpRight:
-                            OffSetMove = new Point((int)((-MapControl.CellWidth * i / (float)(count)) * (index + 1)), (int)((MapControl.CellHeight * i / (float)(count)) * (index + 1)));
+                            OffSetMove = new Point((int)((-MapControl.CellWidth * i / (float)(count)) * step), (int)((MapControl.CellHeight * i / (float)(count)) * step));
                             break;
                         case MirDirection.Right:
-                            OffSetMove = new Point((int)((-MapControl.CellWidth * i / (float)(count)) * (index + 1)), 0);
+                            OffSetMove = new Point((int)((-MapControl.CellWidth * i / (float)(count)) * step), 0);
                             break;
                         case MirDirection.DownRight:
-                            OffSetMove = new Point((int)((-MapControl.CellWidth * i / (float)(count)) * (index + 1)), (int)((-MapControl.CellHeight * i / (float)(count)) * (index + 1)));
+                            OffSetMove = new Point((int)((-MapControl.CellWidth * i / (float)(count)) * step), (int)((-MapControl.CellHeight * i / (float)(count)) * step));
                             break;
                         case MirDirection.Down:
-                            OffSetMove = new Point(0, (int)((-MapControl.CellHeight * i / (float)(count)) * (index + 1)));
+                            OffSetMove = new Point(0, (int)((-MapControl.CellHeight * i / (float)(count)) * step));
                             break;
                         case MirDirection.DownLeft:
-                            OffSetMove = new Point((int)((MapControl.CellWidth * i / (float)(count)) * (index + 1)), (int)((-MapControl.CellHeight * i / (float)(count)) * (index + 1)));
+                            OffSetMove = new Point((int)((MapControl.CellWidth * i / (float)(count)) * step), (int)((-MapControl.CellHeight * i / (float)(count)) * step));
                             break;
                         case MirDirection.Left:
-                            OffSetMove = new Point((int)((MapControl.CellWidth * i / (float)(count)) * (index + 1)), 0);
+                            OffSetMove = new Point((int)((MapControl.CellWidth * i / (float)(count)) * step), 0);
                             break;
                         case MirDirection.UpLeft:
-                            OffSetMove = new Point((int)((MapControl.CellWidth * i / (float)(count)) * (index + 1)), (int)((MapControl.CellHeight * i / (float)(count)) * (index + 1)));
+                            OffSetMove = new Point((int)((MapControl.CellWidth * i / (float)(count)) * step), (int)((MapControl.CellHeight * i / (float)(count)) * step));
                             break;
                     }
 
-                    OffSetMove = new Point(OffSetMove.X % 2 + OffSetMove.X, OffSetMove.Y % 2 + OffSetMove.Y);
+                    if (Settings.SmoothMove)
+                        SmoothMoveRedraw();
+                    else
+                        OffSetMove = new Point(OffSetMove.X % 2 + OffSetMove.X, OffSetMove.Y % 2 + OffSetMove.Y);
                     break;
                 default:
                     OffSetMove = Point.Empty;
@@ -852,6 +857,11 @@ namespace Client.MirObjects
                 DrawLocation.Offset(User.OffSetMove);
                 DrawLocation.Offset(-OffSetMove.X, -OffSetMove.Y);
             }
+
+            // Smooth movement shifts DrawLocation on every rendered frame, so the derived draw offset and
+            // the mouse-over rectangle have to follow it instead of only refreshing on the movement tick.
+            if (Settings.SmoothMove && (OffSetMove != Point.Empty || User.OffSetMove != Point.Empty))
+                update = true;
 
             if (BodyLibrary != null && update)
             {

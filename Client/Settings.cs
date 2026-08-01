@@ -160,7 +160,8 @@ namespace Client
             ExpandedBuffWindow = true,
             ExpandedHeroBuffWindow = true,
             DisplayBodyName = false,
-            NewMove = false;
+            NewMove = false,
+            SmoothMove = true;
 
         public static string Language = "Chinese";
 
@@ -281,6 +282,7 @@ namespace Client
             DuraView = Reader.ReadBoolean("Game", "DuraWindow", DuraView);
             DisplayBodyName = Reader.ReadBoolean("Game", "DisplayBodyName", DisplayBodyName);
             NewMove = Reader.ReadBoolean("Game", "NewMove", NewMove);
+            SmoothMove = Reader.ReadBoolean("Game", "SmoothMove", SmoothMove);
             Language = Reader.ReadString("Game", "Language", Language);
 
             for (int i = 0; i < SkillbarLocation.Length / 2; i++)
@@ -421,6 +423,7 @@ namespace Client
             Reader.Write("Game", "DuraWindow", DuraView);
             Reader.Write("Game", "DisplayBodyName", DisplayBodyName);
             Reader.Write("Game", "NewMove", NewMove);
+            Reader.Write("Game", "SmoothMove", SmoothMove);
             Reader.Write("Game", "Language", Language);
 
             for (int i = 0; i < SkillbarLocation.Length / 2; i++)
