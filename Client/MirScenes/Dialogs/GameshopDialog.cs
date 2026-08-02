@@ -716,6 +716,18 @@ namespace Client.MirScenes.Dialogs
             if (category == "Show All" || category == "All")
                 return GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.All);
 
+            switch (category.Trim().ToLowerInvariant())
+            {
+                case "special":
+                    return GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GameShopCategorySpecial);
+                case "creature":
+                    return GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GameShopCategoryCreature);
+                case "package":
+                    return GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GameShopCategoryPackage);
+                case "fishing":
+                    return GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GameShopCategoryFishing);
+            }
+
             if (Enum.TryParse(category, true, out ItemType itemType) &&
                 Enum.TryParse("ItemType" + itemType, true, out ClientTextKeys key))
             {
