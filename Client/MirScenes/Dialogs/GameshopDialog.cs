@@ -23,6 +23,8 @@ namespace Client.MirScenes.Dialogs
         public MirTextBox Search;
         public MirImageControl TitleLabel, FilterBackground;
 
+        private readonly Dictionary<MirLabel, string> FilterValues = new Dictionary<MirLabel, string>();
+
         public string ClassFilter = "Show All";
         public string TypeFilter = "Show All";
         public string SectionFilter = "Show All";
@@ -437,13 +439,14 @@ namespace Client.MirScenes.Dialogs
                 Filters[i].Click += (o, e) =>
                 {
                     MirLabel lab = (MirLabel)o;
-                    TypeFilter = lab.Text;
+                    TypeFilter = FilterValues.TryGetValue(lab, out string value) ? value : lab.Text;
                     Page = 0;
                     StartIndex = 0;
                     UpdateShop();
                     for (int p = 0; p < Filters.Length; p++)
                     {
-                        if (Filters[p].Text == lab.Text) Filters[p].ForeColour = Color.FromArgb(230, 200, 160);
+                        string filterValue = FilterValues.TryGetValue(Filters[p], out string storedValue) ? storedValue : Filters[p].Text;
+                        if (filterValue == TypeFilter) Filters[p].ForeColour = Color.FromArgb(230, 200, 160);
                         else Filters[p].ForeColour = Color.Gray;
                     }
 
@@ -453,7 +456,9 @@ namespace Client.MirScenes.Dialogs
                     MirLabel lab = (MirLabel)o;
                     for (int p = 0; p < Filters.Length; p++)
                     {
-                        if (Filters[p].Text == lab.Text && Filters[p].ForeColour != Color.FromArgb(230, 200, 160)) Filters[p].ForeColour = Color.FromArgb(160, 140, 110);
+                        string filterValue = FilterValues.TryGetValue(Filters[p], out string storedValue) ? storedValue : Filters[p].Text;
+                        string hoveredValue = FilterValues.TryGetValue(lab, out string currentValue) ? currentValue : lab.Text;
+                        if (filterValue == hoveredValue && Filters[p].ForeColour != Color.FromArgb(230, 200, 160)) Filters[p].ForeColour = Color.FromArgb(160, 140, 110);
                     }
                 };
                 Filters[i].MouseLeave += (o, e) =>
@@ -461,7 +466,9 @@ namespace Client.MirScenes.Dialogs
                     MirLabel lab = (MirLabel)o;
                     for (int p = 0; p < Filters.Length; p++)
                     {
-                        if (Filters[p].Text == lab.Text && Filters[p].ForeColour != Color.FromArgb(230, 200, 160)) Filters[p].ForeColour = Color.Gray;
+                        string filterValue = FilterValues.TryGetValue(Filters[p], out string storedValue) ? storedValue : Filters[p].Text;
+                        string hoveredValue = FilterValues.TryGetValue(lab, out string currentValue) ? currentValue : lab.Text;
+                        if (filterValue == hoveredValue && Filters[p].ForeColour != Color.FromArgb(230, 200, 160)) Filters[p].ForeColour = Color.Gray;
                     }
                 };
                 Filters[i].MouseWheel += FilterScrolling;
@@ -544,6 +551,8 @@ namespace Client.MirScenes.Dialogs
             Grid = null;
             Filters = null;
             FilterBackground = null;
+
+            FilterValues.Clear();
 
             Viewer.Dispose();
 
@@ -683,19 +692,37 @@ namespace Client.MirScenes.Dialogs
         {
             for (int i = 0; i < Filters.Length; i++)
             {
-                if (i < CategoryList.Count)
+                int categoryIndex = i + CStartIndex;
+                if (categoryIndex < CategoryList.Count)
                 {
-                    Filters[i].Text = CategoryList[i + CStartIndex];
-                    Filters[i].ForeColour = Filters[i].Text == TypeFilter ? Color.FromArgb(230, 200, 160) : Color.Gray;
+                    string category = CategoryList[categoryIndex];
+                    FilterValues[Filters[i]] = category;
+                    Filters[i].Text = GetCategoryText(category);
+                    Filters[i].ForeColour = category == TypeFilter ? Color.FromArgb(230, 200, 160) : Color.Gray;
                     Filters[i].NotControl = false;
                 }
                 else
                 {
+                    FilterValues.Remove(Filters[i]);
                     Filters[i].Text = "";
                     Filters[i].NotControl = true;
                 }
             }
 
+        }
+
+        private static string GetCategoryText(string category)
+        {
+            if (category == "Show All" || category == "All")
+                return GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.All);
+
+            if (Enum.TryParse(category, true, out ItemType itemType) &&
+                Enum.TryParse("ItemType" + itemType, true, out ClientTextKeys key))
+            {
+                return GameLanguage.ClientTextMap.GetLocalization(key);
+            }
+
+            return category;
         }
         public void UpdateShop()
         {

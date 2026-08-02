@@ -734,6 +734,7 @@
     "ConfirmBidGoldForItem": "Are you sure you want to bid {0:#,##0} Gold for {1}?",
     "SearchAgainAfterSeconds": "You can search again after {0} seconds.",
     "ShowAllItems": "Show All Items",
+    "Stock": "Stock:",
     "WeaponItems": "Weapon Items",
     "DraperyItems": "Drapery Items",
     "AccessoryItems": "Accessory Items",

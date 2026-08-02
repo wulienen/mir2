@@ -734,6 +734,7 @@
     "ConfirmBidGoldForItem": "你确定要为{1}出价{0:#,##0}金币吗？",
     "SearchAgainAfterSeconds": "你可以在{0}秒后再次搜索。",
     "ShowAllItems": "显示所有物品",
+    "Stock": "库存：",
     "WeaponItems": "武器类物品",
     "DraperyItems": "衣服类物品",
     "AccessoryItems": "饰品类物品",

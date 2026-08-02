@@ -69,7 +69,7 @@ namespace Client.MirControls
                 NotControl = true,
                 ForeColour = Color.Gray,
                 Font = new Font(Settings.FontFamily, 7F),
-                Text = "STOCK:"
+                Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Stock)
             };
 
             stockLabel = new MirLabel

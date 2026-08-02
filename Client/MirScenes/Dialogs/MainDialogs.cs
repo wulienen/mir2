@@ -2844,6 +2844,30 @@ namespace Client.MirScenes.Dialogs
     }
     public sealed class OptionDialog : MirImageControl
     {
+        // These private entries are appended by migrate-settings-shop-assets.ps1.
+        private const int SettingsButtonBaseIndex = 1602;
+
+        private static int SettingsButtonIndex(int originalIndex)
+        {
+            if (originalIndex < 450 || originalIndex > 467)
+                throw new ArgumentOutOfRangeException(nameof(originalIndex));
+
+            return SettingsButtonBaseIndex + originalIndex - 450;
+        }
+
+        private static int MovementButtonIndex(int originalIndex)
+        {
+            return originalIndex switch
+            {
+                848 => 899,
+                850 => 900,
+                851 => 901,
+                852 => 902,
+                853 => 903,
+                _ => throw new ArgumentOutOfRangeException(nameof(originalIndex))
+            };
+        }
+
         public MirButton SkillModeOn, SkillModeOff;
         public MirButton SkillBarOn, SkillBarOff;
         public MirButton EffectOn, EffectOff;
@@ -2891,7 +2915,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 451,
+                PressedIndex = SettingsButtonIndex(451),
             };
             SkillModeOn.Click += (o, e) =>
             {
@@ -2906,7 +2930,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 454
+                PressedIndex = SettingsButtonIndex(454)
             };
             SkillModeOff.Click += (o, e) =>
             {
@@ -2920,7 +2944,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 457,
+                PressedIndex = SettingsButtonIndex(457),
             };
             SkillBarOn.Click += (o, e) => Settings.SkillBar = true;
 
@@ -2931,7 +2955,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 460
+                PressedIndex = SettingsButtonIndex(460)
             };
             SkillBarOff.Click += (o, e) => Settings.SkillBar = false;
 
@@ -2942,7 +2966,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 457,
+                PressedIndex = SettingsButtonIndex(457),
             };
             EffectOn.Click += (o, e) => Settings.Effect = true;
 
@@ -2953,7 +2977,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 460
+                PressedIndex = SettingsButtonIndex(460)
             };
             EffectOff.Click += (o, e) => Settings.Effect = false;
 
@@ -2964,7 +2988,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 457,
+                PressedIndex = SettingsButtonIndex(457),
             };
             DropViewOn.Click += (o, e) => Settings.DropView = true;
 
@@ -2975,7 +2999,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 460
+                PressedIndex = SettingsButtonIndex(460)
             };
             DropViewOff.Click += (o, e) => Settings.DropView = false;
 
@@ -2986,7 +3010,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 457,
+                PressedIndex = SettingsButtonIndex(457),
             };
             NameViewOn.Click += (o, e) => Settings.NameView = true;
 
@@ -2997,7 +3021,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 460
+                PressedIndex = SettingsButtonIndex(460)
             };
             NameViewOff.Click += (o, e) => Settings.NameView = false;
 
@@ -3008,7 +3032,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 463,
+                PressedIndex = SettingsButtonIndex(463),
             };
             HPViewOn.Click += (o, e) =>
             {
@@ -3023,7 +3047,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 466
+                PressedIndex = SettingsButtonIndex(466)
             };
             HPViewOff.Click += (o, e) =>
             {
@@ -3080,7 +3104,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 853,
+                PressedIndex = MovementButtonIndex(853),
             };
             NewMoveOn.Click += (o, e) =>
             {
@@ -3095,7 +3119,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 850
+                PressedIndex = MovementButtonIndex(850)
             };
             NewMoveOff.Click += (o, e) =>
             {
@@ -3110,7 +3134,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 457,
+                PressedIndex = SettingsButtonIndex(457),
             };
             ObserveOn.Click += (o, e) => ToggleObserve(true);
 
@@ -3121,7 +3145,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 460
+                PressedIndex = SettingsButtonIndex(460)
             };
             ObserveOff.Click += (o, e) => ToggleObserve(false);
 
@@ -3142,7 +3166,7 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 457,
+                PressedIndex = SettingsButtonIndex(457),
             };
             SmoothMoveOn.Click += (o, e) =>
             {
@@ -3157,13 +3181,38 @@ namespace Client.MirScenes.Dialogs
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
-                PressedIndex = 460
+                PressedIndex = SettingsButtonIndex(460)
             };
             SmoothMoveOff.Click += (o, e) =>
             {
                 Settings.SmoothMove = false;
                 GameScene.Scene.ChatDialog.ReceiveChat(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SmoothMovementOff), ChatType.Hint);
             };
+
+            ConfigureButton(SkillModeOn, "~");
+            ConfigureButton(SkillModeOff, "Ctrl");
+            ConfigureButton(SkillBarOn, "开");
+            ConfigureButton(SkillBarOff, "关");
+            ConfigureButton(EffectOn, "开");
+            ConfigureButton(EffectOff, "关");
+            ConfigureButton(DropViewOn, "开");
+            ConfigureButton(DropViewOff, "关");
+            ConfigureButton(NameViewOn, "开");
+            ConfigureButton(NameViewOff, "关");
+            ConfigureButton(HPViewOn, "1");
+            ConfigureButton(HPViewOff, "2");
+            ConfigureButton(ObserveOn, "开");
+            ConfigureButton(ObserveOff, "关");
+            ConfigureButton(NewMoveOn, "新");
+            ConfigureButton(NewMoveOff, "旧");
+            ConfigureButton(SmoothMoveOn, "开");
+            ConfigureButton(SmoothMoveOff, "关");
+        }
+
+        private static void ConfigureButton(MirButton button, string text)
+        {
+            button.CenterText = true;
+            button.Text = text;
         }
 
         private void ToggleObserve(bool allow)
@@ -3276,101 +3325,101 @@ namespace Client.MirScenes.Dialogs
         {
             if (Settings.SkillMode)
             {
-                SkillModeOn.Index = 452;
-                SkillModeOff.Index = 453;
+                SkillModeOn.Index = SettingsButtonIndex(452);
+                SkillModeOff.Index = SettingsButtonIndex(453);
             }
             else
             {
-                SkillModeOn.Index = 450;
-                SkillModeOff.Index = 455;
+                SkillModeOn.Index = SettingsButtonIndex(450);
+                SkillModeOff.Index = SettingsButtonIndex(455);
             }
 
             if (Settings.SkillBar)
             {
-                SkillBarOn.Index = 458;
-                SkillBarOff.Index = 459;
+                SkillBarOn.Index = SettingsButtonIndex(458);
+                SkillBarOff.Index = SettingsButtonIndex(459);
             }
             else
             {
-                SkillBarOn.Index = 456;
-                SkillBarOff.Index = 461;
+                SkillBarOn.Index = SettingsButtonIndex(456);
+                SkillBarOff.Index = SettingsButtonIndex(461);
             }
 
             if (Settings.Effect)
             {
-                EffectOn.Index = 458;
-                EffectOff.Index = 459;
+                EffectOn.Index = SettingsButtonIndex(458);
+                EffectOff.Index = SettingsButtonIndex(459);
             }
             else
             {
-                EffectOn.Index = 456;
-                EffectOff.Index = 461;
+                EffectOn.Index = SettingsButtonIndex(456);
+                EffectOff.Index = SettingsButtonIndex(461);
             }
 
             if (Settings.DropView)
             {
-                DropViewOn.Index = 458;
-                DropViewOff.Index = 459;
+                DropViewOn.Index = SettingsButtonIndex(458);
+                DropViewOff.Index = SettingsButtonIndex(459);
             }
             else
             {
-                DropViewOn.Index = 456;
-                DropViewOff.Index = 461;
+                DropViewOn.Index = SettingsButtonIndex(456);
+                DropViewOff.Index = SettingsButtonIndex(461);
             }
 
             if (Settings.NameView)
             {
-                NameViewOn.Index = 458;
-                NameViewOff.Index = 459;
+                NameViewOn.Index = SettingsButtonIndex(458);
+                NameViewOff.Index = SettingsButtonIndex(459);
             }
             else
             {
-                NameViewOn.Index = 456;
-                NameViewOff.Index = 461;
+                NameViewOn.Index = SettingsButtonIndex(456);
+                NameViewOff.Index = SettingsButtonIndex(461);
             }
 
             if (Settings.HPView)
             {
-                HPViewOn.Index = 464;
-                HPViewOff.Index = 465;
+                HPViewOn.Index = SettingsButtonIndex(464);
+                HPViewOff.Index = SettingsButtonIndex(465);
             }
             else
             {
-                HPViewOn.Index = 462;
-                HPViewOff.Index = 467;
+                HPViewOn.Index = SettingsButtonIndex(462);
+                HPViewOff.Index = SettingsButtonIndex(467);
             }
 
             if (Settings.NewMove)
             {
-                NewMoveOn.Index = 853;
-                NewMoveOff.Index = 848;
+                NewMoveOn.Index = MovementButtonIndex(853);
+                NewMoveOff.Index = MovementButtonIndex(848);
             }
             else
             {
-                NewMoveOn.Index = 851;
-                NewMoveOff.Index = 850;
+                NewMoveOn.Index = MovementButtonIndex(851);
+                NewMoveOff.Index = MovementButtonIndex(850);
             }
 
             if (GameScene.AllowObserve)
             {
-                ObserveOn.Index = 458;
-                ObserveOff.Index = 459;
+                ObserveOn.Index = SettingsButtonIndex(458);
+                ObserveOff.Index = SettingsButtonIndex(459);
             }
             else
             {
-                ObserveOn.Index = 456;
-                ObserveOff.Index = 461;
+                ObserveOn.Index = SettingsButtonIndex(456);
+                ObserveOff.Index = SettingsButtonIndex(461);
             }
 
             if (Settings.SmoothMove)
             {
-                SmoothMoveOn.Index = 458;
-                SmoothMoveOff.Index = 459;
+                SmoothMoveOn.Index = SettingsButtonIndex(458);
+                SmoothMoveOff.Index = SettingsButtonIndex(459);
             }
             else
             {
-                SmoothMoveOn.Index = 456;
-                SmoothMoveOff.Index = 461;
+                SmoothMoveOn.Index = SettingsButtonIndex(456);
+                SmoothMoveOff.Index = SettingsButtonIndex(461);
             }
         }
 
