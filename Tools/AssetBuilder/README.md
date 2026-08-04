@@ -117,6 +117,8 @@ dotnet run --project Tools\AssetBuilder\AssetBuilder.csproj -- build-v3 `
 
 `AssetRoot` 必须指向包含 V3 `manifest.json`、`catalogs`、`libraries`、`maps`、`sounds` 和（发布过工作集时）`worksets` 的输出目录，不能指向 `Data_Full`。
 
+不想自己跑这个服务、或者机器没有公网 IP 时，整棵输出目录可以直接放到对象存储加 CDN，见第 9 节。
+
 启动服务：
 
 ```powershell
@@ -203,6 +205,28 @@ Working set: 20 image(s) over 256 KB left to ranged requests (40.8 MB).
 
 日志里出现 `Streaming working set applied: N image(s).` 表示这次冷启动用上了工作集。
 
+### 6.1 把工作集打包进客户端（削峰）
+
+一次重新发布之后，所有冷客户端会在同一分钟里向资源服要同一份 3.6 MB 工作集包。把它随客户端一起分发，这一波请求就完全不存在了：
+
+```powershell
+copy E:\GameSourceCode\StreamingAssetsV3\worksets\<workingSetHash>.wsp `
+     .\Build\Client\Debug\Data\workset.wsp
+```
+
+文件名固定为 `Data\workset.wsp`，不带哈希。客户端只在它的长度和 SHA-256 与当前清单的 `workingSetHash` 完全一致时才使用，所以过期的包不会被写到已经变动的偏移上，而是被忽略并改为下载。日志：
+
+| 日志 | 含义 |
+| --- | --- |
+| `Streaming working set read from '.\Data\workset.wsp'.` | 用上了随包文件，这次冷启动没有为工作集发过请求 |
+| `Bundled working set '...' does not match the manifest; downloading it.` | 包过期了，重新复制一次 |
+
+每次重新发布资源都要重新复制。整包只有 3.6 MB，比让每个玩家各拉一遍便宜得多。
+
+完整的 `Data\*.Lib` 和 `Map\*.map` 本来就可以随客户端分发（`PreferLocalAssets=True` 时优先使用），冷启动最大的一块是 `ChrSel.Lib`——登录和选角的大图有 40.8 MB 不进工作集包，随包分发这一个 50.8 MB 的库就能全部省掉。但**不能**把只下载了一部分的 Lib 放进 `Data`，那会被当成完整图库；零散的图片记录只能走工作集包，这是两者的分工。
+
+需要注意的是重建 Lib 的代价：库的内容哈希一变，客户端会把这个库的容器整体重置，所有玩家都要重新下载他们用到的全部图片。改一个 Lib 就等于给全服制造一次这个库的冷启动。
+
 ## 7. 首次进入错位问题
 
 旧微端曾出现第一次登录、选角和进入游戏时 UI 错位，重启后正常。原因是控件创建时图片尺寸元数据尚未下载，首次布局使用了零尺寸或错误尺寸。
@@ -223,7 +247,7 @@ V3 的处理方式是：
 dotnet run --project Tools\AssetBuilder\AssetBuilder.csproj -- self-test-v3
 ```
 
-客户端侧的本地缓存自测（稀疏容器、位图跨重启、非正常退出后的结构校验、LRU 淘汰、工作集解包、下载优先通道），同样不需要资源服：
+客户端侧的本地缓存自测（稀疏容器、位图跨重启、非正常退出后的结构校验、LRU 淘汰、工作集解包、随包工作集校验、下载优先通道、批量端点缺失检测），同样不需要资源服：
 
 ```powershell
 .\Build\Client\Debug\Client.exe --asset-cache-self-test
@@ -259,3 +283,47 @@ E:\GameSourceCode\StreamingAssetsV3\assetbuilder-v3-failures.log
 | 工作集没生效 | 日志有没有 `Streaming working set applied`；清单里 `workingSetHash` 是否为空；容器里是否已经有这些图片（此时无需再写） |
 
 不要把旧 `StreamingAssets` 或 `StreamingAssetsV2` 与 V3 输出混用。V3 客户端、V3 AssetServer 和 V3 `manifest.json` 必须配套使用。
+
+## 9. 部署到对象存储 / CDN
+
+发布目录里的东西全是内容寻址、永不变更的普通文件，只依赖 HTTP `Range`，所以可以完全不跑 AssetServer，直接放对象存储（R2 / OSS / COS）加 CDN。家宽没有公网 IP、或者不想让 7.6 GB 资源流量压在自己上行上时，这是推荐做法——游戏服那 7000 端口另找一台有公网 IP 的机器转发即可，两者互不相关。
+
+上传时保持目录结构不变：
+
+```text
+manifest.json
+catalogs/{hash}.bin
+libraries/{hash}.lib
+maps/{hash}.mappack
+sounds/{hash}.{wav|mp3|lst}
+worksets/{hash}.wsp
+```
+
+客户端 `AssetBaseUrl` 指到这一层，例如 `https://assets.example.com/v3/`。
+
+三条硬要求：
+
+1. **`manifest.json` 必须是 `Cache-Control: no-cache`**（或几十秒级的短 TTL），其余文件设 `public,max-age=31536000,immutable`。清单被缓存住是唯一会造成「发布了新资源但玩家看不到」的原因，客户端不会给它加时间戳绕过缓存。它是 0.89 MB 的 JSON，顺手开 gzip（AssetServer 本来就压缩 `application/json`）。
+2. **必须支持 `Range`**。`catalogs/*.bin` 和 `libraries/*.lib` 只按范围读取，S3 兼容存储都支持，但要确认 CDN 没有把 Range 请求改写成整取回源——Cloudflare 对「可缓存」资源默认就是整取，`bin` 在它的默认可缓存扩展名列表里，这种情况需要对 `catalogs/` 和 `libraries/` 设置绕过缓存。范围请求被吃掉时客户端会报 `Invalid HTTP range response`。
+3. **不要给整个桶挂鉴权或防盗链**，客户端是普通 `HttpClient`，不带 Referer，也不会做签名。
+
+`?segments=` 批量端点是 AssetServer 独有的。对象存储会忽略这个未知查询串直接返回整个对象，客户端第一次识别出来（成功响应但长度不可能是批量、或者 400/405/501）就会记住，本次会话之后全部改用逐段 Range，**不需要任何配置**。日志里会出现一行
+
+```text
+Streaming origin does not implement the ?segments= batch endpoint; using ranged requests for the rest of this session.
+```
+
+这是正常的，代价只是请求数变多；识别是靠响应头和有界读取完成的，不会为了发现这件事而把一个 429 MB 的 Lib 读进内存。配合首启工作集包（第 6 节）和随包分发（6.1），冷启动的往返次数已经被压掉大部分。
+
+对象存储上没有 `/health`，改用直接验证：
+
+```powershell
+curl -sI https://assets.example.com/v3/manifest.json                                  # 200，cache-control 应为 no-cache
+curl -sI -H "Range: bytes=0-1023" https://assets.example.com/v3/catalogs/<hash>.bin    # 必须 206
+curl -sI https://assets.example.com/v3/maps/<hash>.mappack                            # 200
+```
+
+第二条不是 206 就不用继续了，先把 CDN 的 Range 行为调好。
+
+上传前建议先跑一次 `--prune`（第 3 节），把历史格式和旧版本留下的无引用文件删掉再传，否则会为已经没人访问的文件付存储费。
+

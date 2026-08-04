@@ -1,3 +1,4 @@
+using System.Net;
 using System.Security.Cryptography;
 using Shared.StreamingAssets;
 
@@ -95,8 +96,10 @@ public static class AssetCacheSelfTest
 
             RunEvictionChecks(image, payload);
             RunWorkingSetChecks();
+            RunBundledWorkingSetChecks();
             RunUncleanShutdownChecks(image, payload);
             RunDownloadGateChecks();
+            RunBatchEndpointChecks();
         }
         finally
         {
@@ -363,6 +366,108 @@ public static class AssetCacheSelfTest
             throw new InvalidDataException("A single-permit gate left the bulk lane no permits.");
         if (!single.WaitAsync(priority: false).IsCompleted || single.WaitAsync(priority: true).IsCompleted)
             throw new InvalidDataException("A single-permit gate did not serialise its callers.");
+    }
+
+    /// <summary>
+    /// The bundled working set, which exists so a patch does not make every cold client fetch the same few
+    /// megabytes from the origin at the same minute. The rule that matters is the guard: a pack is used only
+    /// when it is byte-for-byte the one the manifest names, because applying an older pack would write
+    /// records at offsets the republished library has moved.
+    /// </summary>
+    private static void RunBundledWorkingSetChecks()
+    {
+        string root = Path.Combine(Path.GetTempPath(), "YangfeiCrystal-AssetBundle-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        string path = Path.Combine(root, "workset.wsp");
+        try
+        {
+            byte[] pack = new byte[64];
+            Random.Shared.NextBytes(pack);
+            string hash = Convert.ToHexString(SHA256.HashData(pack)).ToLowerInvariant();
+
+            if (AssetManager.TryReadLocalWorkingSet(path, hash, pack.Length) != null)
+                throw new InvalidDataException("A working set was read from a file that does not exist.");
+
+            File.WriteAllBytes(path, pack);
+            byte[] read = AssetManager.TryReadLocalWorkingSet(path, hash, pack.Length);
+            if (read == null || !read.AsSpan().SequenceEqual(pack))
+                throw new InvalidDataException("The bundled working set was not read back intact.");
+
+            // Same length, different bytes: only the hash can tell these apart, and it has to.
+            byte[] impostor = (byte[])pack.Clone();
+            impostor[0] ^= 0xFF;
+            File.WriteAllBytes(path, impostor);
+            if (AssetManager.TryReadLocalWorkingSet(path, hash, pack.Length) != null)
+                throw new InvalidDataException("A bundled working set with the wrong contents was accepted.");
+
+            File.WriteAllBytes(path, pack);
+            if (AssetManager.TryReadLocalWorkingSet(path, hash, pack.Length - 1) != null)
+                throw new InvalidDataException("A bundled working set of the wrong length was accepted.");
+        }
+        finally
+        {
+            try { if (Directory.Exists(root)) Directory.Delete(root, true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>
+    /// Detection of an origin without the <c>?segments=</c> batch endpoint - object storage, a CDN, any
+    /// static file server - decided from response headers only. Getting this wrong in the permissive
+    /// direction means buffering a whole 429 MB library to discover it; getting it wrong in the strict
+    /// direction means one bad minute permanently costs the session its batching.
+    /// </summary>
+    private static void RunBatchEndpointChecks()
+    {
+        const long expected = 1024;
+
+        // Object storage ignoring the query string: a success whose length cannot be the batch we asked for.
+        if (!Missing(HttpStatusCode.OK, 450 * 1024 * 1024L, expected))
+            throw new InvalidDataException("A whole-object reply was mistaken for a batch response.");
+        // Even a shorter body is proof, and the check must not assume the object is larger than the batch.
+        if (!Missing(HttpStatusCode.OK, expected - 1, expected))
+            throw new InvalidDataException("A reply of the wrong length was mistaken for a batch response.");
+        if (Missing(HttpStatusCode.OK, expected, expected))
+            throw new InvalidDataException("A valid batch response was taken for a missing endpoint.");
+
+        // A request that was not understood is permanent; load and outages are not.
+        if (!Missing(HttpStatusCode.BadRequest, 0, expected) ||
+            !Missing(HttpStatusCode.NotImplemented, 0, expected) ||
+            !Missing(HttpStatusCode.MethodNotAllowed, 0, expected))
+            throw new InvalidDataException("A rejected batch request was treated as retryable.");
+        if (Missing(HttpStatusCode.ServiceUnavailable, 0, expected) ||
+            Missing(HttpStatusCode.NotFound, 0, expected) ||
+            Missing(HttpStatusCode.RequestTimeout, 0, expected))
+            throw new InvalidDataException("A transient failure permanently disabled batching.");
+
+        // No Content-Length at all leaves nothing to compare, so the decision has to fall to the read.
+        if (Missing(HttpStatusCode.OK, null, expected))
+            throw new InvalidDataException("A reply without a length was judged from its headers.");
+
+        // ...which is the other half of the guard: the read hands back the body only at the exact length,
+        // and never buffers more than one byte past it, so a chunked whole-object reply is caught too.
+        byte[] body = new byte[16];
+        Random.Shared.NextBytes(body);
+        if (!Read(body, body.Length).AsSpan().SequenceEqual(body))
+            throw new InvalidDataException("A batch body of the expected length was not read back intact.");
+        if (Read(body, body.Length - 1) != null || Read(body, body.Length + 1) != null)
+            throw new InvalidDataException("A batch body of the wrong length was accepted.");
+        if (Read(Array.Empty<byte>(), 0) is not { Length: 0 })
+            throw new InvalidDataException("An empty body of the expected length was refused.");
+    }
+
+    /// <summary>Reads one body through the bounded reader the batch path uses.</summary>
+    private static byte[] Read(byte[] body, long expected)
+    {
+        using HttpContent content = new StreamContent(new MemoryStream(body));
+        return AssetManager.ReadExactlyAsync(content, expected).GetAwaiter().GetResult();
+    }
+
+    /// <summary>Asks the detector about one response carrying nothing but a status and a declared length.</summary>
+    private static bool Missing(HttpStatusCode status, long? contentLength, long expected)
+    {
+        using HttpResponseMessage response = new(status) { Content = new StreamContent(new MemoryStream()) };
+        response.Content.Headers.ContentLength = contentLength;
+        return AssetManager.IsBatchEndpointMissing(response, expected);
     }
 
     private static string BitsPath(string root, string id)

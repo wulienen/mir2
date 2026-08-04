@@ -26,6 +26,12 @@ namespace Client.Streaming
         /// <summary>Records which working set has already been unpacked into the containers.</summary>
         private const string WorkingSetMarkerName = "workset.applied";
 
+        /// <summary>
+        /// The published working set, shipped inside the client package instead of fetched. Sits in
+        /// <see cref="Settings.DataPath"/> next to the whole Libs a full client would carry.
+        /// </summary>
+        private const string LocalWorkingSetName = "workset.wsp";
+
         private static readonly string[] StartupLibraryIds =
         {
             "chrsel", "prguse", "prguse2", "prguse3", "xiayiui", "ui_32bit", "title"
@@ -52,6 +58,15 @@ namespace Client.Streaming
         /// sounds take the other, so a map pack can never sit behind hundreds of image spans.
         /// </summary>
         private static DownloadGate Downloads = new(16);
+
+        /// <summary>
+        /// Set once the origin has proved it does not implement the <c>?segments=</c> batch endpoint, so the
+        /// rest of the session goes straight to ranged requests. Object storage - the natural home for a tree
+        /// of immutable, content-addressed files - ignores an unknown query string and serves the whole
+        /// object, and a CDN in front of it does the same; batching is an optimisation our own AssetServer
+        /// offers, not something the format depends on.
+        /// </summary>
+        private static volatile bool _batchEndpointMissing;
         private static AssetCacheStore _store;
         private static StreamingAssetV3Manifest _manifest;
         private static Dictionary<string, V3LibraryRecord> _libraries;
@@ -82,6 +97,8 @@ namespace Client.Streaming
             if (!Enabled) return;
             Client.Timeout = TimeSpan.FromSeconds(Math.Max(5, Settings.AssetRequestTimeoutSeconds));
             Downloads = new DownloadGate(Math.Max(1, Settings.AssetDownloadConcurrency));
+            // Whether the origin batches is a property of the configured URL, so a fresh start asks again.
+            _batchEndpointMissing = false;
             _store = new AssetCacheStore(Settings.AssetCachePath, Settings.AssetCacheMaxMB, StartupLibraryIds);
             WorkingSetRecorder.Initialize();
             StartupAssetBootstrapper.Begin();
@@ -433,8 +450,10 @@ namespace Client.Streaming
                 string.Equals(Encoding.UTF8.GetString(marker).Trim(), manifest.WorkingSetHash,
                     StringComparison.OrdinalIgnoreCase)) return 0;
 
-            byte[] pack = await DownloadWorkingSetAsync(manifest.WorkingSetHash,
-                (int)manifest.WorkingSetLength).ConfigureAwait(false);
+            byte[] pack = TryReadLocalWorkingSet(Path.Combine(Settings.DataPath, LocalWorkingSetName),
+                              manifest.WorkingSetHash, (int)manifest.WorkingSetLength)
+                          ?? await DownloadWorkingSetAsync(manifest.WorkingSetHash,
+                              (int)manifest.WorkingSetLength).ConfigureAwait(false);
             if (pack == null) return 0;
 
             StreamingWorkingSet set;
@@ -527,6 +546,45 @@ namespace Client.Streaming
             }
             catch (InvalidDataException) { return null; }
             catch (EndOfStreamException) { return null; }
+        }
+
+        /// <summary>
+        /// Reads the working set out of the client package instead of the network. This is the one part of the
+        /// cache that can be prepared offline, and it is the part every cold client wants at the same moment -
+        /// the minutes after a patch are exactly when the origin is busiest. Shipping it flattens that peak to
+        /// nothing. Whole libraries can already be shipped as <c>Data\*.Lib</c>, but a working set is
+        /// deliberately a partial set of records, and a partial <c>.Lib</c> in <c>Data</c> would be taken for a
+        /// complete library; the pack format is what carries loose records safely.
+        ///
+        /// The bundled file is used only when it is byte-for-byte the pack the current manifest names, so a
+        /// copy left behind by an older package is ignored rather than written at offsets that have moved.
+        /// </summary>
+        internal static byte[] TryReadLocalWorkingSet(string path, string hash, int length)
+        {
+            try
+            {
+                if (!File.Exists(path)) return null;
+                if (new FileInfo(path).Length != length)
+                {
+                    CMain.SaveError($"Bundled working set '{path}' is not the published pack; downloading it.");
+                    return null;
+                }
+
+                byte[] bytes = File.ReadAllBytes(path);
+                if (!string.Equals(StreamingAssetIO.ComputeSha256(bytes), hash, StringComparison.OrdinalIgnoreCase))
+                {
+                    CMain.SaveError($"Bundled working set '{path}' does not match the manifest; downloading it.");
+                    return null;
+                }
+
+                CMain.SaveError($"Streaming working set read from '{path}'.");
+                return bytes;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                CMain.SaveError($"Bundled working set '{path}' could not be read: {ex.Message}");
+                return null;
+            }
         }
 
         private static async Task<byte[]> DownloadWorkingSetAsync(string hash, int length)
@@ -783,20 +841,22 @@ namespace Client.Streaming
             long written = 0;
             foreach (List<LibrarySpan> group in GroupSpans(Coalesce(wanted, library.FileLength)))
             {
-                Dictionary<long, byte[]> payloads = group.Count == 1
-                    ? await DownloadSingleSpanAsync(path, library.FileLength, group[0]).ConfigureAwait(false)
-                    : await DownloadSegmentsAsync(path, library.FileLength, group).ConfigureAwait(false);
-
-                if (payloads == null)
-                {
-                    foreach (LibrarySpan span in group)
-                        foreach (V3LibraryImageRecord image in span.Images) RecordFailure(RetryKey(library, image));
-                    continue;
-                }
+                // One round trip when the origin batches, one per span when it does not. A batch that fails
+                // for any other reason also falls back rather than losing the whole group to one bad reply;
+                // that costs a second attempt at the same bytes, which is what the retry bookkeeping below
+                // would have done anyway.
+                Dictionary<long, byte[]> payloads = group.Count > 1 && !_batchEndpointMissing
+                    ? await DownloadSegmentsAsync(path, library.FileLength, group).ConfigureAwait(false)
+                    : null;
+                payloads ??= await DownloadSpansAsync(path, library.FileLength, group).ConfigureAwait(false);
 
                 foreach (LibrarySpan span in group)
                 {
-                    if (!payloads.TryGetValue(span.Offset, out byte[] bytes)) continue;
+                    if (!payloads.TryGetValue(span.Offset, out byte[] bytes))
+                    {
+                        foreach (V3LibraryImageRecord image in span.Images) RecordFailure(RetryKey(library, image));
+                        continue;
+                    }
                     foreach (V3LibraryImageRecord image in span.Images)
                     {
                         string key = RetryKey(library, image);
@@ -876,37 +936,75 @@ namespace Client.Streaming
             }
             if (group.Count > 0) yield return group;
         }
-        private static async Task<Dictionary<long, byte[]>> DownloadSingleSpanAsync(string relativePath,
-            long totalLength, LibrarySpan span)
+        /// <summary>
+        /// Fetches every span of a group as its own ranged request. This is the path an origin without the
+        /// batch endpoint takes: more round trips, but each one is a plain <c>Range</c> GET that object
+        /// storage, a CDN and any static file server all implement. The requests go out together and stay
+        /// bounded by the gate's bulk lane exactly like the single batch they replace. Spans that fail are
+        /// left out of the result instead of failing their siblings.
+        /// </summary>
+        private static async Task<Dictionary<long, byte[]>> DownloadSpansAsync(string relativePath,
+            long totalLength, List<LibrarySpan> spans)
         {
-            byte[] bytes = await DownloadSpanAsync(relativePath, totalLength, span.Offset, span.Length,
-                    priority: false)
+            byte[][] payloads = await Task.WhenAll(spans.Select(span =>
+                    DownloadSpanAsync(relativePath, totalLength, span.Offset, span.Length, priority: false)))
                 .ConfigureAwait(false);
-            return bytes == null ? null : new Dictionary<long, byte[]> { [span.Offset] = bytes };
+
+            Dictionary<long, byte[]> result = new();
+            for (int i = 0; i < spans.Count; i++)
+                if (payloads[i] != null) result[spans[i].Offset] = payloads[i];
+            return result;
         }
 
         /// <summary>
         /// Requests several disjoint spans of one file in a single round trip. The response body is a
         /// sequence of [int64 offset][int32 length][bytes] records. Bulk lane: these are the batches a map
-        /// pack or a catalog read must be able to overtake.
+        /// pack or a catalog read must be able to overtake. Returns null when the group has to be fetched
+        /// span by span instead, either because this origin has no batch endpoint or because the one reply
+        /// was unusable.
         /// </summary>
         private static async Task<Dictionary<long, byte[]>> DownloadSegmentsAsync(string relativePath,
             long totalLength, List<LibrarySpan> spans)
         {
+            // Each record is a 12 byte header plus its payload, so the exact body length is known before the
+            // request goes out - which is what makes an origin that ignores the query string detectable.
+            long expected = 0;
+            StringBuilder query = new();
+            foreach (LibrarySpan span in spans)
+            {
+                if (query.Length > 0) query.Append(',');
+                query.Append(span.Offset).Append('-').Append(span.Length);
+                expected += 12 + span.Length;
+            }
+
             await Downloads.WaitAsync(priority: false).ConfigureAwait(false);
             try
             {
-                StringBuilder query = new();
-                foreach (LibrarySpan span in spans)
-                {
-                    if (query.Length > 0) query.Append(',');
-                    query.Append(span.Offset).Append('-').Append(span.Length);
-                }
-
+                using HttpRequestMessage request = new(HttpMethod.Get,
+                    MakeUrl(relativePath) + "?segments=" + query);
                 using HttpResponseMessage response = await Client
-                    .GetAsync(MakeUrl(relativePath) + "?segments=" + query).ConfigureAwait(false);
+                    .SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+
+                if (IsBatchEndpointMissing(response, expected))
+                {
+                    _batchEndpointMissing = true;
+                    CMain.SaveError("Streaming origin does not implement the ?segments= batch endpoint; " +
+                                    "using ranged requests for the rest of this session.");
+                    return null;
+                }
                 if (!response.IsSuccessStatusCode) throw new HttpRequestException($"HTTP {(int)response.StatusCode}");
-                byte[] body = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
+
+                // Bounded read, because Content-Length can be absent: one byte past the expected length is
+                // already proof this is a whole object rather than a batch, and buffering a 429 MB Lib to
+                // find that out would be the worst possible way to learn it.
+                byte[] body = await ReadExactlyAsync(response.Content, expected).ConfigureAwait(false);
+                if (body == null)
+                {
+                    _batchEndpointMissing = true;
+                    CMain.SaveError("Streaming origin answered ?segments= with something other than a batch; " +
+                                    "using ranged requests for the rest of this session.");
+                    return null;
+                }
 
                 Dictionary<long, byte[]> result = new();
                 int position = 0;
@@ -936,6 +1034,40 @@ namespace Client.Streaming
                 return null;
             }
             finally { Downloads.Release(priority: false); }
+        }
+
+        /// <summary>
+        /// Decides from the response headers alone whether this origin has a batch endpoint at all. Two
+        /// signals count as proof, and neither can change later in the session: a success whose body length
+        /// cannot be a batch of the spans we asked for - object storage ignoring the query string and serving
+        /// the whole object - and a status that means the request itself was not understood. Statuses that a
+        /// working endpoint can also produce under load (5xx other than 501, 403, 404) are left as ordinary
+        /// failures, because permanently giving up batching over one bad minute is worse than retrying.
+        /// </summary>
+        internal static bool IsBatchEndpointMissing(HttpResponseMessage response, long expectedLength) =>
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.MethodNotAllowed
+                or HttpStatusCode.NotImplemented ||
+            (response.IsSuccessStatusCode && response.Content.Headers.ContentLength is long length &&
+             length != expectedLength);
+
+        /// <summary>
+        /// Reads exactly <paramref name="expected"/> bytes, or returns null if the body is any other length.
+        /// Never buffers more than one byte past the expectation.
+        /// </summary>
+        internal static async Task<byte[]> ReadExactlyAsync(HttpContent content, long expected)
+        {
+            byte[] buffer = new byte[expected + 1];
+            await using Stream stream = await content.ReadAsStreamAsync().ConfigureAwait(false);
+            int read = 0;
+            while (read < buffer.Length)
+            {
+                int count = await stream.ReadAsync(buffer.AsMemory(read)).ConfigureAwait(false);
+                if (count == 0) break;
+                read += count;
+            }
+            if (read != expected) return null;
+            Array.Resize(ref buffer, read);
+            return buffer;
         }
         private static async Task EnsureManifestAsync()
         {

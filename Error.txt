@@ -1,0 +1,15 @@
+[2026/8/4 7:50:37] Working set entry 5 of 'chrsel' is malformed.
+[2026/8/4 7:50:37] Working set entry 5 of 'chrsel' is malformed.
+[2026/8/4 7:50:37] Streaming working set read from 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-85d27fb4cd2f4aeb9f3babc16e8d6dd1\workset.wsp'.
+[2026/8/4 7:50:37] Bundled working set 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-85d27fb4cd2f4aeb9f3babc16e8d6dd1\workset.wsp' does not match the manifest; downloading it.
+[2026/8/4 7:50:37] Bundled working set 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-85d27fb4cd2f4aeb9f3babc16e8d6dd1\workset.wsp' is not the published pack; downloading it.
+[2026/8/4 7:51:23] Working set entry 5 of 'chrsel' is malformed.
+[2026/8/4 7:51:23] Working set entry 5 of 'chrsel' is malformed.
+[2026/8/4 7:51:23] Streaming working set read from 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-44e03a5a616b4e5195c8a33452dd5dd8\workset.wsp'.
+[2026/8/4 7:51:23] Bundled working set 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-44e03a5a616b4e5195c8a33452dd5dd8\workset.wsp' does not match the manifest; downloading it.
+[2026/8/4 7:51:23] Bundled working set 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-44e03a5a616b4e5195c8a33452dd5dd8\workset.wsp' is not the published pack; downloading it.
+[2026/8/4 8:25:51] Working set entry 5 of 'chrsel' is malformed.
+[2026/8/4 8:25:51] Working set entry 5 of 'chrsel' is malformed.
+[2026/8/4 8:25:51] Streaming working set read from 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-f20458934aed4f1497228eddeb61d893\workset.wsp'.
+[2026/8/4 8:25:51] Bundled working set 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-f20458934aed4f1497228eddeb61d893\workset.wsp' does not match the manifest; downloading it.
+[2026/8/4 8:25:51] Bundled working set 'C:\Users\cityocean\AppData\Local\Temp\YangfeiCrystal-AssetBundle-f20458934aed4f1497228eddeb61d893\workset.wsp' is not the published pack; downloading it.
