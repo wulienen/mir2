@@ -100,7 +100,8 @@
         HeroEquipment,
         HeroSkills,
         TargetSpellLockOn,
-        PetmodeFocusMasterTarget
+        PetmodeFocusMasterTarget,
+        Assist
     }
 
     public class KeyBind
@@ -217,6 +218,8 @@
             InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.GameshopOpenClose), function = KeybindOptions.GameShop, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.Y };
             list.Add(InputKey);
             InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.QuestDiaryOpenClose), function = KeybindOptions.Quests, RequireAlt = 0, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.Q };
+            list.Add(InputKey);
+            InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.AssistOpenClose), function = KeybindOptions.Assist, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.F12 };
             list.Add(InputKey);
             InputKey = new KeyBind { Group = "Dialogs", Description = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.OptionsOpenClose), function = KeybindOptions.Options, RequireAlt = 2, RequireShift = 2, RequireTilde = 2, RequireCtrl = 2, Key = Keys.Escape };
             list.Add(InputKey);

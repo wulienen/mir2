@@ -960,6 +960,9 @@ namespace Client.MirScenes.Dialogs
 
         public void ReceiveChat(string text, ChatType type)
         {
+            if (Settings.AssistHideDropNotifications && type == ChatType.System2)
+                return;
+
             Color foreColour, backColour;
 
             switch (type)

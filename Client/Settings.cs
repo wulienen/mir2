@@ -215,6 +215,37 @@ namespace Client
         public static string AssetCachePath = @".\Cache\AssetsV3";
         public static int AssetCacheMaxMB = 4096;
 
+        // Assist panel. Defaults preserve the current client behaviour; automatic actions are opt-in.
+        public static bool AssistFreeShift = false,
+                           AssistShowLevel = false,
+                           AssistShowTransform = true,
+                           AssistShowGuildName = true,
+                           AssistShowGroupInfo = false,
+                           AssistShowHealing = true,
+                           AssistHideDead = false,
+                           AssistShowMonsterNames = true,
+                           AssistShowNpcNames = true,
+                           AssistShowPing = false,
+                           AssistShowHealthValues = false,
+                           AssistHideDropNotifications = false,
+                           AssistAutoFlamingSword = false,
+                           AssistAutoTwinDrakeBlade = false,
+                           AssistAutoMagicShield = false,
+                           AssistAutoPoisonAmulet = false,
+                           AssistAutoElementalBarrier = false,
+                           AssistAutoAttack = false,
+                           AssistAutoPickup = false,
+                           AssistProtectionEnabled = false;
+
+        public static int AssistHealthPotionPercent = 50,
+                          AssistManaPotionPercent = 50,
+                          AssistEmergencyPercent = 5,
+                          AssistUseItemInterval = 3000;
+
+        public static string AssistHealthPotionKeyword = "体力恢复药",
+                             AssistManaPotionKeyword = "魔力恢复药",
+                             AssistEmergencyKeyword = "回城卷";
+
         /// <summary>
         /// Records every streaming image the client touches into <c>Cache/AssetsV3/workset-usage.txt</c>, which
         /// AssetBuilder turns into the first-run working set pack. Off in a shipped client: it is a tool for
@@ -355,6 +386,35 @@ namespace Client
             if (AssetDownloadConcurrency < 1) AssetDownloadConcurrency = 1;
             if (AssetDownloadConcurrency > 32) AssetDownloadConcurrency = 32;
 
+            //Assist
+            AssistFreeShift = Reader.ReadBoolean("Assist", "FreeShift", AssistFreeShift);
+            AssistShowLevel = Reader.ReadBoolean("Assist", "ShowLevel", AssistShowLevel);
+            AssistShowTransform = Reader.ReadBoolean("Assist", "ShowTransform", AssistShowTransform);
+            AssistShowGuildName = Reader.ReadBoolean("Assist", "ShowGuildName", AssistShowGuildName);
+            AssistShowGroupInfo = Reader.ReadBoolean("Assist", "ShowGroupInfo", AssistShowGroupInfo);
+            AssistShowHealing = Reader.ReadBoolean("Assist", "ShowHealing", AssistShowHealing);
+            AssistHideDead = Reader.ReadBoolean("Assist", "HideDead", AssistHideDead);
+            AssistShowMonsterNames = Reader.ReadBoolean("Assist", "ShowMonsterNames", AssistShowMonsterNames);
+            AssistShowNpcNames = Reader.ReadBoolean("Assist", "ShowNpcNames", AssistShowNpcNames);
+            AssistShowPing = Reader.ReadBoolean("Assist", "ShowPing", AssistShowPing);
+            AssistShowHealthValues = Reader.ReadBoolean("Assist", "ShowHealthValues", AssistShowHealthValues);
+            AssistHideDropNotifications = Reader.ReadBoolean("Assist", "HideDropNotifications", AssistHideDropNotifications);
+            AssistAutoFlamingSword = Reader.ReadBoolean("Assist", "AutoFlamingSword", AssistAutoFlamingSword);
+            AssistAutoTwinDrakeBlade = Reader.ReadBoolean("Assist", "AutoTwinDrakeBlade", AssistAutoTwinDrakeBlade);
+            AssistAutoMagicShield = Reader.ReadBoolean("Assist", "AutoMagicShield", AssistAutoMagicShield);
+            AssistAutoPoisonAmulet = Reader.ReadBoolean("Assist", "AutoPoisonAmulet", AssistAutoPoisonAmulet);
+            AssistAutoElementalBarrier = Reader.ReadBoolean("Assist", "AutoElementalBarrier", AssistAutoElementalBarrier);
+            AssistAutoAttack = Reader.ReadBoolean("Assist", "AutoAttack", AssistAutoAttack);
+            AssistAutoPickup = Reader.ReadBoolean("Assist", "AutoPickup", AssistAutoPickup);
+            AssistProtectionEnabled = Reader.ReadBoolean("Assist", "ProtectionEnabled", AssistProtectionEnabled);
+            AssistHealthPotionPercent = Math.Clamp(Reader.ReadInt32("Assist", "HealthPotionPercent", AssistHealthPotionPercent), 0, 100);
+            AssistManaPotionPercent = Math.Clamp(Reader.ReadInt32("Assist", "ManaPotionPercent", AssistManaPotionPercent), 0, 100);
+            AssistEmergencyPercent = Math.Clamp(Reader.ReadInt32("Assist", "EmergencyPercent", AssistEmergencyPercent), 0, 100);
+            AssistUseItemInterval = Math.Clamp(Reader.ReadInt32("Assist", "UseItemInterval", AssistUseItemInterval), 250, 60000);
+            AssistHealthPotionKeyword = Reader.ReadString("Assist", "HealthPotionKeyword", AssistHealthPotionKeyword);
+            AssistManaPotionKeyword = Reader.ReadString("Assist", "ManaPotionKeyword", AssistManaPotionKeyword);
+            AssistEmergencyKeyword = Reader.ReadString("Assist", "EmergencyKeyword", AssistEmergencyKeyword);
+
             try
             {
                 string languageDirectory = @".\Localization\";
@@ -474,6 +534,35 @@ namespace Client
             Reader.Write("Streaming", "CachePath", AssetCachePath);
             Reader.Write("Streaming", "CacheMaxMB", AssetCacheMaxMB);
             Reader.Write("Streaming", "RecordWorkingSet", RecordWorkingSet);
+
+            //Assist
+            Reader.Write("Assist", "FreeShift", AssistFreeShift);
+            Reader.Write("Assist", "ShowLevel", AssistShowLevel);
+            Reader.Write("Assist", "ShowTransform", AssistShowTransform);
+            Reader.Write("Assist", "ShowGuildName", AssistShowGuildName);
+            Reader.Write("Assist", "ShowGroupInfo", AssistShowGroupInfo);
+            Reader.Write("Assist", "ShowHealing", AssistShowHealing);
+            Reader.Write("Assist", "HideDead", AssistHideDead);
+            Reader.Write("Assist", "ShowMonsterNames", AssistShowMonsterNames);
+            Reader.Write("Assist", "ShowNpcNames", AssistShowNpcNames);
+            Reader.Write("Assist", "ShowPing", AssistShowPing);
+            Reader.Write("Assist", "ShowHealthValues", AssistShowHealthValues);
+            Reader.Write("Assist", "HideDropNotifications", AssistHideDropNotifications);
+            Reader.Write("Assist", "AutoFlamingSword", AssistAutoFlamingSword);
+            Reader.Write("Assist", "AutoTwinDrakeBlade", AssistAutoTwinDrakeBlade);
+            Reader.Write("Assist", "AutoMagicShield", AssistAutoMagicShield);
+            Reader.Write("Assist", "AutoPoisonAmulet", AssistAutoPoisonAmulet);
+            Reader.Write("Assist", "AutoElementalBarrier", AssistAutoElementalBarrier);
+            Reader.Write("Assist", "AutoAttack", AssistAutoAttack);
+            Reader.Write("Assist", "AutoPickup", AssistAutoPickup);
+            Reader.Write("Assist", "ProtectionEnabled", AssistProtectionEnabled);
+            Reader.Write("Assist", "HealthPotionPercent", AssistHealthPotionPercent);
+            Reader.Write("Assist", "ManaPotionPercent", AssistManaPotionPercent);
+            Reader.Write("Assist", "EmergencyPercent", AssistEmergencyPercent);
+            Reader.Write("Assist", "UseItemInterval", AssistUseItemInterval);
+            Reader.Write("Assist", "HealthPotionKeyword", AssistHealthPotionKeyword);
+            Reader.Write("Assist", "ManaPotionKeyword", AssistManaPotionKeyword);
+            Reader.Write("Assist", "EmergencyKeyword", AssistEmergencyKeyword);
         }
 
         public static void LoadTrackedQuests(string charName)

@@ -269,7 +269,7 @@ namespace Client.MirObjects
             bool showMount = true;
             bool showFishing = true;
 
-            if (TransformType > -1)
+            if (TransformType > -1 && Settings.AssistShowTransform)
             {
                 #region Transform
                 
@@ -595,7 +595,7 @@ namespace Client.MirObjects
 
             #region Common
             //Harvest
-            if (CurrentAction == MirAction.Harvest && TransformType < 0)
+            if (CurrentAction == MirAction.Harvest && (TransformType < 0 || !Settings.AssistShowTransform))
             {
                 WeaponLibrary1 = 1 < Libraries.CWeapons.Length ? Libraries.CWeapons[1] : null;
             }
@@ -1074,13 +1074,13 @@ namespace Client.MirObjects
                             case MirClass.Assassin:
                                 if(GameScene.User.DoubleSlash)
                                     Frames.TryGetValue(MirAction.Attack1, out Frame);
-                                else if (CMain.Shift)
+                                else if (CMain.Shift || Settings.AssistFreeShift)
                                     Frames.TryGetValue(CMain.Random.Next(100) >= 20 ? (CMain.Random.Next(100) > 40 ? MirAction.Attack1 : MirAction.Attack4) : (CMain.Random.Next(100) > 10 ? MirAction.Attack2 : MirAction.Attack3), out Frame);
                                 else
                                     Frames.TryGetValue(CMain.Random.Next(100) >= 40 ? MirAction.Attack1 : MirAction.Attack4, out Frame);
                                 break;
                             default:
-                                if (CMain.Shift && TargetObject == null)
+                                if ((CMain.Shift || Settings.AssistFreeShift) && TargetObject == null)
                                     Frames.TryGetValue(CMain.Random.Next(100) >= 20 ? MirAction.Attack1 : MirAction.Attack3, out Frame);
                                 else
                                     Frames.TryGetValue(CurrentAction, out Frame);
@@ -5269,7 +5269,7 @@ namespace Client.MirObjects
         {
             CreateLabel();
 
-            if (GuildLabel != null && !string.IsNullOrEmpty(GuildName))
+            if (Settings.AssistShowGuildName && GuildLabel != null && !string.IsNullOrEmpty(GuildName))
             {
                 GuildLabel.Text = GuildName;
                 GuildLabel.Location = new Point(DisplayRectangle.X + (50 - GuildLabel.Size.Width) / 2, DisplayRectangle.Y - (19 - GuildLabel.Size.Height / 2) + (Dead ? 35 : 8)); //was 48 -

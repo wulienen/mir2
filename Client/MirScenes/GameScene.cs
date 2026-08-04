@@ -156,6 +156,9 @@ namespace Client.MirScenes
         public TimerDialog TimerControl;
         public CompassDialog CompassControl;
         public RollDialog RollControl;
+        public AssistDialog AssistDialog;
+        public AssistOverlayDialog AssistOverlayDialog;
+        public AssistController AssistController;
 
 
         public static List<ItemInfo> ItemInfoList = new List<ItemInfo>();
@@ -406,6 +409,9 @@ namespace Client.MirScenes
             TimerControl = new TimerDialog { Parent = this, Visible = false };
             CompassControl = new CompassDialog { Parent = this, Visible = false };
             RollControl = new RollDialog { Parent = this, Visible = false };
+            AssistOverlayDialog = new AssistOverlayDialog { Parent = this };
+            AssistDialog = new AssistDialog { Parent = this, Visible = false };
+            AssistController = new AssistController();
 
             for (int i = 0; i < OutputLines.Length; i++)
                 OutputLines[i] = new MirLabel
@@ -448,7 +454,7 @@ namespace Client.MirScenes
                         CMain.SetMouseCursor(MouseCursor.NPCTalk);
                         break;
                     case ObjectType.Player:
-                        if (CMain.Shift)
+                        if (CMain.Shift || Settings.AssistFreeShift)
                         {
                             CMain.SetMouseCursor(MouseCursor.AttackRed);
                         }
@@ -672,6 +678,10 @@ namespace Client.MirScenes
                     case KeybindOptions.Quests:
                         if (!QuestLogDialog.Visible) QuestLogDialog.Show();
                         else QuestLogDialog.Hide();
+                        break;
+                    case KeybindOptions.Assist:
+                        if (!AssistDialog.Visible) AssistDialog.Show();
+                        else AssistDialog.Hide();
                         break;
                     case KeybindOptions.Exit:
                         QuitGame();
@@ -900,6 +910,7 @@ namespace Client.MirScenes
                 HeroInventoryDialog?.Visible == true ||
                 HeroManageDialog?.Visible == true ||
                 HeroDialog?.Visible == true ||
+                AssistDialog.Visible ||
                 ItemLabel != null && !ItemLabel.IsDisposed;
         }
 
@@ -945,6 +956,7 @@ namespace Client.MirScenes
             HeroInventoryDialog?.Hide();
             HeroManageDialog?.Hide();
             HeroDialog?.Hide();
+            AssistDialog.Hide();
 
             DisposeItemLabel();
         }
@@ -1177,6 +1189,63 @@ namespace Client.MirScenes
                     break;
             }
         }
+
+        public bool TryUseAssistSpell(Spell spell)
+        {
+            UserObject actor = User;
+            if (actor == null || actor.Dead || actor.RidingMount || actor.Fishing ||
+                actor.NextMagic != null || actor.QueuedAction != null)
+                return false;
+
+            if (actor.Poison.HasFlag(PoisonType.Stun) ||
+                actor.Poison.HasFlag(PoisonType.Paralysis) ||
+                actor.Poison.HasFlag(PoisonType.LRParalysis) ||
+                actor.Poison.HasFlag(PoisonType.Frozen) ||
+                CMain.Time < actor.BlizzardStopTime ||
+                CMain.Time < actor.ReincarnationStopTime)
+                return false;
+
+            if (!actor.HasClassWeapon && actor.Weapon >= 0)
+                return false;
+
+            ClientMagic magic = actor.Magics.FirstOrDefault(x => x.Spell == spell);
+            if (magic == null || CMain.Time <= magic.CastTime + magic.Delay)
+                return false;
+
+            int cost = magic.Level * magic.LevelCost + magic.BaseCost;
+            if (actor.Stats[Stat.ManaPenaltyPercent] > 0)
+                cost += cost * actor.Stats[Stat.ManaPenaltyPercent] / 100;
+
+            if (cost > actor.MP)
+                return false;
+
+            switch (spell)
+            {
+                case Spell.TwinDrakeBlade:
+                    if (CMain.Time < ToggleTime)
+                        return false;
+
+                    ToggleTime = CMain.Time + 500;
+                    actor.TwinDrakeBlade = true;
+                    SendSpellToggle(actor, spell, true);
+                    actor.Effects.Add(new Effect(Libraries.Magic2, 210, 6, 500, actor));
+                    return true;
+                case Spell.FlamingSword:
+                    if (CMain.Time < ToggleTime)
+                        return false;
+
+                    ToggleTime = CMain.Time + 500;
+                    SendSpellToggle(actor, spell, true);
+                    return true;
+                default:
+                    actor.NextMagic = magic;
+                    actor.NextMagicLocation = actor.CurrentLocation;
+                    actor.NextMagicObject = actor;
+                    actor.NextMagicDirection = actor.Direction;
+                    return true;
+            }
+        }
+
         private void SendSpellToggle(UserObject Actor, Spell Spell, bool CanUse)
         {
             if (Actor == User)
@@ -1190,7 +1259,11 @@ namespace Client.MirScenes
             {
                 //If Last Combat < 10 CANCEL
                 MirMessageBox messageBox = new MirMessageBox(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.ExitTip), MirMessageBoxButtons.YesNo);
-                messageBox.YesButton.Click += (o, e) => Program.Form.Close();
+                messageBox.YesButton.Click += (o, e) =>
+                {
+                    AssistController.SaveItemFilters();
+                    Program.Form.Close();
+                };
                 messageBox.Show();
             }
             else
@@ -1206,6 +1279,7 @@ namespace Client.MirScenes
                 MirMessageBox messageBox = new MirMessageBox(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.LogOutTip), MirMessageBoxButtons.YesNo);
                 messageBox.YesButton.Click += (o, e) =>
                 {
+                    AssistController.SaveItemFilters();
                     Network.Enqueue(new C.LogOut());
                     Enabled = false;
                 };
@@ -1356,6 +1430,8 @@ namespace Client.MirScenes
             HeroBuffsDialog?.Process();
 
             MapControl.Process();
+            AssistController.Process();
+            AssistOverlayDialog.Process();
             MainDialog.Process();
             InventoryDialog.Process();
             GameShopDialog.Process();
@@ -2299,6 +2375,8 @@ namespace Client.MirScenes
             InventoryDialog.RefreshInventory();
             foreach (SkillBarDialog Bar in SkillBarDialogs)
                 Bar.Update();
+            AssistController.InitializeItemFilters();
+            AssistDialog.RefreshItemFilters();
             AllowObserve = p.AllowObserve;
             Observing = p.Observer;
         }
@@ -3576,26 +3654,32 @@ namespace Client.MirScenes
 
         private void DamageIndicator(S.DamageIndicator p)
         {
-            if (Settings.DisplayDamage)
-            {
-                if (MapControl.Objects.TryGetValue(p.ObjectID, out var obj))
-                {
-                    if (obj.Damages.Count >= 10) return;
+            if (!MapControl.Objects.TryGetValue(p.ObjectID, out var obj) || obj.Damages.Count >= 10)
+                return;
 
-                    switch (p.Type)
-                    {
-                        case DamageType.Hit: //add damage level colours
-                            obj.Damages.Add(new Damage(p.Damage.ToString("#,##0"), 1000, obj.Race == ObjectType.Player ? Color.Red : Color.White, 50));
-                            break;
-                        case DamageType.Miss:
-                            obj.Damages.Add(new Damage(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Miss), 1200, obj.Race == ObjectType.Player ? Color.LightCoral : Color.LightGray, 50));
-                            break;
-                        case DamageType.Critical:
-                            obj.Damages.Add(
-                                new Damage(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Crit), 1000, obj.Race == ObjectType.Player ? Color.DarkRed : Color.DarkRed, 50) { Offset = 15 });
-                            break;
-                    }
-                }
+            bool healing = p.Type == DamageType.Hit && p.Damage > 0;
+            if (healing)
+            {
+                if (Settings.AssistShowHealing)
+                    obj.Damages.Add(new Damage($"+{p.Damage:#,##0}", 1000, Color.LimeGreen, 50));
+
+                return;
+            }
+
+            if (!Settings.DisplayDamage)
+                return;
+
+            switch (p.Type)
+            {
+                case DamageType.Hit:
+                    obj.Damages.Add(new Damage(p.Damage.ToString("#,##0"), 1000, obj.Race == ObjectType.Player ? Color.Red : Color.White, 50));
+                    break;
+                case DamageType.Miss:
+                    obj.Damages.Add(new Damage(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Miss), 1200, obj.Race == ObjectType.Player ? Color.LightCoral : Color.LightGray, 50));
+                    break;
+                case DamageType.Critical:
+                    obj.Damages.Add(new Damage(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Crit), 1000, Color.DarkRed, 50) { Offset = 15 });
+                    break;
             }
         }
 
@@ -10266,6 +10350,7 @@ namespace Client.MirScenes
         {
             if (disposing)
             {
+                AssistController?.SaveItemFilters();
                 Scene = null;
                 User = null;
 
@@ -11134,7 +11219,13 @@ namespace Client.MirScenes
             {
                 ob.DrawEffects(Settings.Effect);
 
-                if (Settings.NameView && !(ob is ItemObject) && !ob.Dead)
+                bool showName = Settings.NameView && !(ob is ItemObject) && !ob.Dead;
+                if (ob is MonsterObject && !Settings.AssistShowMonsterNames)
+                    showName = false;
+                if (ob.Race == ObjectType.Merchant && !Settings.AssistShowNpcNames)
+                    showName = false;
+
+                if (showName)
                     ob.DrawName();
 
                 ob.DrawChat();
@@ -11146,6 +11237,7 @@ namespace Client.MirScenes
             foreach (var ob in Objects.Values)
             {
                 ob.DrawHealth();
+                ob.DrawHealthValue();
             }
         }
 
@@ -11612,7 +11704,7 @@ namespace Client.MirScenes
 
             if (MapObject.TargetObject != null && !MapObject.TargetObject.Dead)
             {
-                if (((MapObject.TargetObject.Name.EndsWith(")") || MapObject.TargetObject is PlayerObject) && CMain.Shift) ||
+                if (((MapObject.TargetObject.Name.EndsWith(")") || MapObject.TargetObject is PlayerObject) && (CMain.Shift || Settings.AssistFreeShift)) ||
                     (!MapObject.TargetObject.Name.EndsWith(")") && MapObject.TargetObject is MonsterObject))
                 {
                     GameScene.LogTime = CMain.Time + Globals.LogDelay;
@@ -11707,7 +11799,7 @@ namespace Client.MirScenes
                             return;
                         }
 
-                        if (CMain.Shift)
+                        if (CMain.Shift || Settings.AssistFreeShift)
                         {
                             if (CMain.Time > GameScene.AttackTime && CanRideAttack()) //ArcherTest - shift click
                             {
@@ -11904,7 +11996,7 @@ namespace Client.MirScenes
             }
 
             if (MapObject.TargetObject == null || MapObject.TargetObject.Dead) return;
-            if (((!MapObject.TargetObject.Name.EndsWith(")") && !(MapObject.TargetObject is PlayerObject)) || !CMain.Shift) &&
+            if (((!MapObject.TargetObject.Name.EndsWith(")") && !(MapObject.TargetObject is PlayerObject)) || !(CMain.Shift || Settings.AssistFreeShift)) &&
                 (MapObject.TargetObject.Name.EndsWith(")") || !(MapObject.TargetObject is MonsterObject))) return;
             if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, 1)) return;
             if (User.Class == MirClass.Archer && User.HasClassWeapon && (MapObject.TargetObject is MonsterObject || MapObject.TargetObject is PlayerObject)) return; //ArcherTest - stop walking
@@ -12141,6 +12233,9 @@ namespace Client.MirScenes
             }
 
             GameScene.LogTime = CMain.Time + Globals.LogDelay;
+
+            if (actor == User)
+                GameScene.Scene.AssistController.PrepareConsumables(magic.Spell, actor);
 
             if (actor == User)
             {

@@ -112,7 +112,7 @@ namespace Client.MirObjects
 
         public MLibrary BodyLibrary;
         public Color DrawColour = Color.White, NameColour = Color.White, LightColour = Color.White;
-        public MirLabel NameLabel, ChatLabel, GuildLabel;
+        public MirLabel NameLabel, ChatLabel, GuildLabel, HealthValueLabel;
         public long ChatTime;
         public int DrawFrame, DrawWingFrame;
         public Point DrawLocation, Movement, FinalDrawLocation, OffSetMove;
@@ -200,6 +200,9 @@ namespace Client.MirObjects
             MapControl.Objects.Remove(ObjectID);
             MapControl.ObjectsList.Remove(this);
             GameScene.Scene.MapControl.RemoveObject(this);
+
+            HealthValueLabel?.Dispose();
+            HealthValueLabel = null;
 
             if (ObjectID == Hero?.ObjectID)
                 HeroObject = null;
@@ -543,6 +546,44 @@ namespace Client.MirObjects
             }
 
             Libraries.Prguse2.Draw(index, new Rectangle(0, 0, (int)(32 * PercentHealth / 100F), 4), new Point(DisplayRectangle.X + 8, DisplayRectangle.Y - 64), Color.White, false);
+        }
+
+        public void DrawHealthValue()
+        {
+            bool showLevel = Settings.AssistShowLevel && this is PlayerObject;
+            if ((!Settings.AssistShowHealthValues && !showLevel) || Dead)
+                return;
+
+            if (Race != ObjectType.Player && Race != ObjectType.Monster && Race != ObjectType.Hero)
+                return;
+
+            string text = string.Empty;
+            if (Settings.AssistShowHealthValues)
+            {
+                if (this is UserObject user && user.Stats != null)
+                    text = $"{user.HP:#,##0}/{Math.Max(1, user.Stats[Stat.HP]):#,##0}";
+                else
+                    text = $"{PercentHealth}%";
+            }
+
+            if (showLevel && this is PlayerObject player)
+                text += string.IsNullOrEmpty(text) ? $"Lv.{player.Level}" : $"  Lv.{player.Level}";
+
+            HealthValueLabel ??= new MirLabel
+            {
+                AutoSize = true,
+                BackColour = Color.Transparent,
+                Font = new Font(Settings.FontFamily, 8F),
+                ForeColour = Color.White,
+                OutLine = true,
+                OutLineColour = Color.Black
+            };
+
+            HealthValueLabel.Text = text;
+            HealthValueLabel.Location = new Point(
+                DisplayRectangle.X + (50 - HealthValueLabel.Size.Width) / 2,
+                DisplayRectangle.Y - 80);
+            HealthValueLabel.Draw();
         }
 
         private void DrawXiayiHealth(string name)
