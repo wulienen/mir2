@@ -637,7 +637,9 @@ namespace Client
         private static Spell ReadAssistSpell(string key, Spell defaultValue)
         {
             int value = Reader.ReadInt32("Assist", key, (int)defaultValue);
-            Spell spell = Enum.IsDefined(typeof(Spell), value) ? (Spell)value : Spell.None;
+            Spell spell = value >= byte.MinValue && value <= byte.MaxValue && Enum.IsDefined(typeof(Spell), (byte)value)
+                ? (Spell)(byte)value
+                : Spell.None;
             return spell == Spell.None || AssistController.IsAutoCombatSpell(spell) ? spell : Spell.None;
         }
 

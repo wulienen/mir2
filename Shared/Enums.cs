@@ -1712,6 +1712,7 @@ public enum ServerPacketIds : short
     GuildTerritoryPage,
     StorageUnlockResult,
     StoragePasswordResult,
+    ObjectHealthExact,
 }
 
 public enum ClientPacketIds : short

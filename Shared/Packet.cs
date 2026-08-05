@@ -692,6 +692,8 @@ public abstract class Packet
                 return new S.SpellToggle();
             case (short)ServerPacketIds.ObjectHealth:
                 return new S.ObjectHealth();
+            case (short)ServerPacketIds.ObjectHealthExact:
+                return new S.ObjectHealthExact();
             case (short)ServerPacketIds.ObjectMana:
                 return new S.ObjectMana();
             case (short)ServerPacketIds.MapEffect:

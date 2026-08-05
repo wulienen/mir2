@@ -87,6 +87,9 @@ namespace Client.MirObjects
         }
         public long HealthTime;
         public bool HealthKnown;
+        public int ExactHealth, ExactMaxHealth;
+        public long ExactHealthTime;
+        public bool ExactHealthKnown;
 
         private byte percentMana;
         public virtual byte PercentMana
@@ -566,7 +569,10 @@ namespace Client.MirObjects
             string text = string.Empty;
             if (showHealth)
             {
-                if (hasExactHealth)
+                bool hasRevealedExactHealth = ExactHealthKnown && ExactMaxHealth > 0 && CMain.Time < ExactHealthTime;
+                if (hasRevealedExactHealth)
+                    text = $"{Math.Max(0, ExactHealth):#,##0}/{Math.Max(1, ExactMaxHealth):#,##0}";
+                else if (hasExactHealth)
                     text = $"{Math.Max(0, user.HP):#,##0}/{Math.Max(1, user.Stats[Stat.HP]):#,##0}";
                 else
                     text = $"{PercentHealth}%";

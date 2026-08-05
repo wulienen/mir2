@@ -848,6 +848,13 @@ namespace Server.MirObjects
             if (Envir.Time < RevTime)
             {
                 CurrentMap.Broadcast(p, CurrentLocation);
+                CurrentMap.Broadcast(new S.ObjectHealthExact
+                {
+                    ObjectID = ObjectID,
+                    HP = Math.Max(0, Health),
+                    MaxHP = Math.Max(1, MaxHealth),
+                    Expire = time
+                }, CurrentLocation);
                 return;
             }
 

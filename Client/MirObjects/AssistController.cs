@@ -7,14 +7,9 @@ using C = ClientPackets;
 
 namespace Client.MirObjects
 {
-    public sealed class AssistItemFilter
-    {
-        public string Name { get; set; }
-        public bool Pick { get; set; }
-    }
-
     public sealed class AssistController
     {
+        private const string AutoPickupExcludeFileName = "AutoPickupExclude.txt";
         private const int AutoTargetRange = 20;
         private const int NearbyPatrolRange = 20;
         private const int CurrentMapPatrolSegmentRange = 18;
@@ -57,8 +52,9 @@ namespace Client.MirObjects
         }
 
         private readonly long[] _nextProtectionUse = new long[3];
-        private readonly Dictionary<string, AssistItemFilter> _itemFilters =
-            new Dictionary<string, AssistItemFilter>(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _excludedItems =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private bool _excludeListLoaded;
         private readonly Dictionary<uint, long> _pickupRetryAfter = new Dictionary<uint, long>();
         private long _nextProcessTime;
         private long _nextPickupProcess;
@@ -105,7 +101,7 @@ namespace Client.MirObjects
 
         public void InitializeItemFilters()
         {
-            _itemFilters.Clear();
+            _excludedItems.Clear();
             _pickupRetryAfter.Clear();
             _pickupTargetId = 0;
             _autoAttackTargetId = 0;
@@ -115,65 +111,89 @@ namespace Client.MirObjects
             _resetAnchorAfterManualInput = false;
             _automaticSpellPending = false;
 
-            UserObject user = GameScene.User;
-            if (user == null)
-                return;
+            LoadExcludedItems();
+        }
 
-            string path = GetFilterPath(user.Name);
+        public void ReloadItemExclusions()
+        {
+            _excludedItems.Clear();
+            LoadExcludedItems();
+        }
+
+        private void LoadExcludedItems()
+        {
+            _excludeListLoaded = false;
+            string path = GetExcludeFilePath();
             if (!File.Exists(path))
             {
-                path = GetLegacyFilterPath(user.Name);
-                if (!File.Exists(path))
-                    return;
+                _excludeListLoaded = true;
+                return;
             }
 
-            foreach (string line in File.ReadAllLines(path, Encoding.UTF8))
+            try
             {
-                if (!TryParseFilter(line, out string name, out bool pick))
-                    continue;
-
-                _itemFilters[name] = new AssistItemFilter { Name = name, Pick = pick };
+                foreach (string line in File.ReadAllLines(path, Encoding.UTF8))
+                {
+                    string name = ParseExcludedItem(line);
+                    if (!string.IsNullOrEmpty(name))
+                        _excludedItems.Add(name);
+                }
             }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Automatic pickup exclude list load failed: {ex}");
+            }
+
+            _excludeListLoaded = true;
         }
 
         public void SaveItemFilters()
         {
-            UserObject user = GameScene.User;
-            if (user == null)
+            if (!_excludeListLoaded)
                 return;
 
-            string path = GetFilterPath(user.Name);
+            string path = GetExcludeFilePath();
             string directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory))
                 Directory.CreateDirectory(directory);
 
-            List<string> lines = _itemFilters.Values
-                .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
-                .Select(x => $"{x.Name.Replace("\t", " ")}\t{x.Pick}")
-                .ToList();
-            File.WriteAllLines(path, lines, new UTF8Encoding(false));
+            List<string> lines = new List<string>
+            {
+                "# Automatic pickup exclusion list. One item name per line.",
+                "# Items listed here will not be picked up automatically.",
+                "# Lines beginning with # or ; are comments."
+            };
+            lines.AddRange(_excludedItems
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
+                .Select(x => x.Replace("\t", " ")));
+
+            try
+            {
+                File.WriteAllLines(path, lines, new UTF8Encoding(false));
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Automatic pickup exclude list save failed: {ex}");
+            }
         }
 
-        public IReadOnlyList<AssistItemFilter> GetItemFilters()
+        public IReadOnlyList<string> GetExcludedItems()
         {
-            return _itemFilters.Values
-                .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase)
+            return _excludedItems
+                .OrderBy(x => x, StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
 
-        public void SetItemFilter(string name, bool pick)
+        public void SetItemExcluded(string name, bool excluded)
         {
             name = NormalizeItemName(name);
             if (string.IsNullOrEmpty(name))
                 return;
 
-            if (!_itemFilters.TryGetValue(name, out AssistItemFilter filter))
-            {
-                filter = new AssistItemFilter { Name = name };
-                _itemFilters[name] = filter;
-            }
-
-            filter.Pick = pick;
+            if (excluded)
+                _excludedItems.Add(name);
+            else
+                _excludedItems.Remove(name);
         }
 
         public void ClearAutomaticTargets()
@@ -697,13 +717,7 @@ namespace Client.MirObjects
             if (string.IsNullOrEmpty(name))
                 return false;
 
-            if (!_itemFilters.TryGetValue(name, out AssistItemFilter filter))
-            {
-                filter = new AssistItemFilter { Name = name, Pick = true };
-                _itemFilters[name] = filter;
-            }
-
-            return filter.Pick;
+            return !_excludedItems.Contains(name);
         }
 
         private static string NormalizeItemName(string name)
@@ -711,50 +725,18 @@ namespace Client.MirObjects
             return Regex.Replace(name ?? string.Empty, @"\s*\([\d,]+\)\s*$", string.Empty).Trim();
         }
 
-        private static string GetFilterPath(string characterName)
+        private static string GetExcludeFilePath()
         {
-            return Path.Combine("Configs", GetSafeCharacterName(characterName) + "_assist_filter.txt");
+            return Path.Combine("Configs", AutoPickupExcludeFileName);
         }
 
-        private static string GetLegacyFilterPath(string characterName)
+        private static string ParseExcludedItem(string line)
         {
-            return Path.Combine("Configs", GetSafeCharacterName(characterName) + "_filter.txt");
-        }
+            string value = (line ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(value) || value.StartsWith("#") || value.StartsWith(";"))
+                return string.Empty;
 
-        private static string GetSafeCharacterName(string characterName)
-        {
-            return string.Concat((characterName ?? "character").Select(c =>
-                Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
-        }
-
-        private static bool TryParseFilter(string line, out string name, out bool pick)
-        {
-            name = string.Empty;
-            pick = true;
-            if (string.IsNullOrWhiteSpace(line))
-                return false;
-
-            int tab = line.IndexOf('\t');
-            if (tab > 0 && bool.TryParse(line.Substring(tab + 1).Trim(), out pick))
-            {
-                name = NormalizeItemName(line.Substring(0, tab));
-                return !string.IsNullOrEmpty(name);
-            }
-
-            string[] parts = line.Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 2 || !bool.TryParse(parts[^1], out bool lastValue))
-                return false;
-
-            int nameEnd = parts.Length - 1;
-            pick = lastValue;
-            if (parts.Length >= 3 && bool.TryParse(parts[^2], out bool pickValue))
-            {
-                pick = pickValue;
-                nameEnd--;
-            }
-
-            name = NormalizeItemName(string.Join(" ", parts, 0, nameEnd));
-            return !string.IsNullOrEmpty(name);
+            return NormalizeItemName(value);
         }
 
         private bool ProcessAutomaticSpells()

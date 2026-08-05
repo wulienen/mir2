@@ -1,0 +1,7 @@
+# Automatic pickup exclusion list. One item name per line.
+# Items listed here will not be picked up automatically.
+# Lines beginning with # or ; are comments.
+#
+# Examples:
+# 金币
+# 魔法药品小瓶

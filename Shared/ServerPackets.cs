@@ -3874,6 +3874,29 @@ namespace ServerPackets
         }
     }
 
+    public sealed class ObjectHealthExact : Packet
+    {
+        public override short Index { get { return (short)ServerPacketIds.ObjectHealthExact; } }
+        public uint ObjectID;
+        public int HP, MaxHP;
+        public byte Expire;
+
+        protected override void ReadPacket(BinaryReader reader)
+        {
+            ObjectID = reader.ReadUInt32();
+            HP = reader.ReadInt32();
+            MaxHP = reader.ReadInt32();
+            Expire = reader.ReadByte();
+        }
+        protected override void WritePacket(BinaryWriter writer)
+        {
+            writer.Write(ObjectID);
+            writer.Write(HP);
+            writer.Write(MaxHP);
+            writer.Write(Expire);
+        }
+    }
+
     public sealed class ObjectMana : Packet
     {
         public override short Index { get { return (short)ServerPacketIds.ObjectMana; } }

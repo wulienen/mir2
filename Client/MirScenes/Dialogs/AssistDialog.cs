@@ -18,7 +18,9 @@ namespace Client.MirScenes.Dialogs
         private const int CombatPage = 2;
         private const int ProtectionPage = 3;
         private const int ItemPage = 4;
-        private const int FilterPageSize = 10;
+        private const int FilterColumnCount = 2;
+        private const int FilterVisibleRows = 5;
+        private const int FilterVisibleCount = FilterColumnCount * FilterVisibleRows;
 
         private readonly List<MirControl>[] _pageControls =
         {
@@ -31,15 +33,16 @@ namespace Client.MirScenes.Dialogs
 
         private readonly List<ToggleBinding> _toggleBindings = new List<ToggleBinding>();
         private readonly MirButton[] _tabs = new MirButton[5];
-        private readonly MirCheckBox[] _itemFilterChecks = new MirCheckBox[FilterPageSize];
-        private readonly string[] _itemFilterNames = new string[FilterPageSize];
+        private readonly MirCheckBox[] _itemFilterChecks = new MirCheckBox[FilterVisibleCount];
+        private readonly string[] _itemFilterNames = new string[FilterVisibleCount];
         private MirDropDownBox _huntModeDropDown;
         private MirDropDownBox _combatSpellDropDown;
         private readonly List<Spell> _combatSpellOptions = new List<Spell>();
-        private MirButton _previousFilterButton, _nextFilterButton;
+        private MirButton _filterScrollUpButton, _filterScrollDownButton;
+        private MirControl _filterScrollTrack, _filterScrollThumb;
         private MirLabel _filterPageLabel;
         private int _currentPage;
-        private int _filterPage;
+        private int _filterScrollRow;
         private Texture _backgroundTexture;
         private bool _backgroundLoadAttempted;
         private Rectangle _backgroundSource;
@@ -62,6 +65,7 @@ namespace Client.MirScenes.Dialogs
             Movable = true;
             Sort = true;
             Location = Center;
+            MouseWheel += ItemFilterMouseWheel;
 
             CreateTab(BasicPage, 8, ClientTextKeys.AssistBasicTab);
             CreateTab(ClassPage, 86, ClientTextKeys.AssistClassTab);
@@ -264,26 +268,27 @@ namespace Client.MirScenes.Dialogs
 
         private void CreateItemPage()
         {
-            CreateToggle(ItemPage, 26, 70, ClientTextKeys.AssistAutoPickup,
+            CreateToggle(ItemPage, 26, 50, ClientTextKeys.AssistAutoPickup,
                 () => Settings.AssistAutoPickup, value => Settings.AssistAutoPickup = value,
                 () => GameScene.Scene.AssistController.ClearAutomaticTargets());
 
-            for (int i = 0; i < FilterPageSize; i++)
+            for (int i = 0; i < FilterVisibleCount; i++)
             {
-                int column = i < FilterPageSize / 2 ? 0 : 1;
-                int row = i % (FilterPageSize / 2);
+                int column = i % FilterColumnCount;
+                int row = i / FilterColumnCount;
                 MirCheckBox filter = new MirCheckBox
                 {
                     Index = 2086,
                     UnTickedIndex = 2086,
                     TickedIndex = 2087,
                     Parent = this,
-                    Location = new Point(column == 0 ? 150 : 300, 70 + row * 20),
+                    Location = new Point(column == 0 ? 32 : 225, 72 + row * 20),
                     Library = Libraries.Prguse,
                     Visible = false
                 };
                 int filterIndex = i;
                 filter.Click += (o, e) => FilterClick(filterIndex);
+                filter.MouseWheel += ItemFilterMouseWheel;
                 _itemFilterChecks[i] = filter;
                 _pageControls[ItemPage].Add(filter);
             }
@@ -291,55 +296,67 @@ namespace Client.MirScenes.Dialogs
             _filterPageLabel = new MirLabel
             {
                 Parent = this,
-                Location = new Point(217, 170),
-                Size = new Size(83, 17),
+                Location = new Point(125, 172),
+                Size = new Size(200, 17),
                 DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
                 Font = new Font(Settings.FontFamily, 8F)
             };
             _pageControls[ItemPage].Add(_filterPageLabel);
 
-            _previousFilterButton = new MirButton
+            _filterScrollUpButton = CreateFilterScrollButton(new Point(406, 68), "▲", -1);
+            _filterScrollDownButton = CreateFilterScrollButton(new Point(406, 154), "▼", 1);
+
+            _filterScrollTrack = new MirControl
             {
-                Index = 240,
-                HoverIndex = 241,
-                PressedIndex = 242,
-                Library = Libraries.Prguse2,
+                BackColour = Color.FromArgb(190, 20, 17, 14),
+                Border = true,
+                BorderColour = Color.FromArgb(170, 135, 96, 55),
+                DrawControlTexture = true,
+                Location = new Point(412, 88),
                 Parent = this,
-                Location = new Point(220, 172),
-                Sound = SoundList.ButtonA
+                Size = new Size(8, 64),
+                Visible = false,
+                NotControl = true
             };
-            _previousFilterButton.Hint = Text(ClientTextKeys.AssistFilterPrevious);
-            _previousFilterButton.Click += (o, e) =>
-            {
-                if (_filterPage <= 0)
-                    return;
+            _pageControls[ItemPage].Add(_filterScrollTrack);
 
-                _filterPage--;
-                UpdateItemFilters();
-            };
-            _pageControls[ItemPage].Add(_previousFilterButton);
-
-            _nextFilterButton = new MirButton
+            _filterScrollThumb = new MirControl
             {
-                Index = 243,
-                HoverIndex = 244,
-                PressedIndex = 245,
-                Library = Libraries.Prguse2,
+                BackColour = Color.FromArgb(255, 180, 125, 45),
+                Border = true,
+                BorderColour = Color.FromArgb(255, 230, 190, 95),
+                DrawControlTexture = true,
+                Location = new Point(413, 89),
                 Parent = this,
-                Location = new Point(280, 172),
-                Sound = SoundList.ButtonA
+                Size = new Size(6, 18),
+                Visible = false,
+                NotControl = true
             };
-            _nextFilterButton.Hint = Text(ClientTextKeys.AssistFilterNext);
-            _nextFilterButton.Click += (o, e) =>
-            {
-                int pageCount = GetFilterPageCount();
-                if (_filterPage + 1 >= pageCount)
-                    return;
+            _pageControls[ItemPage].Add(_filterScrollThumb);
+        }
 
-                _filterPage++;
-                UpdateItemFilters();
+        private MirButton CreateFilterScrollButton(Point location, string text, int rowDelta)
+        {
+            MirButton button = new MirButton
+            {
+                AutoSize = false,
+                BackColour = Color.FromArgb(220, 28, 25, 22),
+                Border = true,
+                BorderColour = Color.FromArgb(170, 135, 96, 55),
+                CenterText = true,
+                DrawControlTexture = true,
+                DrawImage = false,
+                FontColour = Color.Gainsboro,
+                Location = location,
+                Parent = this,
+                Size = new Size(20, 18),
+                Sound = SoundList.ButtonA,
+                Text = text
             };
-            _pageControls[ItemPage].Add(_nextFilterButton);
+            button.Click += (o, e) => ScrollItemFilters(rowDelta);
+            button.Hint = rowDelta < 0 ? Text(ClientTextKeys.AssistFilterPrevious) : Text(ClientTextKeys.AssistFilterNext);
+            _pageControls[ItemPage].Add(button);
+            return button;
         }
 
         private void CreateTab(int page, int x, ClientTextKeys textKey)
@@ -394,7 +411,8 @@ namespace Client.MirScenes.Dialogs
             if (string.IsNullOrEmpty(name))
                 return;
 
-            GameScene.Scene.AssistController.SetItemFilter(name, _itemFilterChecks[index].Checked);
+            GameScene.Scene.AssistController.SetItemExcluded(name, _itemFilterChecks[index].Checked);
+            UpdateItemFilters();
         }
 
         public void RefreshItemFilters()
@@ -402,35 +420,43 @@ namespace Client.MirScenes.Dialogs
             UpdateItemFilters();
         }
 
-        private int GetFilterPageCount()
+        private void ScrollItemFilters(int rowDelta)
         {
-            int count = GameScene.Scene?.AssistController?.GetItemFilters().Count ?? 0;
-            return count == 0 ? 0 : (count + FilterPageSize - 1) / FilterPageSize;
+            if (_currentPage != ItemPage || rowDelta == 0)
+                return;
+
+            _filterScrollRow += rowDelta;
+            UpdateItemFilters();
+        }
+
+        private void ItemFilterMouseWheel(object sender, MouseEventArgs e)
+        {
+            if (_currentPage != ItemPage || e.Delta == 0)
+                return;
+
+            ScrollItemFilters(e.Delta > 0 ? -1 : 1);
         }
 
         private void UpdateItemFilters()
         {
-            if (_filterPage < 0)
-                _filterPage = 0;
-
-            IReadOnlyList<AssistItemFilter> items = GameScene.Scene?.AssistController?.GetItemFilters();
+            IReadOnlyList<string> items = GameScene.Scene?.AssistController?.GetExcludedItems();
             int itemCount = items?.Count ?? 0;
-            int pageCount = itemCount == 0 ? 0 : (itemCount + FilterPageSize - 1) / FilterPageSize;
+            int rowCount = (itemCount + FilterColumnCount - 1) / FilterColumnCount;
+            int maxScrollRow = Math.Max(0, rowCount - FilterVisibleRows);
             bool showFilterControls = _currentPage == ItemPage;
-            if (pageCount == 0)
-                _filterPage = 0;
-            else if (_filterPage >= pageCount)
-                _filterPage = pageCount - 1;
+            _filterScrollRow = Math.Clamp(_filterScrollRow, 0, maxScrollRow);
 
-            for (int i = 0; i < FilterPageSize; i++)
+            for (int i = 0; i < FilterVisibleCount; i++)
             {
-                int itemIndex = _filterPage * FilterPageSize + i;
+                int row = _filterScrollRow + i / FilterColumnCount;
+                int column = i % FilterColumnCount;
+                int itemIndex = row * FilterColumnCount + column;
                 if (items != null && itemIndex < itemCount)
                 {
-                    AssistItemFilter item = items[itemIndex];
-                    _itemFilterNames[i] = item.Name;
-                    _itemFilterChecks[i].LabelText = item.Name;
-                    _itemFilterChecks[i].Checked = item.Pick;
+                    _itemFilterNames[i] = items[itemIndex];
+                    _itemFilterChecks[i].Location = new Point(column == 0 ? 32 : 225, 72 + (i / FilterColumnCount) * 20);
+                    _itemFilterChecks[i].LabelText = items[itemIndex];
+                    _itemFilterChecks[i].Checked = true;
                     _itemFilterChecks[i].Visible = showFilterControls;
                 }
                 else
@@ -442,9 +468,25 @@ namespace Client.MirScenes.Dialogs
                 }
             }
 
-            _filterPageLabel.Text = pageCount == 0 ? "0 / 0" : $"{_filterPage + 1} / {pageCount}";
-            _previousFilterButton.Enabled = _filterPage > 0;
-            _nextFilterButton.Enabled = pageCount > 0 && _filterPage + 1 < pageCount;
+            int firstItem = itemCount == 0 ? 0 : _filterScrollRow * FilterColumnCount + 1;
+            int lastItem = itemCount == 0 ? 0 : Math.Min(itemCount, (_filterScrollRow + FilterVisibleRows) * FilterColumnCount);
+            _filterPageLabel.Text = itemCount == 0 ? "0 / 0" : $"{firstItem}-{lastItem} / {itemCount}";
+            _filterScrollUpButton.Enabled = showFilterControls && _filterScrollRow > 0;
+            _filterScrollDownButton.Enabled = showFilterControls && _filterScrollRow < maxScrollRow;
+
+            bool scrollable = showFilterControls && maxScrollRow > 0;
+            _filterScrollTrack.Visible = scrollable;
+            _filterScrollThumb.Visible = scrollable;
+            if (scrollable)
+            {
+                const int trackTop = 89;
+                const int trackHeight = 62;
+                int thumbHeight = Math.Max(14, trackHeight * FilterVisibleRows / rowCount);
+                int thumbTravel = trackHeight - thumbHeight;
+                int thumbY = trackTop + (int)Math.Round(thumbTravel * (_filterScrollRow / (double)maxScrollRow));
+                _filterScrollThumb.Location = new Point(413, thumbY);
+                _filterScrollThumb.Size = new Size(6, thumbHeight);
+            }
         }
 
         private void CreateProtectionRow(int y, ClientTextKeys conditionKey,
@@ -662,6 +704,7 @@ namespace Client.MirScenes.Dialogs
             if (Visible)
                 return;
 
+            GameScene.Scene?.AssistController?.ReloadItemExclusions();
             RefreshControls();
             SwitchPage(_currentPage);
             UpdateItemFilters();
@@ -765,6 +808,8 @@ namespace Client.MirScenes.Dialogs
                 string health = "--";
                 if (player is UserObject user && user.Stats != null && user.Stats[Stat.HP] > 0)
                     health = $"{Math.Max(0, user.HP):#,##0}/{Math.Max(1, user.Stats[Stat.HP]):#,##0}";
+                else if (player?.ExactHealthKnown == true && player.ExactMaxHealth > 0 && CMain.Time < player.ExactHealthTime)
+                    health = $"{Math.Max(0, player.ExactHealth):#,##0}/{Math.Max(1, player.ExactMaxHealth):#,##0}";
                 else if (player?.HealthKnown == true)
                     health = $"{player.PercentHealth}%";
 

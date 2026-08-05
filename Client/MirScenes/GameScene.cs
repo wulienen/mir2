@@ -1852,6 +1852,9 @@ namespace Client.MirScenes
                 case (short)ServerPacketIds.ObjectHealth:
                     ObjectHealth((S.ObjectHealth)p);
                     break;
+                case (short)ServerPacketIds.ObjectHealthExact:
+                    ObjectHealthExact((S.ObjectHealthExact)p);
+                    break;
                 case (short)ServerPacketIds.ObjectMana:
                     ObjectMana((S.ObjectMana)p);
                     break;
@@ -5265,6 +5268,23 @@ namespace Client.MirScenes
                 ob.HealthTime = CMain.Time + p.Expire * 1000;
                 ob.HealthKnown = true;
             }
+        }
+
+        private void ObjectHealthExact(S.ObjectHealthExact p)
+        {
+            if (!MapControl.Objects.TryGetValue(p.ObjectID, out var ob))
+                return;
+
+            int maxHealth = Math.Max(1, p.MaxHP);
+            int health = Math.Clamp(p.HP, 0, maxHealth);
+
+            ob.ExactHealth = health;
+            ob.ExactMaxHealth = maxHealth;
+            ob.ExactHealthTime = CMain.Time + p.Expire * 1000L;
+            ob.ExactHealthKnown = true;
+            ob.PercentHealth = (byte)Math.Clamp((int)(health * 100L / maxHealth), 0, 100);
+            ob.HealthKnown = true;
+            ob.HealthTime = ob.ExactHealthTime;
         }
 
         private void ObjectMana(S.ObjectMana p)
