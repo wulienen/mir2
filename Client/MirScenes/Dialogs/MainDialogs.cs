@@ -5,6 +5,7 @@ using Client.MirNetwork;
 using Client.MirObjects;
 using Client.MirSounds;
 using SlimDX;
+using SlimDX.Direct3D9;
 using Font = System.Drawing.Font;
 using C = ClientPackets;
 
@@ -2847,6 +2848,9 @@ namespace Client.MirScenes.Dialogs
     }
     public sealed class OptionDialog : MirImageControl
     {
+        private const string BackgroundFileName = "OptionDialogBackground-360x460.png";
+        private static readonly Size DialogSize = new Size(360, 460);
+
         // These private entries are appended by migrate-settings-shop-assets.ps1.
         private const int SettingsButtonBaseIndex = 1602;
 
@@ -2871,50 +2875,95 @@ namespace Client.MirScenes.Dialogs
             };
         }
 
+        private static Point LayoutPoint(int x, int y)
+        {
+            return new Point(
+                (int)Math.Round(x * DialogSize.Width / 280D),
+                (int)Math.Round(y * DialogSize.Height / 360D));
+        }
+
+        private static Size LayoutSize(int width, int height)
+        {
+            return new Size(
+                (int)Math.Round(width * DialogSize.Width / 280D),
+                (int)Math.Round(height * DialogSize.Height / 360D));
+        }
+
+        private Texture _backgroundTexture;
+        private bool _backgroundLoadAttempted;
+        private Rectangle _backgroundSource;
+        private MirControl SoundTrack, MusicSoundTrack;
+
         public MirButton SkillModeOn, SkillModeOff;
         public MirButton SkillBarOn, SkillBarOff;
         public MirButton EffectOn, EffectOff;
         public MirButton DropViewOn, DropViewOff;
-        public MirButton NameViewOn, NameViewOff;
         public MirButton HPViewOn, HPViewOff;
         public MirButton NewMoveOn, NewMoveOff;
         public MirButton SmoothMoveOn, SmoothMoveOff;
         public MirLabel SmoothMoveLabel;
         public MirButton ObserveOn, ObserveOff;
         public MirImageControl SoundBar, MusicSoundBar;
-        public MirImageControl VolumeBar, MusicVolumeBar;
+        public MirControl VolumeBar, MusicVolumeBar;
 
         public MirButton CloseButton;
 
 
         public OptionDialog()
         {
-            Index = 411;
-            Library = Libraries.Title;
+            Index = -1;
+            Library = null;
+            AutoSize = false;
+            Size = DialogSize;
+            DrawImage = false;
+            DrawControlTexture = false;
             Movable = true;
             Sort = true;
 
-            Location = new Point((Settings.ScreenWidth - Size.Width) / 2, (Settings.ScreenHeight - Size.Height) / 2);
+            Location = Center;
 
             BeforeDraw += OptionPanel_BeforeDraw;
+
+            new MirLabel
+            {
+                AutoSize = false,
+                DrawFormat = TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter,
+                ForeColour = Color.Gold,
+                Font = new Font(Settings.FontFamily, 10F, System.Drawing.FontStyle.Bold),
+                Location = LayoutPoint(20, 50),
+                Parent = this,
+                Size = LayoutSize(240, 20),
+                Text = "设置"
+            };
 
             CloseButton = new MirButton
             {
                 Index = 360,
                 HoverIndex = 361,
                 Library = Libraries.Prguse2,
-                Location = new Point(Size.Width - 26, 5),
+                Location = new Point(Size.Width - 26, LayoutPoint(0, 5).Y),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 PressedIndex = 362,
             };
             CloseButton.Click += (o, e) => Hide();
 
+            CreateOptionLabel("技能模式", 59);
+            CreateOptionLabel("技能栏", 82);
+            CreateOptionLabel("特效", 104);
+            CreateOptionLabel("掉落显示", 126);
+            CreateOptionLabel("HP/MP显示", 148);
+            CreateOptionLabel("声音", 172);
+            CreateOptionLabel("音乐", 194);
+            CreateOptionLabel("观战", 217);
+            CreateOptionLabel("移动方式", 241);
+            SmoothMoveLabel = CreateOptionLabel("平滑移动", 264);
+
             //tilde option
             SkillModeOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 68),
+                Location = LayoutPoint(159, 59),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2929,7 +2978,7 @@ namespace Client.MirScenes.Dialogs
             SkillModeOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 68),
+                Location = LayoutPoint(201, 59),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2943,7 +2992,7 @@ namespace Client.MirScenes.Dialogs
             SkillBarOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 93),
+                Location = LayoutPoint(159, 82),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2954,7 +3003,7 @@ namespace Client.MirScenes.Dialogs
             SkillBarOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 93),
+                Location = LayoutPoint(201, 82),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2965,7 +3014,7 @@ namespace Client.MirScenes.Dialogs
             EffectOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 118),
+                Location = LayoutPoint(159, 104),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2976,7 +3025,7 @@ namespace Client.MirScenes.Dialogs
             EffectOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 118),
+                Location = LayoutPoint(201, 104),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2987,7 +3036,7 @@ namespace Client.MirScenes.Dialogs
             DropViewOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 143),
+                Location = LayoutPoint(159, 126),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -2998,7 +3047,7 @@ namespace Client.MirScenes.Dialogs
             DropViewOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 143),
+                Location = LayoutPoint(201, 126),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3006,32 +3055,10 @@ namespace Client.MirScenes.Dialogs
             };
             DropViewOff.Click += (o, e) => Settings.DropView = false;
 
-            NameViewOn = new MirButton
-            {
-                Library = Libraries.Prguse2,
-                Location = new Point(159, 168),
-                Parent = this,
-                Sound = SoundList.ButtonA,
-                Size = new Size(36, 17),
-                PressedIndex = SettingsButtonIndex(457),
-            };
-            NameViewOn.Click += (o, e) => Settings.NameView = true;
-
-            NameViewOff = new MirButton
-            {
-                Library = Libraries.Prguse2,
-                Location = new Point(201, 168),
-                Parent = this,
-                Sound = SoundList.ButtonA,
-                Size = new Size(36, 17),
-                PressedIndex = SettingsButtonIndex(460)
-            };
-            NameViewOff.Click += (o, e) => Settings.NameView = false;
-
             HPViewOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 193),
+                Location = LayoutPoint(159, 148),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3046,7 +3073,7 @@ namespace Client.MirScenes.Dialogs
             HPViewOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 193),
+                Location = LayoutPoint(201, 148),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3060,50 +3087,40 @@ namespace Client.MirScenes.Dialogs
 
             SoundBar = new MirImageControl
             {
-                Index = 468,
-                Library = Libraries.Prguse2,
-                Location = new Point(159, 225),
+                Index = -1,
+                AutoSize = false,
+                Location = LayoutPoint(154, 168),
                 Parent = this,
+                Size = LayoutSize(94, 20),
                 DrawImage = false,
             };
             SoundBar.MouseDown += SoundBar_MouseMove;
             SoundBar.MouseMove += SoundBar_MouseMove;
             SoundBar.BeforeDraw += SoundBar_BeforeDraw;
 
-            VolumeBar = new MirImageControl
-            {
-                Index = 20,
-                Library = Libraries.Prguse,
-                Location = new Point(155, 218),
-                Parent = this,
-                NotControl = true,
-            };
+            SoundTrack = CreateSliderTrack(175);
+            VolumeBar = CreateSliderFill(SoundTrack);
 
             MusicSoundBar = new MirImageControl
             {
-                Index = 468,
-                Library = Libraries.Prguse2,
-                Location = new Point(159, 251),
+                Index = -1,
+                AutoSize = false,
+                Location = LayoutPoint(154, 190),
                 Parent = this,
+                Size = LayoutSize(94, 20),
                 DrawImage = false
             };
             MusicSoundBar.MouseDown += MusicSoundBar_MouseMove;
             MusicSoundBar.MouseMove += MusicSoundBar_MouseMove;
             MusicSoundBar.BeforeDraw += MusicSoundBar_BeforeDraw;
 
-            MusicVolumeBar = new MirImageControl
-            {
-                Index = 20,
-                Library = Libraries.Prguse,
-                Location = new Point(155, 244),
-                Parent = this,
-                NotControl = true,
-            };
+            MusicSoundTrack = CreateSliderTrack(197);
+            MusicVolumeBar = CreateSliderFill(MusicSoundTrack);
 
             NewMoveOn = new MirButton
             {
                 Library = Libraries.Title,
-                Location = new Point(159, 296),
+                Location = LayoutPoint(159, 241),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3118,7 +3135,7 @@ namespace Client.MirScenes.Dialogs
             NewMoveOff = new MirButton
             {
                 Library = Libraries.Title,
-                Location = new Point(201, 296),
+                Location = LayoutPoint(201, 241),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3133,7 +3150,7 @@ namespace Client.MirScenes.Dialogs
             ObserveOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 271),
+                Location = LayoutPoint(159, 217),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3144,7 +3161,7 @@ namespace Client.MirScenes.Dialogs
             ObserveOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 271),
+                Location = LayoutPoint(201, 217),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3152,20 +3169,10 @@ namespace Client.MirScenes.Dialogs
             };
             ObserveOff.Click += (o, e) => ToggleObserve(false);
 
-            // The panel art has no row below NewMove, so this one brings its own caption.
-            SmoothMoveLabel = new MirLabel
-            {
-                Text = GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.SmoothMovement),
-                Location = new Point(22, 322),
-                Size = new Size(130, 17),
-                Parent = this,
-                NotControl = true,
-            };
-
             SmoothMoveOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(159, 321),
+                Location = LayoutPoint(159, 264),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3180,7 +3187,7 @@ namespace Client.MirScenes.Dialogs
             SmoothMoveOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = new Point(201, 321),
+                Location = LayoutPoint(201, 264),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3200,8 +3207,6 @@ namespace Client.MirScenes.Dialogs
             ConfigureButton(EffectOff, "关");
             ConfigureButton(DropViewOn, "开");
             ConfigureButton(DropViewOff, "关");
-            ConfigureButton(NameViewOn, "开");
-            ConfigureButton(NameViewOff, "关");
             ConfigureButton(HPViewOn, "1");
             ConfigureButton(HPViewOff, "2");
             ConfigureButton(ObserveOn, "开");
@@ -3210,6 +3215,100 @@ namespace Client.MirScenes.Dialogs
             ConfigureButton(NewMoveOff, "旧");
             ConfigureButton(SmoothMoveOn, "开");
             ConfigureButton(SmoothMoveOff, "关");
+        }
+
+        private MirLabel CreateOptionLabel(string text, int y)
+        {
+            return new MirLabel
+            {
+                AutoSize = false,
+                DrawFormat = TextFormatFlags.VerticalCenter | TextFormatFlags.Left,
+                ForeColour = Color.FromArgb(240, 220, 170),
+                Location = LayoutPoint(34, y),
+                NotControl = true,
+                OutLine = true,
+                Parent = this,
+                Size = LayoutSize(115, 18),
+                Text = text
+            };
+        }
+
+        private MirControl CreateSliderTrack(int y)
+        {
+            return new MirControl
+            {
+                BackColour = Color.FromArgb(220, 22, 18, 14),
+                Border = true,
+                BorderColour = Color.FromArgb(255, 170, 115, 45),
+                DrawControlTexture = true,
+                Location = LayoutPoint(159, y),
+                NotControl = true,
+                Parent = this,
+                Size = LayoutSize(82, 10)
+            };
+        }
+
+        private MirControl CreateSliderFill(MirControl track)
+        {
+            return new MirControl
+            {
+                BackColour = Color.FromArgb(255, 220, 153, 56),
+                DrawControlTexture = true,
+                Location = new Point(track.Location.X + 1, track.Location.Y + 2),
+                NotControl = true,
+                Parent = this,
+                Size = new Size(1, track.Size.Height - 4),
+                Visible = false
+            };
+        }
+
+        private static void UpdateSlider(MirControl track, MirControl fill, byte value)
+        {
+            int width = (int)((track.Size.Width - 2) * (value / 100D));
+            fill.Size = new Size(Math.Max(1, width), track.Size.Height - 4);
+            fill.Location = new Point(track.Location.X + 1, track.Location.Y + 2);
+            fill.Visible = width > 0;
+        }
+
+        protected internal override void DrawControl()
+        {
+            base.DrawControl();
+
+            if (!TryLoadBackground())
+                return;
+
+            DXManager.DrawOpaque(_backgroundTexture, _backgroundSource,
+                new Vector3(DisplayLocation.X, DisplayLocation.Y, 0F), Color.White, Opacity);
+        }
+
+        private bool TryLoadBackground()
+        {
+            if (_backgroundTexture != null && !_backgroundTexture.Disposed)
+                return true;
+
+            if (_backgroundLoadAttempted)
+                return false;
+
+            _backgroundLoadAttempted = true;
+            string path = Path.Combine(Settings.DataPath, BackgroundFileName);
+            if (!File.Exists(path))
+                return false;
+
+            try
+            {
+                _backgroundTexture = Texture.FromFile(DXManager.Device, path, 0, 0, 1,
+                    Usage.None, Format.A8R8G8B8, Pool.Managed, Filter.None, Filter.None, 0);
+                SurfaceDescription description = _backgroundTexture.GetLevelDescription(0);
+                _backgroundSource = new Rectangle(0, 0, description.Width, description.Height);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Option dialog background load failed: {ex}");
+                _backgroundTexture?.Dispose();
+                _backgroundTexture = null;
+                return false;
+            }
         }
 
         private static void ConfigureButton(MirButton button, string text)
@@ -3251,59 +3350,21 @@ namespace Client.MirScenes.Dialogs
             byte volume = (byte)(p.X / (double)SoundBar.Size.Width * 100);
             Settings.Volume = volume;
 
-            double percent = Settings.Volume / 100D;
-
             SoundBar.Hint = $"{Settings.Volume}%";
 
-            if (percent > 1) percent = 1;
-
-            VolumeBar.Location = percent > 0 ? new Point(159 + (int)((SoundBar.Size.Width - 2) * percent), 218) : new Point(159, 218);
+            UpdateSlider(SoundTrack, VolumeBar, Settings.Volume);
         }
 
         private void SoundBar_BeforeDraw(object sender, EventArgs e)
         {
-            if (SoundBar.Library == null) return;
-
-            double percent = Settings.Volume / 100D;
-
             SoundBar.Hint = $"{Settings.Volume}%";
-
-            if (percent > 1) percent = 1;
-            if (percent > 0)
-            {
-                Rectangle section = new Rectangle
-                {
-                    Size = new Size((int)((SoundBar.Size.Width - 2) * percent), SoundBar.Size.Height)
-                };
-
-                SoundBar.Library.Draw(SoundBar.Index, section, SoundBar.DisplayLocation, Color.White, false);
-                VolumeBar.Location = new Point(159 + section.Size.Width, 218);
-            }
-            else
-                VolumeBar.Location = new Point(159, 218);
+            UpdateSlider(SoundTrack, VolumeBar, Settings.Volume);
         }
 
         private void MusicSoundBar_BeforeDraw(object sender, EventArgs e)
         {
-            if (MusicSoundBar.Library == null) return;
-
-            double percent = Settings.MusicVolume / 100D;
-
             MusicSoundBar.Hint = $"{Settings.MusicVolume}%";
-
-            if (percent > 1) percent = 1;
-            if (percent > 0)
-            {
-                Rectangle section = new Rectangle
-                {
-                    Size = new Size((int)((MusicSoundBar.Size.Width - 2) * percent), MusicSoundBar.Size.Height)
-                };
-
-                MusicSoundBar.Library.Draw(MusicSoundBar.Index, section, MusicSoundBar.DisplayLocation, Color.White, false);
-                MusicVolumeBar.Location = new Point(159 + section.Size.Width, 244);
-            }
-            else
-                MusicVolumeBar.Location = new Point(159, 244);
+            UpdateSlider(MusicSoundTrack, MusicVolumeBar, Settings.MusicVolume);
         }
 
         private void MusicSoundBar_MouseMove(object sender, MouseEventArgs e)
@@ -3315,13 +3376,9 @@ namespace Client.MirScenes.Dialogs
             byte volume = (byte)(p.X / (double)MusicSoundBar.Size.Width * 100);
             Settings.MusicVolume = volume;
 
-            double percent = Settings.MusicVolume / 100D;
-
             MusicSoundBar.Hint = $"{Settings.MusicVolume}%";
 
-            if (percent > 1) percent = 1;
-
-            MusicVolumeBar.Location = percent > 0 ? new Point(159 + (int)((MusicSoundBar.Size.Width - 2) * percent), 244) : new Point(159, 244);
+            UpdateSlider(MusicSoundTrack, MusicVolumeBar, Settings.MusicVolume);
         }
 
         private void OptionPanel_BeforeDraw(object sender, EventArgs e)
@@ -3368,17 +3425,6 @@ namespace Client.MirScenes.Dialogs
             {
                 DropViewOn.Index = SettingsButtonIndex(456);
                 DropViewOff.Index = SettingsButtonIndex(461);
-            }
-
-            if (Settings.NameView)
-            {
-                NameViewOn.Index = SettingsButtonIndex(458);
-                NameViewOff.Index = SettingsButtonIndex(459);
-            }
-            else
-            {
-                NameViewOn.Index = SettingsButtonIndex(456);
-                NameViewOff.Index = SettingsButtonIndex(461);
             }
 
             if (Settings.HPView)

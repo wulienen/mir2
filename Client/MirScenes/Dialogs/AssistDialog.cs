@@ -362,6 +362,7 @@ namespace Client.MirScenes.Dialogs
             IReadOnlyList<AssistItemFilter> items = GameScene.Scene?.AssistController?.GetItemFilters();
             int itemCount = items?.Count ?? 0;
             int pageCount = itemCount == 0 ? 0 : (itemCount + FilterPageSize - 1) / FilterPageSize;
+            bool showFilterControls = _currentPage == ItemPage;
             if (pageCount == 0)
                 _filterPage = 0;
             else if (_filterPage >= pageCount)
@@ -376,7 +377,7 @@ namespace Client.MirScenes.Dialogs
                     _itemFilterNames[i] = item.Name;
                     _itemFilterChecks[i].LabelText = item.Name;
                     _itemFilterChecks[i].Checked = item.Pick;
-                    _itemFilterChecks[i].Visible = true;
+                    _itemFilterChecks[i].Visible = showFilterControls;
                 }
                 else
                 {
@@ -647,7 +648,14 @@ namespace Client.MirScenes.Dialogs
                 MirLabel label = _groupLabels[i];
                 label.Visible = true;
                 label.ForeColour = player == null ? Color.Gray : Color.White;
-                label.Text = player == null ? $"{name}  --" : $"{name}  {player.PercentHealth}%";
+
+                string health = "--";
+                if (player is UserObject user && user.Stats != null && user.Stats[Stat.HP] > 0)
+                    health = $"{Math.Max(0, user.HP):#,##0}/{Math.Max(1, user.Stats[Stat.HP]):#,##0}";
+                else if (player?.HealthKnown == true)
+                    health = $"{player.PercentHealth}%";
+
+                label.Text = $"{name}  {health}";
             }
         }
     }

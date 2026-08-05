@@ -145,7 +145,8 @@ namespace Client.MirObjects
                 _autoPathOwned = false;
 
             MapObject selectedTarget = MapObject.TargetObject;
-            if (selectedTarget != null && !selectedTarget.Dead && selectedTarget.ObjectID != _autoAttackTargetId)
+            if (Settings.AssistAutoAttack && selectedTarget != null && !selectedTarget.Dead &&
+                selectedTarget.ObjectID != _autoAttackTargetId)
             {
                 if (_autoPathOwned)
                 {
@@ -189,22 +190,32 @@ namespace Client.MirObjects
             }
 
             if (Settings.AssistAutoPickup)
-                ProcessAutoPickup(user, map);
+                ProcessAutoPickup(user, map, Settings.AssistAutoAttack);
         }
 
-        private void ProcessAutoPickup(UserObject user, MapControl map)
+        private void ProcessAutoPickup(UserObject user, MapControl map, bool allowMovement)
         {
             if (CMain.Time < _nextPickupProcess)
                 return;
 
             _nextPickupProcess = CMain.Time + 200;
             RemoveExpiredPickupRetries();
+
+            // Auto pickup by itself only collects items already on the player's cell.
+            // Any pathing to an item is reserved for the auto-attack workflow.
+            if (!allowMovement && _autoPathOwned)
+            {
+                map.AutoPath = false;
+                _autoPathOwned = false;
+            }
+
             ItemObject item = null;
             if (_pickupTargetId != 0 && MapControl.Objects.TryGetValue(_pickupTargetId, out MapObject current))
                 item = current as ItemObject;
 
             if (item == null || IsPickupCoolingDown(item.ObjectID) || !ShouldPickItem(item.Name) ||
-                Functions.MaxDistance(user.CurrentLocation, item.CurrentLocation) > AutoTargetRange)
+                Functions.MaxDistance(user.CurrentLocation, item.CurrentLocation) > AutoTargetRange ||
+                (!allowMovement && item.CurrentLocation != user.CurrentLocation))
             {
                 if (_autoPathOwned)
                 {
@@ -212,7 +223,7 @@ namespace Client.MirObjects
                     _autoPathOwned = false;
                 }
 
-                item = FindNearestItem(user);
+                item = allowMovement ? FindNearestItem(user) : FindItemAtLocation(user);
                 _pickupTargetId = item?.ObjectID ?? 0;
             }
 
@@ -238,6 +249,12 @@ namespace Client.MirObjects
                 return;
             }
 
+            if (!allowMovement)
+            {
+                _pickupTargetId = 0;
+                return;
+            }
+
             if (map.AutoPath)
                 return;
 
@@ -255,6 +272,18 @@ namespace Client.MirObjects
             map.CurrentPath = path;
             map.AutoPath = true;
             _autoPathOwned = true;
+        }
+
+        private ItemObject FindItemAtLocation(UserObject user)
+        {
+            foreach (MapObject mapObject in MapControl.Objects.Values)
+            {
+                if (mapObject is ItemObject item && item.CurrentLocation == user.CurrentLocation &&
+                    !IsPickupCoolingDown(item.ObjectID) && ShouldPickItem(item.Name))
+                    return item;
+            }
+
+            return null;
         }
 
         private ItemObject FindNearestItem(UserObject user)

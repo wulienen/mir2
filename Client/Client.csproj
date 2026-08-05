@@ -86,6 +86,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>
+    <None Update="Resources\OptionDialogBackground-360x460.png">
+      <TargetPath>Data\OptionDialogBackground-360x460.png</TargetPath>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
     <None Update="Assets\Fonts\HarmonyOS_Sans_SC_Medium.ttf">
       <TargetPath>Data\Fonts\HarmonyOS_Sans_SC_Medium.ttf</TargetPath>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

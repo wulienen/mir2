@@ -3672,7 +3672,8 @@ namespace Client.MirScenes
             switch (p.Type)
             {
                 case DamageType.Hit:
-                    obj.Damages.Add(new Damage(p.Damage.ToString("#,##0"), 1000, obj.Race == ObjectType.Player ? Color.Red : Color.White, 50));
+                    long damage = Math.Abs((long)p.Damage);
+                    obj.Damages.Add(new Damage(damage.ToString("#,##0"), 1000, obj.Race == ObjectType.Player ? Color.Red : Color.White, 50));
                     break;
                 case DamageType.Miss:
                     obj.Damages.Add(new Damage(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.Miss), 1200, obj.Race == ObjectType.Player ? Color.LightCoral : Color.LightGray, 50));
@@ -3749,14 +3750,16 @@ namespace Client.MirScenes
             User.HP = p.HP;
             User.MP = p.MP;
 
-            User.PercentHealth = (byte)(User.HP / (float)User.Stats[Stat.HP] * 100);
+            int maxHealth = Math.Max(1, User.Stats[Stat.HP]);
+            User.PercentHealth = (byte)Math.Clamp((int)(User.HP * 100L / maxHealth), 0, 100);
         }
         private void HeroHealthChanged(S.HeroHealthChanged p)
         {
             Hero.HP = p.HP;
             Hero.MP = p.MP;
 
-            Hero.PercentHealth = (byte)(Hero.HP / (float)Hero.Stats[Stat.HP] * 100);
+            int maxHealth = Math.Max(1, Hero.Stats[Stat.HP]);
+            Hero.PercentHealth = (byte)Math.Clamp((int)(Hero.HP * 100L / maxHealth), 0, 100);
             Hero.PercentMana = (byte)(Hero.MP / (float)Hero.Stats[Stat.MP] * 100);
         }
 
@@ -5259,6 +5262,7 @@ namespace Client.MirScenes
             {
                 ob.PercentHealth = p.Percent;
                 ob.HealthTime = CMain.Time + p.Expire * 1000;
+                ob.HealthKnown = true;
             }
         }
 
@@ -11594,7 +11598,8 @@ namespace Client.MirScenes
         {
             MapButtons |= e.Button;
             if (e.Button != MouseButtons.Right || !Settings.NewMove)
-                GameScene.CanRun = false;
+                GameScene.CanRun = e.Button == MouseButtons.Left &&
+                    (MapObject.MouseObject is MonsterObject || MapObject.MouseObject is PlayerObject);
 
             if (AwakeningAction == true) return;
 
@@ -11799,13 +11804,23 @@ namespace Client.MirScenes
                             return;
                         }
 
-                        if (CMain.Shift || Settings.AssistFreeShift)
+                        MapObject target = null;
+                        if (MapObject.MouseObject is MonsterObject || MapObject.MouseObject is PlayerObject)
+                            target = MapObject.MouseObject;
+                        bool movingToTarget = target != null && MapObject.TargetObject == target && !target.Dead;
+
+                        bool freeShiftTargetInRange = target != null &&
+                            (User.Class == MirClass.Archer && User.HasClassWeapon && !User.RidingMount &&
+                             !User.Poison.HasFlag(PoisonType.Dazed)
+                                ? Functions.InRange(target.CurrentLocation, User.CurrentLocation, Globals.MaxAttackRange)
+                                : Functions.InRange(target.CurrentLocation, User.CurrentLocation, 1));
+
+                        // F12 removes the need to hold Shift, but it must still be a target attack in range.
+                        // Keep the original Shift behavior, including attacking in a direction with no target.
+                        if (CMain.Shift || (Settings.AssistFreeShift && freeShiftTargetInRange))
                         {
                             if (CMain.Time > GameScene.AttackTime && CanRideAttack()) //ArcherTest - shift click
                             {
-                                MapObject target = null;
-                                if (MapObject.MouseObject is MonsterObject || MapObject.MouseObject is PlayerObject) target = MapObject.MouseObject;
-
                                 if (User.Class == MirClass.Archer && User.HasClassWeapon && !User.RidingMount && !User.Poison.HasFlag(PoisonType.Dazed))
                                 {
                                     if (target != null)
@@ -11882,6 +11897,29 @@ namespace Client.MirScenes
                                 return;
                             }
                         }
+                        if (movingToTarget && GameScene.CanRun && CanRun(direction) && CMain.Time > GameScene.NextRunTime &&
+                            User.HP >= 10 && (!User.Sneaking || (User.Sneaking && User.Sprint)))
+                        {
+                            int distance = User.RidingMount || User.Sprint && !User.Sneaking ? 3 : 2;
+                            bool fail = false;
+                            for (int i = 0; i <= distance; i++)
+                            {
+                                if (!CheckDoorOpen(Functions.PointMove(User.CurrentLocation, direction, i)))
+                                    fail = true;
+                            }
+
+                            if (!fail)
+                            {
+                                User.QueuedAction = new QueuedAction
+                                {
+                                    Action = MirAction.Running,
+                                    Direction = direction,
+                                    Location = Functions.PointMove(User.CurrentLocation, direction, distance)
+                                };
+                                return;
+                            }
+                        }
+
                         if ((CanWalk(direction, out direction)) && (CheckDoorOpen(Functions.PointMove(User.CurrentLocation, direction, 1))))
                         {
 
@@ -12001,6 +12039,29 @@ namespace Client.MirScenes
             if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, 1)) return;
             if (User.Class == MirClass.Archer && User.HasClassWeapon && (MapObject.TargetObject is MonsterObject || MapObject.TargetObject is PlayerObject)) return; //ArcherTest - stop walking
             direction = Functions.DirectionFromPoint(User.CurrentLocation, MapObject.TargetObject.CurrentLocation);
+
+            if (GameScene.CanRun && CanRun(direction) && CMain.Time > GameScene.NextRunTime && User.HP >= 10 &&
+                (!User.Sneaking || (User.Sneaking && User.Sprint)))
+            {
+                int distance = User.RidingMount || User.Sprint && !User.Sneaking ? 3 : 2;
+                bool fail = false;
+                for (int i = 0; i <= distance; i++)
+                {
+                    if (!CheckDoorOpen(Functions.PointMove(User.CurrentLocation, direction, i)))
+                        fail = true;
+                }
+
+                if (!fail)
+                {
+                    User.QueuedAction = new QueuedAction
+                    {
+                        Action = MirAction.Running,
+                        Direction = direction,
+                        Location = Functions.PointMove(User.CurrentLocation, direction, distance)
+                    };
+                    return;
+                }
+            }
 
             if (!CanWalk(direction, out direction)) return;
 

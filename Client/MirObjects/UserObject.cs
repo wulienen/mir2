@@ -173,7 +173,8 @@ namespace Client.MirObjects
             AttackSpeed = 1400 - ((Stats[Stat.AttackSpeed] * 60) + Math.Min(370, (Level * 14)));
             if (AttackSpeed < 550) AttackSpeed = 550;
 
-            PercentHealth = (byte)(HP / (float)Stats[Stat.HP] * 100);
+            int maxHealth = Math.Max(1, Stats[Stat.HP]);
+            PercentHealth = (byte)Math.Clamp((int)(HP * 100L / maxHealth), 0, 100);
 
             GameScene.Scene.Redraw();
         }

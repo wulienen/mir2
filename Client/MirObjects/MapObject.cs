@@ -82,10 +82,11 @@ namespace Client.MirObjects
             {
                 if (percentHealth == value) return;
 
-                percentHealth = value;
+                percentHealth = value > 100 ? (byte)100 : value;
             }
         }
         public long HealthTime;
+        public bool HealthKnown;
 
         private byte percentMana;
         public virtual byte PercentMana
@@ -551,17 +552,22 @@ namespace Client.MirObjects
         public void DrawHealthValue()
         {
             bool showLevel = Settings.AssistShowLevel && this is PlayerObject;
-            if ((!Settings.AssistShowHealthValues && !showLevel) || Dead)
+            UserObject user = this as UserObject;
+            bool hasExactHealth = user?.Stats != null && user.Stats[Stat.HP] > 0;
+            bool hasPercentHealth = HealthKnown && (CMain.Time < HealthTime || ShouldDrawHealth());
+            bool showHealth = Settings.AssistShowHealthValues && (hasExactHealth || hasPercentHealth);
+
+            if ((!showHealth && !showLevel) || Dead)
                 return;
 
             if (Race != ObjectType.Player && Race != ObjectType.Monster && Race != ObjectType.Hero)
                 return;
 
             string text = string.Empty;
-            if (Settings.AssistShowHealthValues)
+            if (showHealth)
             {
-                if (this is UserObject user && user.Stats != null)
-                    text = $"{user.HP:#,##0}/{Math.Max(1, user.Stats[Stat.HP]):#,##0}";
+                if (hasExactHealth)
+                    text = $"{Math.Max(0, user.HP):#,##0}/{Math.Max(1, user.Stats[Stat.HP]):#,##0}";
                 else
                     text = $"{PercentHealth}%";
             }
