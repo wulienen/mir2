@@ -1,9 +1,17 @@
 ﻿using Client.MirSounds;
 
+using Client.MirObjects;
 using Client.Streaming;
 
 namespace Client
 {
+    public enum AssistSearchMode
+    {
+        VisibleOnly = 0,
+        Nearby = 1,
+        CurrentMap = 2
+    }
+
     class Settings
     {
         public const long CleanDelay = 600000;
@@ -242,6 +250,14 @@ namespace Client
                           AssistEmergencyPercent = 5,
                           AssistUseItemInterval = 3000;
 
+        public static AssistSearchMode AssistHuntMode = AssistSearchMode.Nearby;
+
+        public static Spell AssistWarriorCombatSpell = Spell.None,
+                            AssistWizardCombatSpell = Spell.None,
+                            AssistTaoistCombatSpell = Spell.None,
+                            AssistAssassinCombatSpell = Spell.None,
+                            AssistArcherCombatSpell = Spell.None;
+
         public static string AssistHealthPotionKeyword = "体力恢复药",
                              AssistManaPotionKeyword = "魔力恢复药",
                              AssistEmergencyKeyword = "回城卷";
@@ -406,6 +422,15 @@ namespace Client
             AssistAutoElementalBarrier = Reader.ReadBoolean("Assist", "AutoElementalBarrier", AssistAutoElementalBarrier);
             AssistAutoAttack = Reader.ReadBoolean("Assist", "AutoAttack", AssistAutoAttack);
             AssistAutoPickup = Reader.ReadBoolean("Assist", "AutoPickup", AssistAutoPickup);
+            int huntMode = Reader.ReadInt32("Assist", "SearchMode", (int)AssistHuntMode);
+            AssistHuntMode = Enum.IsDefined(typeof(AssistSearchMode), huntMode)
+                ? (AssistSearchMode)huntMode
+                : AssistSearchMode.Nearby;
+            AssistWarriorCombatSpell = ReadAssistSpell("WarriorCombatSpell", AssistWarriorCombatSpell);
+            AssistWizardCombatSpell = ReadAssistSpell("WizardCombatSpell", AssistWizardCombatSpell);
+            AssistTaoistCombatSpell = ReadAssistSpell("TaoistCombatSpell", AssistTaoistCombatSpell);
+            AssistAssassinCombatSpell = ReadAssistSpell("AssassinCombatSpell", AssistAssassinCombatSpell);
+            AssistArcherCombatSpell = ReadAssistSpell("ArcherCombatSpell", AssistArcherCombatSpell);
             AssistProtectionEnabled = Reader.ReadBoolean("Assist", "ProtectionEnabled", AssistProtectionEnabled);
             AssistHealthPotionPercent = Math.Clamp(Reader.ReadInt32("Assist", "HealthPotionPercent", AssistHealthPotionPercent), 0, 100);
             AssistManaPotionPercent = Math.Clamp(Reader.ReadInt32("Assist", "ManaPotionPercent", AssistManaPotionPercent), 0, 100);
@@ -555,6 +580,12 @@ namespace Client
             Reader.Write("Assist", "AutoElementalBarrier", AssistAutoElementalBarrier);
             Reader.Write("Assist", "AutoAttack", AssistAutoAttack);
             Reader.Write("Assist", "AutoPickup", AssistAutoPickup);
+            Reader.Write("Assist", "SearchMode", (int)AssistHuntMode);
+            Reader.Write("Assist", "WarriorCombatSpell", (int)AssistWarriorCombatSpell);
+            Reader.Write("Assist", "WizardCombatSpell", (int)AssistWizardCombatSpell);
+            Reader.Write("Assist", "TaoistCombatSpell", (int)AssistTaoistCombatSpell);
+            Reader.Write("Assist", "AssassinCombatSpell", (int)AssistAssassinCombatSpell);
+            Reader.Write("Assist", "ArcherCombatSpell", (int)AssistArcherCombatSpell);
             Reader.Write("Assist", "ProtectionEnabled", AssistProtectionEnabled);
             Reader.Write("Assist", "HealthPotionPercent", AssistHealthPotionPercent);
             Reader.Write("Assist", "ManaPotionPercent", AssistManaPotionPercent);
@@ -563,6 +594,51 @@ namespace Client
             Reader.Write("Assist", "HealthPotionKeyword", AssistHealthPotionKeyword);
             Reader.Write("Assist", "ManaPotionKeyword", AssistManaPotionKeyword);
             Reader.Write("Assist", "EmergencyKeyword", AssistEmergencyKeyword);
+        }
+
+        public static Spell GetAssistCombatSpell(MirClass mirClass)
+        {
+            return mirClass switch
+            {
+                MirClass.Warrior => AssistWarriorCombatSpell,
+                MirClass.Wizard => AssistWizardCombatSpell,
+                MirClass.Taoist => AssistTaoistCombatSpell,
+                MirClass.Assassin => AssistAssassinCombatSpell,
+                MirClass.Archer => AssistArcherCombatSpell,
+                _ => Spell.None
+            };
+        }
+
+        public static void SetAssistCombatSpell(MirClass mirClass, Spell spell)
+        {
+            if (spell != Spell.None && !AssistController.IsAutoCombatSpell(spell))
+                spell = Spell.None;
+
+            switch (mirClass)
+            {
+                case MirClass.Warrior:
+                    AssistWarriorCombatSpell = spell;
+                    break;
+                case MirClass.Wizard:
+                    AssistWizardCombatSpell = spell;
+                    break;
+                case MirClass.Taoist:
+                    AssistTaoistCombatSpell = spell;
+                    break;
+                case MirClass.Assassin:
+                    AssistAssassinCombatSpell = spell;
+                    break;
+                case MirClass.Archer:
+                    AssistArcherCombatSpell = spell;
+                    break;
+            }
+        }
+
+        private static Spell ReadAssistSpell(string key, Spell defaultValue)
+        {
+            int value = Reader.ReadInt32("Assist", key, (int)defaultValue);
+            Spell spell = Enum.IsDefined(typeof(Spell), value) ? (Spell)value : Spell.None;
+            return spell == Spell.None || AssistController.IsAutoCombatSpell(spell) ? spell : Spell.None;
         }
 
         public static void LoadTrackedQuests(string charName)

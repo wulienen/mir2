@@ -15,8 +15,9 @@ namespace Client.MirScenes.Dialogs
 
         private const int BasicPage = 0;
         private const int ClassPage = 1;
-        private const int ProtectionPage = 2;
-        private const int ItemPage = 3;
+        private const int CombatPage = 2;
+        private const int ProtectionPage = 3;
+        private const int ItemPage = 4;
         private const int FilterPageSize = 10;
 
         private readonly List<MirControl>[] _pageControls =
@@ -24,13 +25,17 @@ namespace Client.MirScenes.Dialogs
             new List<MirControl>(),
             new List<MirControl>(),
             new List<MirControl>(),
+            new List<MirControl>(),
             new List<MirControl>()
         };
 
         private readonly List<ToggleBinding> _toggleBindings = new List<ToggleBinding>();
-        private readonly MirButton[] _tabs = new MirButton[4];
+        private readonly MirButton[] _tabs = new MirButton[5];
         private readonly MirCheckBox[] _itemFilterChecks = new MirCheckBox[FilterPageSize];
         private readonly string[] _itemFilterNames = new string[FilterPageSize];
+        private MirDropDownBox _huntModeDropDown;
+        private MirDropDownBox _combatSpellDropDown;
+        private readonly List<Spell> _combatSpellOptions = new List<Spell>();
         private MirButton _previousFilterButton, _nextFilterButton;
         private MirLabel _filterPageLabel;
         private int _currentPage;
@@ -58,24 +63,15 @@ namespace Client.MirScenes.Dialogs
             Sort = true;
             Location = Center;
 
-            CreateTab(BasicPage, 16, ClientTextKeys.AssistBasicTab);
-            CreateTab(ClassPage, 94, ClientTextKeys.AssistClassTab);
-            CreateTab(ProtectionPage, 172, ClientTextKeys.AssistProtectionTab);
-            CreateTab(ItemPage, 250, ClientTextKeys.AssistItemTab);
-
-            new MirLabel
-            {
-                AutoSize = true,
-                Parent = this,
-                Location = new Point(330, 18),
-                Text = Text(ClientTextKeys.AssistTitle),
-                ForeColour = Color.Gold,
-                OutLine = true,
-                OutLineColour = Color.Black
-            };
+            CreateTab(BasicPage, 8, ClientTextKeys.AssistBasicTab);
+            CreateTab(ClassPage, 86, ClientTextKeys.AssistClassTab);
+            CreateTab(CombatPage, 164, ClientTextKeys.AssistCombatTab);
+            CreateTab(ProtectionPage, 242, ClientTextKeys.AssistProtectionTab);
+            CreateTab(ItemPage, 320, ClientTextKeys.AssistItemTab);
 
             CreateBasicPage();
             CreateClassPage();
+            CreateCombatPage();
             CreateProtectionPage();
             CreateItemPage();
 
@@ -205,12 +201,70 @@ namespace Client.MirScenes.Dialogs
                 value => Settings.AssistEmergencyKeyword = value);
         }
 
+        private void CreateCombatPage()
+        {
+            CreateToggle(CombatPage, 26, 70, ClientTextKeys.AssistAutoAttack,
+                () => Settings.AssistAutoAttack, value => Settings.AssistAutoAttack = value,
+                () => GameScene.Scene?.AssistController?.ClearAutomaticTargets());
+
+            MirLabel searchModeLabel = new MirLabel
+            {
+                AutoSize = true,
+                Parent = this,
+                Location = new Point(26, 103),
+                Text = Text(ClientTextKeys.AssistSearchMode)
+            };
+            _huntModeDropDown = new MirDropDownBox
+            {
+                Parent = this,
+                Location = new Point(125, 99),
+                Size = new Size(180, 18),
+                Enabled = true
+            };
+            _huntModeDropDown.ValueChanged += (o, e) =>
+            {
+                int index = _huntModeDropDown._WantedIndex;
+                if (index < 0 || index > (int)AssistSearchMode.CurrentMap)
+                    return;
+
+                _huntModeDropDown.SelectedIndex = index;
+                Settings.AssistHuntMode = (AssistSearchMode)index;
+                GameScene.Scene?.AssistController?.ClearAutomaticTargets();
+            };
+            _pageControls[CombatPage].Add(searchModeLabel);
+            _pageControls[CombatPage].Add(_huntModeDropDown);
+
+            MirLabel combatSpellLabel = new MirLabel
+            {
+                AutoSize = true,
+                Parent = this,
+                Location = new Point(26, 132),
+                Text = Text(ClientTextKeys.AssistCombatSkill)
+            };
+            _combatSpellDropDown = new MirDropDownBox
+            {
+                Parent = this,
+                Location = new Point(125, 128),
+                Size = new Size(180, 18),
+                Enabled = true
+            };
+            _combatSpellDropDown.ValueChanged += (o, e) =>
+            {
+                int index = _combatSpellDropDown._WantedIndex;
+                if (index < 0 || index >= _combatSpellOptions.Count || GameScene.User == null)
+                    return;
+
+                _combatSpellDropDown.SelectedIndex = index;
+                Settings.SetAssistCombatSpell(GameScene.User.Class, _combatSpellOptions[index]);
+                GameScene.Scene?.AssistController?.NotifyManualInput();
+            };
+            _pageControls[CombatPage].Add(combatSpellLabel);
+            _pageControls[CombatPage].Add(_combatSpellDropDown);
+        }
+
         private void CreateItemPage()
         {
-            CreateToggle(ItemPage, 26, 70, ClientTextKeys.AssistAutoAttack,
-                () => Settings.AssistAutoAttack, value => Settings.AssistAutoAttack = value,
-                () => GameScene.Scene.AssistController.ClearAutomaticTargets());
-            CreateToggle(ItemPage, 26, 95, ClientTextKeys.AssistAutoPickup,
+            CreateToggle(ItemPage, 26, 70, ClientTextKeys.AssistAutoPickup,
                 () => Settings.AssistAutoPickup, value => Settings.AssistAutoPickup = value,
                 () => GameScene.Scene.AssistController.ClearAutomaticTargets());
 
@@ -521,6 +575,65 @@ namespace Client.MirScenes.Dialogs
         {
             foreach (ToggleBinding binding in _toggleBindings)
                 binding.Control.Checked = binding.Read();
+
+            RefreshCombatControls();
+        }
+
+        private void RefreshCombatControls()
+        {
+            if (_huntModeDropDown == null || _combatSpellDropDown == null)
+                return;
+
+            _huntModeDropDown.Items = new List<string>
+            {
+                Text(ClientTextKeys.AssistSearchVisible),
+                Text(ClientTextKeys.AssistSearchNearby),
+                Text(ClientTextKeys.AssistSearchCurrentMap)
+            };
+            int huntMode = (int)Settings.AssistHuntMode;
+            if (huntMode < 0 || huntMode > (int)AssistSearchMode.CurrentMap)
+            {
+                Settings.AssistHuntMode = AssistSearchMode.Nearby;
+                huntMode = (int)Settings.AssistHuntMode;
+            }
+            _huntModeDropDown.SelectedIndex = huntMode;
+
+            _combatSpellOptions.Clear();
+            _combatSpellOptions.Add(Spell.None);
+
+            UserObject user = GameScene.User;
+            if (user != null)
+            {
+                foreach (ClientMagic magic in user.Magics
+                             .Where(x => x != null && AssistController.IsAutoCombatSpell(x.Spell))
+                             .GroupBy(x => x.Spell)
+                             .Select(x => x.First())
+                             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
+                    _combatSpellOptions.Add(magic.Spell);
+            }
+
+            _combatSpellDropDown.Items = new List<string>
+            {
+                Text(ClientTextKeys.AssistNoCombatSkill)
+            };
+            if (user != null)
+            {
+                foreach (Spell spell in _combatSpellOptions.Skip(1))
+                {
+                    ClientMagic magic = user.Magics.FirstOrDefault(x => x != null && x.Spell == spell);
+                    _combatSpellDropDown.Items.Add(magic?.Name ?? spell.ToString());
+                }
+            }
+
+            Spell selectedSpell = user == null ? Spell.None : Settings.GetAssistCombatSpell(user.Class);
+            int selectedIndex = _combatSpellOptions.IndexOf(selectedSpell);
+            if (selectedIndex < 0)
+            {
+                selectedIndex = 0;
+                if (user != null && selectedSpell != Spell.None)
+                    Settings.SetAssistCombatSpell(user.Class, Spell.None);
+            }
+            _combatSpellDropDown.SelectedIndex = selectedIndex;
         }
 
         private static void RefreshPlayerAppearances()

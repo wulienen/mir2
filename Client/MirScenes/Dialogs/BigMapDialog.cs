@@ -611,6 +611,7 @@ namespace Client.MirScenes.Dialogs
 
         private void OnMouseClick(object sender, MouseEventArgs e)
         {
+            GameScene.Scene?.AssistController?.NotifyManualInput();
             int X = (int)((e.Location.X - BigMap_MouseCoordsProcessing_OffsetX) / ScaleX);
             int Y = (int)((e.Location.Y - BigMap_MouseCoordsProcessing_OffsetY) / ScaleY);
 

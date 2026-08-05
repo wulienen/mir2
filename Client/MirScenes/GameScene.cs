@@ -4122,6 +4122,7 @@ namespace Client.MirScenes
 
         private void MapChanged(S.MapChanged p)
         {
+            AssistController?.ClearAutomaticTargets();
             var isCurrentMap = (MapControl.Index == p.MapIndex);
 
             if (isCurrentMap)
@@ -10659,6 +10660,8 @@ namespace Client.MirScenes
             Processdoors();
             RetryStreamingMap();
             _streamingMap?.EnsureVisibleChunks(this);
+            if (Settings.AssistAutoAttack)
+                GameScene.Scene.AssistController.ValidateAutomaticTargets();
             User.Process();
             for (int i = ObjectsList.Count - 1; i >= 0; i--)
             {
@@ -11516,6 +11519,7 @@ namespace Client.MirScenes
             if (!(e is MouseEventArgs me)) return;
 
             if (AwakeningAction == true) return;
+            GameScene.Scene?.AssistController?.NotifyManualInput();
             switch (me.Button)
             {
                 case MouseButtons.Left:
@@ -11678,12 +11682,17 @@ namespace Client.MirScenes
                 GameScene.PickedUpGold = false;
             }
 
+            bool automaticTarget = Settings.AssistAutoAttack &&
+                AssistController.IsAutoCombatTarget(MapObject.MouseObject);
+            bool manualTarget = !Settings.AssistAutoAttack &&
+                !(MapObject.MouseObject is MonsterObject monster && (monster.AI == 64 || monster.AI == 70));
             if (MapObject.MouseObject != null && !MapObject.MouseObject.Dead && !(MapObject.MouseObject is ItemObject) &&
-                !(MapObject.MouseObject is NPCObject) && !(MapObject.MouseObject is MonsterObject && MapObject.MouseObject.AI == 64)
-                 && !(MapObject.MouseObject is MonsterObject && MapObject.MouseObject.AI == 70))
+                !(MapObject.MouseObject is NPCObject) && (automaticTarget || manualTarget))
             {
                 MapObject.TargetObjectID = MapObject.MouseObject.ObjectID;
-                if (MapObject.MouseObject is MonsterObject && MapObject.MouseObject.AI != 6)
+                if (Settings.AssistAutoAttack)
+                    MapObject.MagicObjectID = MapObject.TargetObject.ObjectID;
+                else if (MapObject.MouseObject is MonsterObject && MapObject.MouseObject.AI != 6)
                     MapObject.MagicObjectID = MapObject.TargetObject.ObjectID;
             }
             else
@@ -11694,10 +11703,27 @@ namespace Client.MirScenes
         {
             if (AwakeningAction == true) return;
 
+            // Automatic combat is restricted to the same legal monster set used by
+            // target selection, spell casting, and pursuit. Manual/PvP targeting is
+            // unchanged while the feature is disabled.
+            if (Settings.AssistAutoAttack)
+                GameScene.Scene.AssistController.ValidateAutomaticTargets();
+
             if ((MouseControl == this) && (MapButtons != MouseButtons.None)) AutoHit = false;//mouse actions stop mining even when frozen!
             if (!CanRideAttack()) AutoHit = false;
 
             if (CMain.Time < InputDelay || User.Poison.HasFlag(PoisonType.Paralysis) || User.Poison.HasFlag(PoisonType.LRParalysis) || User.Poison.HasFlag(PoisonType.Frozen) || User.Fishing) return;
+
+            // Prepare the configured automatic combat skill before the normal
+            // attack/movement branch can enqueue a competing action. Manual map
+            // input and an already queued action retain priority.
+            if (Settings.AssistAutoAttack && MapButtons == MouseButtons.None &&
+                User.NextMagic == null && User.QueuedAction == null &&
+                GameScene.Scene.AssistController.TryUseAutoCombatSpell(User, MapObject.TargetObject as MonsterObject))
+            {
+                UseMagic(User.NextMagic, User);
+                return;
+            }
 
             if (User.NextMagic != null && !User.RidingMount)
             {
@@ -11709,8 +11735,12 @@ namespace Client.MirScenes
 
             if (MapObject.TargetObject != null && !MapObject.TargetObject.Dead)
             {
-                if (((MapObject.TargetObject.Name.EndsWith(")") || MapObject.TargetObject is PlayerObject) && (CMain.Shift || Settings.AssistFreeShift)) ||
-                    (!MapObject.TargetObject.Name.EndsWith(")") && MapObject.TargetObject is MonsterObject))
+                bool autoCombatTarget = Settings.AssistAutoAttack &&
+                    GameScene.Scene.AssistController.CanAutoAttackTarget(MapObject.TargetObject);
+                bool manualTarget = !Settings.AssistAutoAttack &&
+                    (((MapObject.TargetObject.Name.EndsWith(")") || MapObject.TargetObject is PlayerObject) && (CMain.Shift || Settings.AssistFreeShift)) ||
+                     (!MapObject.TargetObject.Name.EndsWith(")") && MapObject.TargetObject is MonsterObject));
+                if (autoCombatTarget || manualTarget)
                 {
                     GameScene.LogTime = CMain.Time + Globals.LogDelay;
 
@@ -11805,7 +11835,8 @@ namespace Client.MirScenes
                         }
 
                         MapObject target = null;
-                        if (MapObject.MouseObject is MonsterObject || MapObject.MouseObject is PlayerObject)
+                        if ((MapObject.MouseObject is MonsterObject || MapObject.MouseObject is PlayerObject) &&
+                            (!Settings.AssistAutoAttack || AssistController.IsAutoCombatTarget(MapObject.MouseObject)))
                             target = MapObject.MouseObject;
                         bool movingToTarget = target != null && MapObject.TargetObject == target && !target.Dead;
 
@@ -11817,7 +11848,8 @@ namespace Client.MirScenes
 
                         // F12 removes the need to hold Shift, but it must still be a target attack in range.
                         // Keep the original Shift behavior, including attacking in a direction with no target.
-                        if (CMain.Shift || (Settings.AssistFreeShift && freeShiftTargetInRange))
+                        bool allowManualAttack = !Settings.AssistAutoAttack || target != null;
+                        if (allowManualAttack && (CMain.Shift || (Settings.AssistFreeShift && freeShiftTargetInRange)))
                         {
                             if (CMain.Time > GameScene.AttackTime && CanRideAttack()) //ArcherTest - shift click
                             {
@@ -11851,7 +11883,8 @@ namespace Client.MirScenes
                             return;
                         }
 
-                        if (MapObject.MouseObject is MonsterObject && User.Class == MirClass.Archer && MapObject.TargetObject != null && !MapObject.TargetObject.Dead && User.HasClassWeapon && !User.RidingMount) //ArcherTest - range attack
+                        if (MapObject.MouseObject is MonsterObject && User.Class == MirClass.Archer && MapObject.TargetObject != null && !MapObject.TargetObject.Dead && User.HasClassWeapon && !User.RidingMount &&
+                            (!Settings.AssistAutoAttack || AssistController.IsAutoCombatTarget(MapObject.MouseObject))) //ArcherTest - range attack
                         {
                             if (Functions.InRange(MapObject.MouseObject.CurrentLocation, User.CurrentLocation, Globals.MaxAttackRange))
                             {
@@ -11984,7 +12017,9 @@ namespace Client.MirScenes
                 }
             }
 
-            if (AutoPath)
+            bool automaticTargetPresent = Settings.AssistAutoAttack &&
+                GameScene.Scene.AssistController.CanAutoAttackTarget(MapObject.TargetObject);
+            if (AutoPath && !automaticTargetPresent)
             {
                 if (CurrentPath == null || CurrentPath.Count == 0)
                 {
@@ -12034,10 +12069,15 @@ namespace Client.MirScenes
             }
 
             if (MapObject.TargetObject == null || MapObject.TargetObject.Dead) return;
-            if (((!MapObject.TargetObject.Name.EndsWith(")") && !(MapObject.TargetObject is PlayerObject)) || !(CMain.Shift || Settings.AssistFreeShift)) &&
-                (MapObject.TargetObject.Name.EndsWith(")") || !(MapObject.TargetObject is MonsterObject))) return;
+            bool automaticTarget = Settings.AssistAutoAttack &&
+                GameScene.Scene.AssistController.CanAutoAttackTarget(MapObject.TargetObject);
+            bool manualPursuitTarget = !Settings.AssistAutoAttack &&
+                (((!MapObject.TargetObject.Name.EndsWith(")") && !(MapObject.TargetObject is PlayerObject)) || !(CMain.Shift || Settings.AssistFreeShift)) &&
+                 (MapObject.TargetObject.Name.EndsWith(")") || !(MapObject.TargetObject is MonsterObject)));
+            if (!automaticTarget && (Settings.AssistAutoAttack || manualPursuitTarget)) return;
             if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, 1)) return;
-            if (User.Class == MirClass.Archer && User.HasClassWeapon && (MapObject.TargetObject is MonsterObject || MapObject.TargetObject is PlayerObject)) return; //ArcherTest - stop walking
+            if (!automaticTarget && User.Class == MirClass.Archer && User.HasClassWeapon &&
+                (MapObject.TargetObject is MonsterObject || MapObject.TargetObject is PlayerObject)) return; //ArcherTest - stop walking
             direction = Functions.DirectionFromPoint(User.CurrentLocation, MapObject.TargetObject.CurrentLocation);
 
             if (GameScene.CanRun && CanRun(direction) && CMain.Time > GameScene.NextRunTime && User.HP >= 10 &&
