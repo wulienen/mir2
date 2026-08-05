@@ -2,11 +2,17 @@ using Client.MirControls;
 using Client.MirGraphics;
 using Client.MirObjects;
 using Client.MirSounds;
+using SlimDX;
+using SlimDX.Direct3D9;
+using Font = System.Drawing.Font;
 
 namespace Client.MirScenes.Dialogs
 {
     public sealed class AssistDialog : MirImageControl
     {
+        private const string BackgroundFileName = "AssistDialogBackground-450x200.png";
+        private static readonly Size DialogSize = new Size(450, 200);
+
         private const int BasicPage = 0;
         private const int ClassPage = 1;
         private const int ProtectionPage = 2;
@@ -29,6 +35,9 @@ namespace Client.MirScenes.Dialogs
         private MirLabel _filterPageLabel;
         private int _currentPage;
         private int _filterPage;
+        private Texture _backgroundTexture;
+        private bool _backgroundLoadAttempted;
+        private Rectangle _backgroundSource;
 
         private sealed class ToggleBinding
         {
@@ -38,8 +47,13 @@ namespace Client.MirScenes.Dialogs
 
         public AssistDialog()
         {
-            Index = 33;
-            Library = Libraries.Prguse3;
+            Index = -1;
+            Library = null;
+            AutoSize = false;
+            Size = DialogSize;
+            DrawImage = false;
+            DrawControlTexture = true;
+            BackColour = Color.FromArgb(255, 15, 12, 10);
             Movable = true;
             Sort = true;
             Location = Center;
@@ -78,6 +92,47 @@ namespace Client.MirScenes.Dialogs
             closeButton.Click += (o, e) => Hide();
 
             SwitchPage(BasicPage);
+        }
+
+        protected internal override void DrawControl()
+        {
+            base.DrawControl();
+
+            if (!TryLoadBackground())
+                return;
+
+            DXManager.DrawOpaque(_backgroundTexture, _backgroundSource,
+                new Vector3(DisplayLocation.X, DisplayLocation.Y, 0F), Color.White, Opacity);
+        }
+
+        private bool TryLoadBackground()
+        {
+            if (_backgroundTexture != null && !_backgroundTexture.Disposed)
+                return true;
+
+            if (_backgroundLoadAttempted)
+                return false;
+
+            _backgroundLoadAttempted = true;
+            string path = Path.Combine(Settings.DataPath, BackgroundFileName);
+            if (!File.Exists(path))
+                return false;
+
+            try
+            {
+                _backgroundTexture = Texture.FromFile(DXManager.Device, path, 0, 0, 1,
+                    Usage.None, Format.A8R8G8B8, Pool.Managed, Filter.None, Filter.None, 0);
+                SurfaceDescription description = _backgroundTexture.GetLevelDescription(0);
+                _backgroundSource = new Rectangle(0, 0, description.Width, description.Height);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                CMain.SaveError($"Assist dialog background load failed: {ex}");
+                _backgroundTexture?.Dispose();
+                _backgroundTexture = null;
+                return false;
+            }
         }
 
         private void CreateBasicPage()
@@ -498,6 +553,17 @@ namespace Client.MirScenes.Dialogs
             UpdateItemFilters();
             Visible = true;
             BringToFront();
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                _backgroundTexture?.Dispose();
+                _backgroundTexture = null;
+            }
+
+            base.Dispose(disposing);
         }
     }
 
