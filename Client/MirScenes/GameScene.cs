@@ -2378,6 +2378,8 @@ namespace Client.MirScenes
             InventoryDialog.RefreshInventory();
             foreach (SkillBarDialog Bar in SkillBarDialogs)
                 Bar.Update();
+            Settings.AssistAutoAttack = false;
+            AssistController.ClearAutomaticTargets();
             AssistController.InitializeItemFilters();
             AssistDialog.RefreshItemFilters();
             AllowObserve = p.AllowObserve;

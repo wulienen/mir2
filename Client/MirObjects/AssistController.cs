@@ -11,6 +11,9 @@ namespace Client.MirObjects
     {
         private const string AutoPickupExcludeFileName = "AutoPickupExclude.txt";
         private const int AutoTargetRange = 20;
+        // Server drops can spread four cells from a monster. One extra cell
+        // covers the player's usual melee position beside the defeated target.
+        private const int CombatPickupPriorityRange = 5;
         private const int NearbyPatrolRange = 20;
         private const int CurrentMapPatrolSegmentRange = 18;
         private const int PatrolCandidateAttempts = 16;
@@ -324,6 +327,23 @@ namespace Client.MirObjects
                         MapObject.MagicObjectID = 0;
 
                     MapObject.TargetObjectID = 0;
+                    target = null;
+                }
+                else
+                {
+                    _autoAttackTargetId = target.ObjectID;
+                }
+
+                // Keep fighting the current target, but collect drops at the
+                // player's feet before locking the next visible monster.
+                if (target == null && Settings.AssistAutoPickup && user.NextMagic == null &&
+                    (user.QueuedAction == null || _pathOwner != AutomaticPathOwner.None) &&
+                    FindNearestItem(user, CombatPickupPriorityRange) != null &&
+                    ProcessAutoPickup(user, map, true, CombatPickupPriorityRange))
+                    return;
+
+                if (target == null)
+                {
                     target = FindNearestMonster(user);
                     if (target != null)
                     {
@@ -331,10 +351,6 @@ namespace Client.MirObjects
                         MapObject.TargetObjectID = target.ObjectID;
                         MapObject.MagicObjectID = target.ObjectID;
                     }
-                }
-                else
-                {
-                    _autoAttackTargetId = target.ObjectID;
                 }
 
                 if (target != null)
@@ -376,9 +392,10 @@ namespace Client.MirObjects
                 ProcessPatrol(user, map);
         }
 
-        private bool ProcessAutoPickup(UserObject user, MapControl map, bool allowMovement)
+        private bool ProcessAutoPickup(UserObject user, MapControl map, bool allowMovement,
+            int maximumDistance = AutoTargetRange)
         {
-            if (CMain.Time < _nextPickupProcess)
+            if (maximumDistance >= AutoTargetRange && CMain.Time < _nextPickupProcess)
                 return _pickupTargetId != 0 || (_pathOwner == AutomaticPathOwner.Pickup && map.AutoPath);
 
             _nextPickupProcess = CMain.Time + 200;
@@ -394,13 +411,13 @@ namespace Client.MirObjects
                 item = current as ItemObject;
 
             if (item == null || IsPickupCoolingDown(item.ObjectID) || !ShouldPickItem(item.Name) ||
-                Functions.MaxDistance(user.CurrentLocation, item.CurrentLocation) > AutoTargetRange ||
+                Functions.MaxDistance(user.CurrentLocation, item.CurrentLocation) > maximumDistance ||
                 (!allowMovement && item.CurrentLocation != user.CurrentLocation))
             {
                 if (_pathOwner == AutomaticPathOwner.Pickup)
                     CancelOwnedPath(map);
 
-                item = allowMovement ? FindNearestItem(user) : FindItemAtLocation(user);
+                item = allowMovement ? FindNearestItem(user, maximumDistance) : FindItemAtLocation(user);
                 _pickupTargetId = item?.ObjectID ?? 0;
             }
 
@@ -450,7 +467,7 @@ namespace Client.MirObjects
             if (map.PathFinder == null)
                 return false;
 
-            List<Node> path = map.PathFinder.FindPath(user.CurrentLocation, item.CurrentLocation, AutoTargetRange);
+            List<Node> path = map.PathFinder.FindPath(user.CurrentLocation, item.CurrentLocation, maximumDistance);
             if (path == null || path.Count == 0)
             {
                 _pickupRetryAfter[item.ObjectID] = CMain.Time + 2000;
@@ -474,7 +491,7 @@ namespace Client.MirObjects
             return null;
         }
 
-        private ItemObject FindNearestItem(UserObject user)
+        private ItemObject FindNearestItem(UserObject user, int maximumDistance = AutoTargetRange)
         {
             ItemObject result = null;
             int nearest = int.MaxValue;
@@ -485,7 +502,7 @@ namespace Client.MirObjects
                     continue;
 
                 int distance = Functions.MaxDistance(user.CurrentLocation, item.CurrentLocation);
-                if (distance > AutoTargetRange || distance >= nearest)
+                if (distance > maximumDistance || distance >= nearest)
                     continue;
 
                 nearest = distance;

@@ -242,13 +242,13 @@ namespace Client.MirScenes.Dialogs
             {
                 AutoSize = true,
                 Parent = this,
-                Location = new Point(26, 132),
+                Location = new Point(26, 165),
                 Text = Text(ClientTextKeys.AssistCombatSkill)
             };
             _combatSpellDropDown = new MirDropDownBox
             {
                 Parent = this,
-                Location = new Point(125, 128),
+                Location = new Point(125, 161),
                 Size = new Size(180, 18),
                 Enabled = true
             };
