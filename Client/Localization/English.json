@@ -1102,6 +1102,7 @@
     "AssistSearchCurrentMap": "Current map patrol",
     "AssistCombatSkill": "Auto skill",
     "AssistNoCombatSkill": "No skill",
+    "AssistExcludedItemsHint": "Checked items are excluded from auto pickup.",
     "AssistFilterPrevious": "Previous filter page",
     "AssistFilterNext": "Next filter page",
     "AssistEnableProtection": "Enable protection",

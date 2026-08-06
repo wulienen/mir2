@@ -67,7 +67,7 @@ namespace Client
 
 
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.Selectable, true);
-            FormBorderStyle = Settings.FullScreen || Settings.Borderless ? FormBorderStyle.None : FormBorderStyle.FixedDialog;
+            ApplyWindowStyle();
 
             Graphics = CreateGraphics();
             Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -574,7 +574,7 @@ namespace Client
         {
             Settings.FullScreen = !Settings.FullScreen;
 
-            Program.Form.FormBorderStyle = Settings.FullScreen || Settings.Borderless ? FormBorderStyle.None : FormBorderStyle.FixedDialog;
+            Program.Form.ApplyWindowStyle();
 
             Program.Form.TopMost = Settings.FullScreen;
 
@@ -591,6 +591,11 @@ namespace Client
             }
 
             Program.Form.CenterToScreen();
+        }
+
+        private void ApplyWindowStyle()
+        {
+            FormBorderStyle = Settings.FullScreen ? FormBorderStyle.None : FormBorderStyle.FixedDialog;
         }
 
         public void CreateScreenShot()

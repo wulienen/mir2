@@ -272,6 +272,18 @@ namespace Client.MirScenes.Dialogs
                 () => Settings.AssistAutoPickup, value => Settings.AssistAutoPickup = value,
                 () => GameScene.Scene.AssistController.ClearAutomaticTargets());
 
+            MirLabel exclusionHint = new MirLabel
+            {
+                Parent = this,
+                Location = new Point(145, 50),
+                Size = new Size(250, 18),
+                DrawFormat = TextFormatFlags.VerticalCenter,
+                Font = new Font(Settings.FontFamily, 8F),
+                ForeColour = Color.FromArgb(255, 220, 180, 95),
+                Text = Text(ClientTextKeys.AssistExcludedItemsHint)
+            };
+            _pageControls[ItemPage].Add(exclusionHint);
+
             for (int i = 0; i < FilterVisibleCount; i++)
             {
                 int column = i % FilterColumnCount;

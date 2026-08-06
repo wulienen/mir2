@@ -1102,6 +1102,7 @@
     "AssistSearchCurrentMap": "全图巡逻",
     "AssistCombatSkill": "自动技能",
     "AssistNoCombatSkill": "不使用技能",
+    "AssistExcludedItemsHint": "下面勾选的物品不会自动拾取",
     "AssistFilterPrevious": "上一页",
     "AssistFilterNext": "下一页",
     "AssistEnableProtection": "开启保护",
