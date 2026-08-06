@@ -359,6 +359,13 @@ namespace Client.MirObjects
             if (user.NextMagic != null)
                 return;
 
+            // A patrol step may already be queued by MapControl before this
+            // controller runs. Give a newly visible pickup target priority over
+            // that automatic patrol action when no legal monster is present.
+            if (Settings.AssistAutoPickup && _pathOwner == AutomaticPathOwner.Patrol &&
+                ProcessAutoPickup(user, map, true))
+                return;
+
             if (user.QueuedAction != null)
                 return;
 
@@ -401,7 +408,19 @@ namespace Client.MirObjects
                 return false;
 
             if (_pathOwner == AutomaticPathOwner.Patrol)
+            {
                 CancelOwnedPath(map);
+                // The queued movement was created by the patrol path just
+                // cancelled. Do not let it run over the newly selected item.
+                if (user.QueuedAction != null &&
+                    (user.QueuedAction.Action == MirAction.Standing ||
+                     user.QueuedAction.Action == MirAction.Walking ||
+                     user.QueuedAction.Action == MirAction.Running ||
+                     user.QueuedAction.Action == MirAction.MountStanding ||
+                     user.QueuedAction.Action == MirAction.MountWalking ||
+                     user.QueuedAction.Action == MirAction.MountRunning))
+                    user.QueuedAction = null;
+            }
 
             if (item.CurrentLocation == user.CurrentLocation)
             {
