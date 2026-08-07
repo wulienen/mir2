@@ -44,6 +44,37 @@ namespace Client.MirObjects
             Spell.PoisonShot, Spell.CrippleShot, Spell.NapalmShot, Spell.OneWithNature
         };
 
+        // Pets the Taoist keeps alive while automatic combat is running. Each is
+        // only cast when its skill is bound on the F11 skill page.
+        private static readonly Spell[] AutoSummonSpells =
+        {
+            Spell.SummonSkeleton, Spell.SummonShinsu, Spell.SummonHolyDeva
+        };
+
+        // Skills that only reach the cells around the caster. Casting them from
+        // the full server side range would simply waste the mana.
+        private static readonly Dictionary<Spell, int> SelfCentredSpellRange = new Dictionary<Spell, int>
+        {
+            { Spell.Repulsion, 2 },
+            { Spell.ThunderStorm, 2 },
+            { Spell.FlameField, 2 },
+            { Spell.LionRoar, 2 },
+            { Spell.BattleCry, 2 },
+            { Spell.BladeAvalanche, 1 },
+            { Spell.EnergyRepulsor, 2 },
+            { Spell.FireBurst, 2 },
+            { Spell.CrescentSlash, 1 },
+            { Spell.HeavenlySword, 2 },
+            { Spell.PoisonSword, 1 },
+            { Spell.CatTongue, 1 },
+            { Spell.OneWithNature, 2 },
+            { Spell.Lightning, 5 },
+            { Spell.HellFire, 4 }
+        };
+
+        /// <summary>Minimum distance a ranged class tries to keep from a monster.</summary>
+        private const int RangedKeepAwayDistance = 3;
+
         private enum AutomaticPathOwner
         {
             None,
@@ -52,6 +83,7 @@ namespace Client.MirObjects
         }
 
         private readonly long[] _nextProtectionUse = new long[3];
+        private readonly AssistCombatAI _combatAI = new AssistCombatAI();
         private readonly HashSet<string> _excludedItems =
             new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private bool _excludeListLoaded;
@@ -59,6 +91,8 @@ namespace Client.MirObjects
         private long _nextProcessTime;
         private long _nextPickupProcess;
         private long _nextPatrolProcess;
+        private long _nextRepositionProcess;
+        private long _nextSummonProcess;
         private byte _nextPoisonShape = 1;
         private uint _autoAttackTargetId;
         private uint _pickupTargetId;
@@ -86,7 +120,7 @@ namespace Client.MirObjects
             _nextProcessTime = CMain.Time + 100;
 
             if (_automaticSpellPending && (GameScene.User.NextMagic == null ||
-                                           !IsAutoCombatSpell(GameScene.User.NextMagic.Spell)))
+                                           !IsAutomaticSpell(GameScene.User.NextMagic.Spell)))
                 _automaticSpellPending = false;
 
             ProcessProtection();
@@ -110,6 +144,7 @@ namespace Client.MirObjects
             _patrolAnchorSet = false;
             _resetAnchorAfterManualInput = false;
             _automaticSpellPending = false;
+            _combatAI.Reset();
 
             LoadExcludedItems();
         }
@@ -203,7 +238,7 @@ namespace Client.MirObjects
             _pickupTargetId = 0;
 
             if (_automaticSpellPending && GameScene.User?.NextMagic != null &&
-                IsAutoCombatSpell(GameScene.User.NextMagic.Spell))
+                IsAutomaticSpell(GameScene.User.NextMagic.Spell))
                 GameScene.User.ClearMagic();
 
             _automaticSpellPending = false;
@@ -235,7 +270,7 @@ namespace Client.MirObjects
             _pickupTargetId = 0;
 
             if (_automaticSpellPending && GameScene.User?.NextMagic != null &&
-                IsAutoCombatSpell(GameScene.User.NextMagic.Spell))
+                IsAutomaticSpell(GameScene.User.NextMagic.Spell))
                 GameScene.User.ClearMagic();
 
             _automaticSpellPending = false;
@@ -379,8 +414,15 @@ namespace Client.MirObjects
                     if (ownedPath && MapControl.MapButtons == MouseButtons.None)
                         user.QueuedAction = null;
 
+                    bool acted = false;
                     if (user.NextMagic == null && user.QueuedAction == null)
-                        TryUseAutoCombatSpell(user, target);
+                        acted = TryUseAutoCombatSpell(user, target);
+
+                    // Standing still in melee range is what the ranged classes must
+                    // avoid. Kite only while the skill is unavailable, the same way
+                    // ArcherHero steps away while its attack is on cooldown.
+                    if (!acted)
+                        ProcessRangedPositioning(user, map, target);
 
                     return;
                 }
@@ -400,6 +442,10 @@ namespace Client.MirObjects
                 return;
 
             if (Settings.AssistAutoPickup && ProcessAutoPickup(user, map, Settings.AssistAutoAttack))
+                return;
+
+            // No monster in sight is the best moment to replace a missing pet.
+            if (Settings.AssistAutoAttack && TryResummonPets(user))
                 return;
 
             if (Settings.AssistAutoAttack)
@@ -595,6 +641,17 @@ namespace Client.MirObjects
             return AutoCombatSpells.Contains(spell);
         }
 
+        public static bool IsAutoSummonSpell(Spell spell)
+        {
+            return Array.IndexOf(AutoSummonSpells, spell) >= 0;
+        }
+
+        /// <summary>Any skill this controller may cast on its own.</summary>
+        public static bool IsAutomaticSpell(Spell spell)
+        {
+            return IsAutoCombatSpell(spell) || IsAutoSummonSpell(spell);
+        }
+
         private void EnsureAutoCombatContext(UserObject user, MapControl map)
         {
             if (_patrolMapIndex == map.Index && _patrolAnchorSet)
@@ -672,42 +729,24 @@ namespace Client.MirObjects
             return record.MapInfo.Movements.Any(x => x.Location == location);
         }
 
+        /// <summary>
+        /// Casts the next automatic combat skill. The skill pool comes from the
+        /// F11 skill page: a skill without a bound key is never used. Which of
+        /// the bound skills is chosen is decided by <see cref="AssistCombatAI"/>.
+        /// </summary>
         internal bool TryUseAutoCombatSpell(UserObject user, MonsterObject target)
         {
-            Spell spell = Settings.GetAssistCombatSpell(user.Class);
-            if (spell == Spell.None || !IsAutoCombatSpell(spell) || !CanAutoAttackTarget(target))
+            if (!CanAutoAttackTarget(target) || !CanCastAutomatically(user))
                 return false;
 
-            if (spell == Spell.ElementalShot && !user.HasElements)
-                return false;
+            // A dead pet leaves the Taoist without its main damage source, so
+            // replacing it takes priority over the next attack skill.
+            if (TryResummonPets(user))
+                return true;
 
-            if (!HasRequiredCombatItems(user, spell))
-                return false;
-
-            if (user.NextMagic != null || user.QueuedAction != null || user.RidingMount || user.Fishing ||
-                CMain.Time < GameScene.SpellTime || CMain.Time < user.BlizzardStopTime ||
-                CMain.Time < user.ReincarnationStopTime ||
-                user.Poison.HasFlag(PoisonType.Stun) || user.Poison.HasFlag(PoisonType.Paralysis) ||
-                user.Poison.HasFlag(PoisonType.LRParalysis) || user.Poison.HasFlag(PoisonType.Frozen) ||
-                user.Poison.HasFlag(PoisonType.Dazed))
-                return false;
-
-            if ((!user.HasClassWeapon && user.Weapon >= 0) ||
-                (user.Class == MirClass.Archer && !user.HasClassWeapon))
-                return false;
-
-            ClientMagic magic = user.Magics.FirstOrDefault(x => x.Spell == spell);
-            if (magic == null || CMain.Time <= magic.CastTime + magic.Delay)
-                return false;
-
-            int cost = magic.Level * magic.LevelCost + magic.BaseCost;
-            if (user.Stats[Stat.ManaPenaltyPercent] > 0)
-                cost += cost * user.Stats[Stat.ManaPenaltyPercent] / 100;
-            if (cost > user.MP)
-                return false;
-
-            int range = magic.Range == 0 ? 1 : magic.Range;
-            if (!Functions.InRange(user.CurrentLocation, target.CurrentLocation, range))
+            AssistCombatAI.CombatContext context = BuildCombatContext(user, target);
+            ClientMagic magic = _combatAI.Select(context, candidate => CanCastCombatSpell(user, target, candidate));
+            if (magic == null)
                 return false;
 
             user.NextMagic = magic;
@@ -716,6 +755,172 @@ namespace Client.MirObjects
             user.NextMagicDirection = Functions.DirectionFromPoint(user.CurrentLocation, target.CurrentLocation);
             _automaticSpellPending = true;
             return true;
+        }
+
+        private static AssistCombatAI.CombatContext BuildCombatContext(UserObject user, MonsterObject target)
+        {
+            AssistCombatAI.CombatContext context = new AssistCombatAI.CombatContext
+            {
+                User = user,
+                Target = target,
+                TargetDistance = Functions.MaxDistance(user.CurrentLocation, target.CurrentLocation)
+            };
+
+            foreach (MapObject mapObject in MapControl.Objects.Values)
+            {
+                if (!(mapObject is MonsterObject monster) || !IsAutoCombatTarget(monster))
+                    continue;
+
+                if (Functions.MaxDistance(target.CurrentLocation, monster.CurrentLocation) <= 1)
+                    context.MonstersNextToTarget++;
+
+                int distanceToUser = Functions.MaxDistance(user.CurrentLocation, monster.CurrentLocation);
+                if (distanceToUser <= 1)
+                    context.MonstersNextToUser++;
+                if (distanceToUser <= 2)
+                    context.MonstersNearUser++;
+            }
+
+            return context;
+        }
+
+        /// <summary>Player state that blocks every automatic cast.</summary>
+        private static bool CanCastAutomatically(UserObject user)
+        {
+            if (user.NextMagic != null || user.QueuedAction != null || user.RidingMount || user.Fishing ||
+                CMain.Time < GameScene.SpellTime || CMain.Time < user.BlizzardStopTime ||
+                CMain.Time < user.ReincarnationStopTime ||
+                user.Poison.HasFlag(PoisonType.Stun) || user.Poison.HasFlag(PoisonType.Paralysis) ||
+                user.Poison.HasFlag(PoisonType.LRParalysis) || user.Poison.HasFlag(PoisonType.Frozen) ||
+                user.Poison.HasFlag(PoisonType.Dazed))
+                return false;
+
+            return (user.HasClassWeapon || user.Weapon < 0) &&
+                   (user.Class != MirClass.Archer || user.HasClassWeapon);
+        }
+
+        private static bool CanCastCombatSpell(UserObject user, MonsterObject target, ClientMagic magic)
+        {
+            if (magic.Spell == Spell.ElementalShot && !user.HasElements)
+                return false;
+
+            if (!HasRequiredCombatItems(user, magic.Spell) || !IsMagicReady(user, magic))
+                return false;
+
+            return Functions.InRange(user.CurrentLocation, target.CurrentLocation, GetEffectiveRange(magic));
+        }
+
+        private static bool IsMagicReady(UserObject user, ClientMagic magic)
+        {
+            if (magic == null || CMain.Time <= magic.CastTime + magic.Delay)
+                return false;
+
+            int cost = magic.Level * magic.LevelCost + magic.BaseCost;
+            if (user.Stats[Stat.ManaPenaltyPercent] > 0)
+                cost += cost * user.Stats[Stat.ManaPenaltyPercent] / 100;
+
+            return cost <= user.MP;
+        }
+
+        /// <summary>
+        /// Distance the skill is allowed to be cast from. Most skills use the
+        /// range sent by the server, but a skill that only hits around the
+        /// caster would be wasted from across the screen.
+        /// </summary>
+        private static int GetEffectiveRange(ClientMagic magic)
+        {
+            int range = magic.Range == 0 ? 1 : magic.Range;
+            if (SelfCentredSpellRange.TryGetValue(magic.Spell, out int limit))
+                range = Math.Min(range, limit);
+
+            return range;
+        }
+
+        private static ClientMagic FindBoundMagic(UserObject user, Spell spell)
+        {
+            if (user.Magics == null)
+                return null;
+
+            foreach (ClientMagic magic in user.Magics)
+            {
+                if (magic != null && magic.Spell == spell && magic.Key != 0)
+                    return magic;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Replaces a summoned pet that died or went missing. Only summon skills
+        /// bound on the F11 skill page are used, and a summon is skipped while
+        /// its pet is alive so a healthy pet is never recalled needlessly.
+        /// </summary>
+        private bool TryResummonPets(UserObject user)
+        {
+            if (CMain.Time < _nextSummonProcess || !CanCastAutomatically(user))
+                return false;
+
+            int livePets = 0;
+            foreach (MapObject mapObject in MapControl.Objects.Values)
+            {
+                if (mapObject is MonsterObject pet && pet.MasterObjectId == user.ObjectID && !pet.Dead)
+                    livePets++;
+            }
+
+            // The server refuses a third monster pet, so stop asking for one.
+            if (livePets >= 2)
+            {
+                _nextSummonProcess = CMain.Time + 2000;
+                return false;
+            }
+
+            foreach (Spell spell in AutoSummonSpells)
+            {
+                ClientMagic magic = FindBoundMagic(user, spell);
+                if (magic == null || HasSummonedPet(user, spell) ||
+                    !HasRequiredCombatItems(user, spell) || !IsMagicReady(user, magic))
+                    continue;
+
+                _nextSummonProcess = CMain.Time + 1500;
+
+                // Summons have no target: UseMagic sends the caster location.
+                user.NextMagic = magic;
+                user.NextMagicLocation = user.CurrentLocation;
+                user.NextMagicObject = null;
+                user.NextMagicDirection = user.Direction;
+                _automaticSpellPending = true;
+                return true;
+            }
+
+            _nextSummonProcess = CMain.Time + 500;
+            return false;
+        }
+
+        private static bool HasSummonedPet(UserObject user, Spell spell)
+        {
+            foreach (MapObject mapObject in MapControl.Objects.Values)
+            {
+                if (mapObject is MonsterObject pet && pet.MasterObjectId == user.ObjectID && !pet.Dead &&
+                    IsSummonedBy(spell, pet.BaseImage))
+                    return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsSummonedBy(Spell spell, Monster image)
+        {
+            switch (spell)
+            {
+                case Spell.SummonSkeleton:
+                    return image == Monster.BoneFamiliar;
+                case Spell.SummonShinsu:
+                    return image == Monster.Shinsu || image == Monster.Shinsu1;
+                case Spell.SummonHolyDeva:
+                    return image == Monster.HolyDeva;
+                default:
+                    return false;
+            }
         }
 
         private static bool HasRequiredCombatItems(UserObject user, Spell spell)
@@ -734,6 +939,12 @@ namespace Client.MirObjects
                     return HasAmulet(user, 1, 0);
                 case Spell.PoisonCloud:
                     return HasAmulet(user, 5, 0) && HasPoison(user, 5, 1);
+                case Spell.SummonSkeleton:
+                    return HasAmulet(user, 1, 0);
+                case Spell.SummonHolyDeva:
+                    return HasAmulet(user, 2, 0);
+                case Spell.SummonShinsu:
+                    return HasAmulet(user, 5, 0);
                 default:
                     return true;
             }
@@ -741,16 +952,170 @@ namespace Client.MirObjects
 
         private static bool HasAmulet(UserObject user, int count, int shape)
         {
-            return user.Equipment.Any(item => item?.Info != null && item.Info.Type == ItemType.Amulet &&
-                                               item.Info.Shape == shape && item.Count >= count);
+            return HasAmuletIn(user.Equipment, count, shape) ||
+                   (Settings.AssistAutoPoisonAmulet && HasAmuletIn(user.Inventory, count, shape));
+        }
+
+        private static bool HasAmuletIn(IEnumerable<UserItem> items, int count, int shape)
+        {
+            return items.Any(item => item?.Info != null && item.Info.Type == ItemType.Amulet &&
+                                     item.Info.Shape == shape && item.Count >= count);
         }
 
         private static bool HasPoison(UserObject user, int count, int shape = 0)
         {
-            return user.Equipment.Any(item => item?.Info != null && item.Info.Type == ItemType.Amulet &&
-                                               item.Count >= count &&
-                                               (shape == 0 ? item.Info.Shape == 1 || item.Info.Shape == 2 :
-                                                             item.Info.Shape == shape));
+            return HasPoisonIn(user.Equipment, count, shape) ||
+                   (Settings.AssistAutoPoisonAmulet && HasPoisonIn(user.Inventory, count, shape));
+        }
+
+        private static bool HasPoisonIn(IEnumerable<UserItem> items, int count, int shape)
+        {
+            return items.Any(item => item?.Info != null && item.Info.Type == ItemType.Amulet &&
+                                     item.Count >= count &&
+                                     (shape == 0 ? item.Info.Shape == 1 || item.Info.Shape == 2 :
+                                                   item.Info.Shape == shape));
+        }
+
+        /// <summary>
+        /// True for the classes that must fight from a distance instead of
+        /// closing in for melee swings. A bound skill that actually reaches
+        /// further than melee is required, otherwise the player could never
+        /// attack anything.
+        /// </summary>
+        public bool IsRangedAutoCombat(UserObject user)
+        {
+            if (user == null || !Settings.AssistAutoAttack)
+                return false;
+
+            if (user.Class != MirClass.Wizard && user.Class != MirClass.Taoist && user.Class != MirClass.Archer)
+                return false;
+
+            return GetRangedCastRange(user) >= RangedKeepAwayDistance;
+        }
+
+        /// <summary>
+        /// Distance automatic pursuit stops at. Melee classes still walk up to
+        /// the monster, ranged classes stop as soon as they can open fire.
+        /// </summary>
+        public int GetAutoPursuitRange(UserObject user)
+        {
+            if (!IsRangedAutoCombat(user))
+                return 1;
+
+            return Math.Max(RangedKeepAwayDistance, GetRangedCastRange(user) - 1);
+        }
+
+        private static int GetRangedCastRange(UserObject user)
+        {
+            int range = 0;
+
+            // The bow already attacks from a distance without any skill.
+            if (user.Class == MirClass.Archer && user.HasClassWeapon)
+                range = Globals.MaxAttackRange;
+
+            if (user.Magics != null)
+            {
+                foreach (ClientMagic magic in user.Magics)
+                {
+                    if (magic == null || magic.Key == 0 || !IsAutoCombatSpell(magic.Spell))
+                        continue;
+
+                    int magicRange = GetEffectiveRange(magic);
+                    if (magicRange > range)
+                        range = magicRange;
+                }
+            }
+
+            return Math.Min(range, AutoTargetRange);
+        }
+
+        /// <summary>
+        /// Steps away from the monsters that reached melee range while keeping
+        /// the target inside casting range. Repositioning only runs when no
+        /// skill was cast this tick, mirroring ArcherHero which kites while its
+        /// attack is on cooldown.
+        /// </summary>
+        private void ProcessRangedPositioning(UserObject user, MapControl map, MonsterObject target)
+        {
+            if (!IsRangedAutoCombat(user) || user.RidingMount || user.Fishing || user.InTrapRock ||
+                user.QueuedAction != null || user.NextMagic != null || map.AutoPath ||
+                MapControl.MapButtons != MouseButtons.None || CMain.Time < _nextRepositionProcess ||
+                user.Poison.HasFlag(PoisonType.Stun) || user.Poison.HasFlag(PoisonType.Paralysis) ||
+                user.Poison.HasFlag(PoisonType.LRParalysis) || user.Poison.HasFlag(PoisonType.Frozen))
+                return;
+
+            int threatDistance = GetNearestThreatDistance(user.CurrentLocation);
+            if (threatDistance >= RangedKeepAwayDistance)
+                return;
+
+            int castRange = Math.Max(RangedKeepAwayDistance, GetRangedCastRange(user));
+            if (!TryFindRetreatCell(map, user.CurrentLocation, target.CurrentLocation, castRange,
+                    threatDistance, out Point destination))
+                return;
+
+            _nextRepositionProcess = CMain.Time + 200;
+            user.QueuedAction = new QueuedAction
+            {
+                Action = MirAction.Walking,
+                Direction = Functions.DirectionFromPoint(user.CurrentLocation, destination),
+                Location = destination
+            };
+        }
+
+        private static int GetNearestThreatDistance(Point location)
+        {
+            int nearest = int.MaxValue;
+            foreach (MapObject mapObject in MapControl.Objects.Values)
+            {
+                if (!(mapObject is MonsterObject monster) || !IsAutoCombatTarget(monster))
+                    continue;
+
+                int distance = Functions.MaxDistance(location, monster.CurrentLocation);
+                if (distance < nearest)
+                    nearest = distance;
+            }
+
+            return nearest;
+        }
+
+        /// <summary>
+        /// Picks the neighbouring cell that gains the most space from the
+        /// closest monster while the target stays inside casting range.
+        /// </summary>
+        private static bool TryFindRetreatCell(MapControl map, Point origin, Point targetLocation,
+            int castRange, int currentThreat, out Point destination)
+        {
+            destination = origin;
+            int bestThreat = 0;
+            int bestTargetDistance = 0;
+            bool found = false;
+
+            for (MirDirection direction = MirDirection.Up; direction <= MirDirection.UpLeft; direction++)
+            {
+                Point candidate = Functions.PointMove(origin, direction, 1);
+                if (!map.EmptyCell(candidate))
+                    continue;
+
+                int targetDistance = Functions.MaxDistance(candidate, targetLocation);
+                if (targetDistance > castRange)
+                    continue;
+
+                int threat = GetNearestThreatDistance(candidate);
+                if (threat <= currentThreat)
+                    continue;
+
+                // More space first, then the shortest way back to the target.
+                if (found && (threat < bestThreat ||
+                              (threat == bestThreat && targetDistance >= bestTargetDistance)))
+                    continue;
+
+                bestThreat = threat;
+                bestTargetDistance = targetDistance;
+                destination = candidate;
+                found = true;
+            }
+
+            return found;
         }
 
         private void CancelOwnedPath(MapControl map)

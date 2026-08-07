@@ -11792,7 +11792,8 @@ namespace Client.MirScenes
                         //  return;
                     }
 
-                    else if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, 1))
+                    else if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, 1) &&
+                             !(autoCombatTarget && GameScene.Scene.AssistController.IsRangedAutoCombat(User)))
                     {
                         if (CMain.Time > GameScene.AttackTime && CanRideAttack() && !User.Poison.HasFlag(PoisonType.Dazed))
                         {
@@ -12099,7 +12100,12 @@ namespace Client.MirScenes
                 (((!MapObject.TargetObject.Name.EndsWith(")") && !(MapObject.TargetObject is PlayerObject)) || !(CMain.Shift || Settings.AssistFreeShift)) &&
                  (MapObject.TargetObject.Name.EndsWith(")") || !(MapObject.TargetObject is MonsterObject)));
             if (!automaticTarget && (Settings.AssistAutoAttack || manualPursuitTarget)) return;
-            if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, 1)) return;
+            // Ranged classes stop as soon as the target is in casting range. They
+            // must never walk in to swing at a monster.
+            int pursuitRange = automaticTarget
+                ? GameScene.Scene.AssistController.GetAutoPursuitRange(User)
+                : 1;
+            if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, pursuitRange)) return;
             if (!automaticTarget && User.Class == MirClass.Archer && User.HasClassWeapon &&
                 (MapObject.TargetObject is MonsterObject || MapObject.TargetObject is PlayerObject)) return; //ArcherTest - stop walking
             direction = Functions.DirectionFromPoint(User.CurrentLocation, MapObject.TargetObject.CurrentLocation);

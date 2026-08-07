@@ -36,8 +36,6 @@ namespace Client.MirScenes.Dialogs
         private readonly MirCheckBox[] _itemFilterChecks = new MirCheckBox[FilterVisibleCount];
         private readonly string[] _itemFilterNames = new string[FilterVisibleCount];
         private MirDropDownBox _huntModeDropDown;
-        private MirDropDownBox _combatSpellDropDown;
-        private readonly List<Spell> _combatSpellOptions = new List<Spell>();
         private MirButton _filterScrollUpButton, _filterScrollDownButton;
         private MirControl _filterScrollTrack, _filterScrollThumb;
         private MirLabel _filterPageLabel;
@@ -238,32 +236,9 @@ namespace Client.MirScenes.Dialogs
             _pageControls[CombatPage].Add(searchModeLabel);
             _pageControls[CombatPage].Add(_huntModeDropDown);
 
-            MirLabel combatSpellLabel = new MirLabel
-            {
-                AutoSize = true,
-                Parent = this,
-                Location = new Point(26, 165),
-                Text = Text(ClientTextKeys.AssistCombatSkill)
-            };
-            _combatSpellDropDown = new MirDropDownBox
-            {
-                Parent = this,
-                Location = new Point(125, 161),
-                Size = new Size(180, 18),
-                Enabled = true
-            };
-            _combatSpellDropDown.ValueChanged += (o, e) =>
-            {
-                int index = _combatSpellDropDown._WantedIndex;
-                if (index < 0 || index >= _combatSpellOptions.Count || GameScene.User == null)
-                    return;
-
-                _combatSpellDropDown.SelectedIndex = index;
-                Settings.SetAssistCombatSpell(GameScene.User.Class, _combatSpellOptions[index]);
-                GameScene.Scene?.AssistController?.NotifyManualInput();
-            };
-            _pageControls[CombatPage].Add(combatSpellLabel);
-            _pageControls[CombatPage].Add(_combatSpellDropDown);
+            // Which skills automatic combat uses is taken from the F11 skill
+            // page: a skill without a bound key is left out, every bound skill
+            // takes part. No skill picker is needed here.
         }
 
         private void CreateItemPage()
@@ -635,7 +610,7 @@ namespace Client.MirScenes.Dialogs
 
         private void RefreshCombatControls()
         {
-            if (_huntModeDropDown == null || _combatSpellDropDown == null)
+            if (_huntModeDropDown == null)
                 return;
 
             _huntModeDropDown.Items = new List<string>
@@ -651,43 +626,6 @@ namespace Client.MirScenes.Dialogs
                 huntMode = (int)Settings.AssistHuntMode;
             }
             _huntModeDropDown.SelectedIndex = huntMode;
-
-            _combatSpellOptions.Clear();
-            _combatSpellOptions.Add(Spell.None);
-
-            UserObject user = GameScene.User;
-            if (user != null)
-            {
-                foreach (ClientMagic magic in user.Magics
-                             .Where(x => x != null && AssistController.IsAutoCombatSpell(x.Spell))
-                             .GroupBy(x => x.Spell)
-                             .Select(x => x.First())
-                             .OrderBy(x => x.Name, StringComparer.OrdinalIgnoreCase))
-                    _combatSpellOptions.Add(magic.Spell);
-            }
-
-            _combatSpellDropDown.Items = new List<string>
-            {
-                Text(ClientTextKeys.AssistNoCombatSkill)
-            };
-            if (user != null)
-            {
-                foreach (Spell spell in _combatSpellOptions.Skip(1))
-                {
-                    ClientMagic magic = user.Magics.FirstOrDefault(x => x != null && x.Spell == spell);
-                    _combatSpellDropDown.Items.Add(magic?.Name ?? spell.ToString());
-                }
-            }
-
-            Spell selectedSpell = user == null ? Spell.None : Settings.GetAssistCombatSpell(user.Class);
-            int selectedIndex = _combatSpellOptions.IndexOf(selectedSpell);
-            if (selectedIndex < 0)
-            {
-                selectedIndex = 0;
-                if (user != null && selectedSpell != Spell.None)
-                    Settings.SetAssistCombatSpell(user.Class, Spell.None);
-            }
-            _combatSpellDropDown.SelectedIndex = selectedIndex;
         }
 
         private static void RefreshPlayerAppearances()
