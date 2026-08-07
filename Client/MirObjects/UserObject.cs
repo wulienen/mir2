@@ -23,6 +23,7 @@ namespace Client.MirObjects
         public bool TradeLocked;
         public uint TradeGoldAmount;
         public bool AllowTrade;
+        public bool HasFullBrightLight;
 
         public bool RentalGoldLocked;
         public bool RentalItemLocked;
@@ -216,6 +217,7 @@ namespace Client.MirObjects
 
             ItemMode = SpecialItemMode.None;
             FastRun = false;
+            HasFullBrightLight = false;
 
             ItemSets.Clear();
             MirSet.Clear();
@@ -233,6 +235,9 @@ namespace Client.MirObjects
                     CurrentWearWeight = (int)Math.Min(int.MaxValue, CurrentWearWeight + temp.Weight);
 
                 if (temp.CurrentDura == 0 && realItem.Durability > 0) continue;
+
+                if (Functions.IsFullBrightLight(realItem.Light))
+                    HasFullBrightLight = true;
 
                 if (realItem.Type == ItemType.Armour)
                 {
@@ -341,6 +346,9 @@ namespace Client.MirObjects
                     CurrentWearWeight = (int)Math.Min(int.MaxValue, CurrentWearWeight + temp.Weight);
 
                 if (temp.CurrentDura == 0 && realItem.Durability > 0) continue;
+
+                if (Functions.IsFullBrightLight(realItem.Light))
+                    HasFullBrightLight = true;
 
                 Stats.Add(realItem.Stats);
                 Stats.Add(temp.AddedStats);

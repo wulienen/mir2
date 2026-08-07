@@ -10843,8 +10843,10 @@ namespace Client.MirScenes
             //Render Death, 
 
             LightSetting setting = Lights == LightSetting.Normal ? GameScene.Scene.Lights : Lights;
+            bool blinded = GameScene.User.Poison.HasFlag(PoisonType.Blindness);
+            bool fullBrightLight = setting == LightSetting.Night && GameScene.User.HasFullBrightLight;
 
-            if (setting != LightSetting.Day || GameScene.User.Poison.HasFlag(PoisonType.Blindness))
+            if ((setting != LightSetting.Day && !fullBrightLight) || blinded)
             {
                 DrawLights(setting);
             }
@@ -11356,7 +11358,7 @@ namespace Client.MirScenes
                 {
                     light = ob.Light;
 
-                    int lightRange = light % 15;
+                    int lightRange = Functions.GetLightRange((byte)light);
                     if (lightRange >= DXManager.Lights.Count)
                         lightRange = DXManager.Lights.Count - 1;
 

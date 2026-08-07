@@ -315,6 +315,19 @@ public static class Functions
 
     }
 
+    public const int LightRangeBase = 15;
+    public const int FullBrightLightRange = LightRangeBase - 1;
+
+    public static int GetLightRange(byte light)
+    {
+        return light % LightRangeBase;
+    }
+
+    public static bool IsFullBrightLight(byte light)
+    {
+        return light > 0 && GetLightRange(light) == FullBrightLightRange;
+    }
+
     public static MirDirection ReverseDirection(MirDirection dir)
     {
         switch (dir)
