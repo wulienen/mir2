@@ -135,8 +135,16 @@ namespace Server.MirObjects
                 return;
             }
 
-            if (Owner != null && Envir.Time > OwnerTime)
+            MapObject previousOwner = Owner;
+            if (Owner != null && (Owner.Node == null || Envir.Time > OwnerTime))
+            {
                 Owner = null;
+            }
+
+            if (previousOwner != null && Owner == null)
+            {
+                BroadcastInfo();
+            }
 
             base.Process();
         }
@@ -364,22 +372,59 @@ namespace Server.MirObjects
 
         public override Packet GetInfo()
         {
+            return GetInfo(null);
+        }
+
+        public Packet GetInfo(PlayerObject viewer)
+        {
             if (Item != null)
                 return new S.ObjectItem
-                    {
-                        ObjectID = ObjectID,
-                        Name = Item.Count > 1 ? string.Format("{0} ({1})", Name, Item.Count) : Name,
-                        NameColour = NameColour,
-                        Location = CurrentLocation,
-                        Image = Item.Image
-                    };
+                {
+                    ObjectID = ObjectID,
+                    Name = Item.Count > 1 ? string.Format("{0} ({1})", Name, Item.Count) : Name,
+                    NameColour = NameColour,
+                    Location = CurrentLocation,
+                    Image = Item.Image,
+                    CanPickUp = CanPickUp(viewer)
+                };
 
             return new S.ObjectGold
-                {
-                    ObjectID =  ObjectID,
-                    Gold = Gold,
-                    Location = CurrentLocation,
-                };
+            {
+                ObjectID = ObjectID,
+                Gold = Gold,
+                Location = CurrentLocation,
+                CanPickUp = CanPickUp(viewer)
+            };
+        }
+
+        public bool CanPickUp(PlayerObject viewer)
+        {
+            if (viewer == null || Owner == null || Owner.Node == null || Envir.Time > OwnerTime || Owner == viewer)
+                return true;
+
+            PlayerObject owner = Owner as PlayerObject;
+            return owner != null && viewer.GroupMembers != null && viewer.GroupMembers.Contains(owner);
+        }
+
+        public override void Add(HumanObject player)
+        {
+            if (player is PlayerObject viewer)
+                viewer.Enqueue(GetInfo(viewer));
+        }
+
+        public override void BroadcastInfo()
+        {
+            if (CurrentMap == null)
+                return;
+
+            for (int i = CurrentMap.Players.Count - 1; i >= 0; i--)
+            {
+                PlayerObject viewer = CurrentMap.Players[i];
+                if (!Functions.InRange(CurrentLocation, viewer.CurrentLocation, Globals.DataRange))
+                    continue;
+
+                viewer.Enqueue(GetInfo(viewer));
+            }
         }
 
 

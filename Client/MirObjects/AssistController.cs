@@ -10,10 +10,7 @@ namespace Client.MirObjects
     public sealed class AssistController
     {
         private const string AutoPickupExcludeFileName = "AutoPickupExclude.txt";
-        private const int AutoTargetRange = 20;
-        // Server drops can spread four cells from a monster. One extra cell
-        // covers the player's usual melee position beside the defeated target.
-        private const int CombatPickupPriorityRange = 5;
+        private const int AutoTargetRange = 9;
         private const int NearbyPatrolRange = 20;
         private const int CurrentMapPatrolSegmentRange = 18;
         private const int PatrolCandidateAttempts = 16;
@@ -334,13 +331,30 @@ namespace Client.MirObjects
                     _autoAttackTargetId = target.ObjectID;
                 }
 
-                // Keep fighting the current target, but collect drops at the
-                // player's feet before locking the next visible monster.
-                if (target == null && Settings.AssistAutoPickup && user.NextMagic == null &&
+                if (target == null)
+                    target = FindNearestMonster(user);
+
+                ItemObject priorityItem = Settings.AssistAutoPickup
+                    ? FindNearestItem(user, GetVisiblePickupPriorityRange())
+                    : null;
+                if (priorityItem != null &&
+                    (target == null || Functions.MaxDistance(user.CurrentLocation, priorityItem.CurrentLocation) <
+                     Functions.MaxDistance(user.CurrentLocation, target.CurrentLocation)) &&
+                    user.NextMagic == null &&
                     (user.QueuedAction == null || _pathOwner != AutomaticPathOwner.None) &&
-                    FindNearestItem(user, CombatPickupPriorityRange) != null &&
-                    ProcessAutoPickup(user, map, true, CombatPickupPriorityRange))
+                    ProcessAutoPickup(user, map, true, GetVisiblePickupPriorityRange()))
+                {
+                    if (target != null)
+                    {
+                        if (MapObject.TargetObjectID == target.ObjectID)
+                            MapObject.TargetObjectID = 0;
+                        if (MapObject.MagicObjectID == target.ObjectID)
+                            MapObject.MagicObjectID = 0;
+                        _autoAttackTargetId = 0;
+                    }
+
                     return;
+                }
 
                 if (target == null)
                 {
@@ -410,7 +424,7 @@ namespace Client.MirObjects
             if (_pickupTargetId != 0 && MapControl.Objects.TryGetValue(_pickupTargetId, out MapObject current))
                 item = current as ItemObject;
 
-            if (item == null || IsPickupCoolingDown(item.ObjectID) || !ShouldPickItem(item.Name) ||
+            if (item == null || !item.CanPickUp || IsPickupCoolingDown(item.ObjectID) || !ShouldPickItem(item.Name) ||
                 Functions.MaxDistance(user.CurrentLocation, item.CurrentLocation) > maximumDistance ||
                 (!allowMovement && item.CurrentLocation != user.CurrentLocation))
             {
@@ -483,7 +497,7 @@ namespace Client.MirObjects
         {
             foreach (MapObject mapObject in MapControl.Objects.Values)
             {
-                if (mapObject is ItemObject item && item.CurrentLocation == user.CurrentLocation &&
+                if (mapObject is ItemObject item && item.CanPickUp && item.CurrentLocation == user.CurrentLocation &&
                     !IsPickupCoolingDown(item.ObjectID) && ShouldPickItem(item.Name))
                     return item;
             }
@@ -497,7 +511,7 @@ namespace Client.MirObjects
             int nearest = int.MaxValue;
             foreach (MapObject mapObject in MapControl.Objects.Values)
             {
-                if (!(mapObject is ItemObject item) || IsPickupCoolingDown(item.ObjectID) ||
+                if (!(mapObject is ItemObject item) || !item.CanPickUp || IsPickupCoolingDown(item.ObjectID) ||
                     !ShouldPickItem(item.Name))
                     continue;
 
@@ -510,6 +524,13 @@ namespace Client.MirObjects
             }
 
             return result;
+        }
+
+        private static int GetVisiblePickupPriorityRange()
+        {
+            int horizontalRange = Math.Max(1, Settings.ScreenWidth / (MapControl.CellWidth * 2));
+            int verticalRange = Math.Max(1, Settings.ScreenHeight / (MapControl.CellHeight * 2));
+            return Math.Min(9, Math.Min(horizontalRange, verticalRange));
         }
 
         private bool IsPickupCoolingDown(uint objectId)

@@ -2138,6 +2138,7 @@ namespace ServerPackets
         public Point Location;
         public ushort Image;
         public ItemGrade grade;
+        public bool CanPickUp = true;
 
 
         protected override void ReadPacket(BinaryReader reader)
@@ -2148,6 +2149,7 @@ namespace ServerPackets
             Location = new Point(reader.ReadInt32(), reader.ReadInt32());
             Image = reader.ReadUInt16();
             grade = (ItemGrade)reader.ReadByte();
+			CanPickUp = reader.ReadBoolean();
 		}
 
         protected override void WritePacket(BinaryWriter writer)
@@ -2159,6 +2161,7 @@ namespace ServerPackets
             writer.Write(Location.Y);
             writer.Write(Image);
             writer.Write((byte)grade);
+			writer.Write(CanPickUp);
 		}
     }
     public sealed class ObjectGold : Packet
@@ -2171,6 +2174,7 @@ namespace ServerPackets
         public uint ObjectID;
         public uint Gold;
         public Point Location;
+        public bool CanPickUp = true;
 
 
         protected override void ReadPacket(BinaryReader reader)
@@ -2178,6 +2182,7 @@ namespace ServerPackets
             ObjectID = reader.ReadUInt32();
             Gold = reader.ReadUInt32();
             Location = new Point(reader.ReadInt32(), reader.ReadInt32());
+            CanPickUp = reader.ReadBoolean();
         }
 
         protected override void WritePacket(BinaryWriter writer)
@@ -2186,6 +2191,7 @@ namespace ServerPackets
             writer.Write(Gold);
             writer.Write(Location.X);
             writer.Write(Location.Y);
+            writer.Write(CanPickUp);
         }
     }
     public sealed class GainedItem : Packet

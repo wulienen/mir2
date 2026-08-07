@@ -1768,6 +1768,7 @@ namespace Server.MirObjects
         }
         private void GetObjectsPassive(MirConnection c = null)
         {
+            PlayerObject viewer = c?.Player ?? this;
             for (int y = CurrentLocation.Y - Globals.DataRange; y <= CurrentLocation.Y + Globals.DataRange; y++)
             {
                 if (y < 0) continue;
@@ -1807,6 +1808,10 @@ namespace Server.MirObjects
                             NPC.CheckVisible(this);
 
                             if (NPC.VisibleLog[Info.Index] && NPC.Visible) Enqueue(ob.GetInfo(), c);
+                        }
+                        else if (ob.Race == ObjectType.Item)
+                        {
+                            Enqueue(((ItemObject)ob).GetInfo(viewer), c);
                         }
                         else
                         {
@@ -7498,12 +7503,12 @@ namespace Server.MirObjects
 
                 if (ob.Race != ObjectType.Item) continue;
 
-                if (ob.Owner != null && ob.Owner != this && !IsGroupMember(ob.Owner)) //Or Group member.
+                ItemObject item = (ItemObject)ob;
+                if (!item.CanPickUp(this))
                 {
                     sendFail = true;
                     continue;
                 }
-                ItemObject item = (ItemObject)ob;
 
                 if (item.Item != null)
                 {

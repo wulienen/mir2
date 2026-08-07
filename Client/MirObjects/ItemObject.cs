@@ -17,6 +17,7 @@ namespace Client.MirObjects
         }
 
         public Size Size;
+        public bool CanPickUp = true;
 
 
         public ItemObject(uint objectID) : base(objectID)
@@ -28,6 +29,7 @@ namespace Client.MirObjects
         {
             Name = info.Name;
             NameColour = info.NameColour;
+            CanPickUp = info.CanPickUp;
 
             BodyLibrary = Libraries.FloorItems;
 
@@ -44,6 +46,7 @@ namespace Client.MirObjects
         public void Load(S.ObjectGold info)
         {
             Name = GameLanguage.ClientTextMap.GetLocalization((ClientTextKeys.GoldAmount), info.Gold);
+            CanPickUp = info.CanPickUp;
 
 
             BodyLibrary = Libraries.FloorItems;
