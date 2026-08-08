@@ -525,8 +525,6 @@
     "Trade": "Trade",
     "Observe": "Observe",
     "PlayerDisabledObservation": "That player has disabled observation.",
-    "HpMpMode1": "[HP/MP Mode 1]",
-    "HpMpMode2": "[HP/MP Mode 2]",
     "NewMovementStyle": "[New Movement Style]",
     "OldMovementStyle": "[Old Movement Style]",
     "SmoothMovement": "Smooth Move",

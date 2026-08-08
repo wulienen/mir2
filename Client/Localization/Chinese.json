@@ -525,8 +525,6 @@
     "Trade": "交易 ({0})",
     "Observe": "观战",
     "PlayerDisabledObservation": "该玩家已关闭观战功能。",
-    "HpMpMode1": "[HP/MP模式 1]",
-    "HpMpMode2": "[HP/MP模式 2]",
     "NewMovementStyle": "[新移动方式]",
     "OldMovementStyle": "[旧移动方式]",
     "SmoothMovement": "平滑移动",

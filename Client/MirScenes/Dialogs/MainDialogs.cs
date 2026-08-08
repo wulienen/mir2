@@ -22,7 +22,7 @@ namespace Client.MirScenes.Dialogs
         public MirImageControl ExperienceBar, WeightBar, LeftCap, RightCap, HudBackground;
         public MirButton GameShopButton, MenuButton, InventoryButton, CharacterButton, SkillButton, QuestButton, OptionButton;
         public MirControl HealthOrb;
-        public MirLabel HealthLabel, ManaLabel, TopLabel, BottomLabel, LevelLabel, CharacterName, ExperienceLabel, GoldLabel, WeightLabel, SpaceLabel, AModeLabel, PModeLabel, SModeLabel;
+        public MirLabel HealthLabel, ManaLabel, LevelLabel, CharacterName, ExperienceLabel, GoldLabel, WeightLabel, SpaceLabel, AModeLabel, PModeLabel, SModeLabel;
         public HeroInfoPanel HeroInfoPanel;
         public HeroBehaviourPanel HeroBehaviourPanel;
 
@@ -260,22 +260,6 @@ namespace Client.MirScenes.Dialogs
                 DrawFormat = useXiayiUi ? TextFormatFlags.HorizontalCenter : TextFormatFlags.Default,
             };
             if (!useXiayiUi) ManaLabel.SizeChanged += Label_SizeChanged;
-
-            TopLabel = new MirLabel
-            {
-                Size = new Size(useXiayiUi ? XiayiUiTheme.HudWidth : 85, 30),
-                DrawFormat = TextFormatFlags.HorizontalCenter,
-                Location = new Point(useXiayiUi ? 0 : 9, useXiayiUi ? XiayiUiTheme.HudBarY + 3 : 20),
-                Parent = HealthOrb,
-            };
-
-            BottomLabel = new MirLabel
-            {
-                Size = new Size(useXiayiUi ? XiayiUiTheme.HudWidth : 85, 30),
-                DrawFormat = TextFormatFlags.HorizontalCenter,
-                Location = new Point(useXiayiUi ? 0 : 9, useXiayiUi ? XiayiUiTheme.HudBarY + 17 : 50),
-                Parent = HealthOrb,
-            };
 
             LevelLabel = new MirLabel
             {
@@ -515,28 +499,8 @@ namespace Client.MirScenes.Dialogs
                     break;
             }
 
-            if (Settings.HPView)
-            {
-                HealthLabel.Text = string.Format("HP {0}/{1}", User.HP, User.Stats[Stat.HP]);
-                ManaLabel.Text = HPOnly ? "" : string.Format("MP {0}/{1} ", User.MP, User.Stats[Stat.MP]);
-                TopLabel.Text = string.Empty;
-                BottomLabel.Text = string.Empty;
-            }
-            else
-            {
-                if (HPOnly)
-                {
-                    TopLabel.Text = string.Format("{0}\n" + "--", User.HP);
-                    BottomLabel.Text = string.Format("{0}", User.Stats[Stat.HP]);
-                }
-                else
-                {
-                    TopLabel.Text = string.Format(" {0}    {1} \n" + "---------------", User.HP, User.MP);
-                    BottomLabel.Text = string.Format(" {0}    {1} ", User.Stats[Stat.HP], User.Stats[Stat.MP]);
-                }
-                HealthLabel.Text = string.Empty;
-                ManaLabel.Text = string.Empty;
-            }
+            HealthLabel.Text = string.Format("HP {0}/{1}", User.HP, User.Stats[Stat.HP]);
+            ManaLabel.Text = HPOnly ? "" : string.Format("MP {0}/{1} ", User.MP, User.Stats[Stat.MP]);
 
             double experiencePercent = User.MaxExperience <= 0 ? 0 : User.Experience / (double)User.MaxExperience;
             LevelLabel.Text = User.Level.ToString();
@@ -1836,7 +1800,6 @@ namespace Client.MirScenes.Dialogs
         private readonly MirButton _switchBindsButton;
 
         public bool AltBind;
-        public bool HasSkill = false;
         public byte BarIndex;
 
         //public bool TopBind = !Settings.SkillMode;
@@ -1983,13 +1946,6 @@ namespace Client.MirScenes.Dialogs
 
         public void Update()
         {
-            HasSkill = false;
-            foreach (var m in GameScene.User.Magics)
-            {
-                if ((m.Key < (BarIndex * 8)+1) || (m.Key > ((BarIndex + 1) * 8)+1)) continue;
-                HasSkill = true;
-            }
-
             if (!Visible) return;
             Index = 2190;
             _switchBindsButton.Index = 2247;
@@ -2007,7 +1963,6 @@ namespace Client.MirScenes.Dialogs
                 foreach (var m in GameScene.User.Magics)
                 {
                     if (m.Key != i + offset) continue;
-                    HasSkill = true;
                     ClientMagic magic = MapObject.User.GetMagic(m.Spell);
                     if (magic == null) continue;
 
@@ -2069,7 +2024,6 @@ namespace Client.MirScenes.Dialogs
         public override void Show()
         {
             if (Visible) return;
-            if (!HasSkill) return;
             Settings.SkillBar = true;
             Visible = true;
             Update();
@@ -2898,7 +2852,6 @@ namespace Client.MirScenes.Dialogs
         public MirButton SkillBarOn, SkillBarOff;
         public MirButton EffectOn, EffectOff;
         public MirButton DropViewOn, DropViewOff;
-        public MirButton HPViewOn, HPViewOff;
         public MirButton NewMoveOn, NewMoveOff;
         public MirButton SmoothMoveOn, SmoothMoveOff;
         public MirLabel SmoothMoveLabel;
@@ -2952,12 +2905,11 @@ namespace Client.MirScenes.Dialogs
             CreateOptionLabel("技能栏", 82);
             CreateOptionLabel("特效", 104);
             CreateOptionLabel("掉落显示", 126);
-            CreateOptionLabel("HP/MP显示", 148);
-            CreateOptionLabel("声音", 172);
-            CreateOptionLabel("音乐", 194);
-            CreateOptionLabel("观战", 217);
-            CreateOptionLabel("移动方式", 241);
-            SmoothMoveLabel = CreateOptionLabel("平滑移动", 264);
+            CreateOptionLabel("声音", 150);
+            CreateOptionLabel("音乐", 172);
+            CreateOptionLabel("观战", 195);
+            CreateOptionLabel("移动方式", 219);
+            SmoothMoveLabel = CreateOptionLabel("平滑移动", 242);
 
             //tilde option
             SkillModeOn = new MirButton
@@ -2998,7 +2950,12 @@ namespace Client.MirScenes.Dialogs
                 Size = new Size(36, 17),
                 PressedIndex = SettingsButtonIndex(457),
             };
-            SkillBarOn.Click += (o, e) => Settings.SkillBar = true;
+            SkillBarOn.Click += (o, e) =>
+            {
+                Settings.SkillBar = true;
+                foreach (SkillBarDialog bar in GameScene.Scene.SkillBarDialogs)
+                    bar.Show();
+            };
 
             SkillBarOff = new MirButton
             {
@@ -3009,7 +2966,12 @@ namespace Client.MirScenes.Dialogs
                 Size = new Size(36, 17),
                 PressedIndex = SettingsButtonIndex(460)
             };
-            SkillBarOff.Click += (o, e) => Settings.SkillBar = false;
+            SkillBarOff.Click += (o, e) =>
+            {
+                Settings.SkillBar = false;
+                foreach (SkillBarDialog bar in GameScene.Scene.SkillBarDialogs)
+                    bar.Hide();
+            };
 
             EffectOn = new MirButton
             {
@@ -3055,41 +3017,11 @@ namespace Client.MirScenes.Dialogs
             };
             DropViewOff.Click += (o, e) => Settings.DropView = false;
 
-            HPViewOn = new MirButton
-            {
-                Library = Libraries.Prguse2,
-                Location = LayoutPoint(159, 148),
-                Parent = this,
-                Sound = SoundList.ButtonA,
-                Size = new Size(36, 17),
-                PressedIndex = SettingsButtonIndex(463),
-            };
-            HPViewOn.Click += (o, e) =>
-            {
-                Settings.HPView = true;
-                GameScene.Scene.ChatDialog.ReceiveChat(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.HpMpMode1), ChatType.Hint);
-            };
-
-            HPViewOff = new MirButton
-            {
-                Library = Libraries.Prguse2,
-                Location = LayoutPoint(201, 148),
-                Parent = this,
-                Sound = SoundList.ButtonA,
-                Size = new Size(36, 17),
-                PressedIndex = SettingsButtonIndex(466)
-            };
-            HPViewOff.Click += (o, e) =>
-            {
-                Settings.HPView = false;
-                GameScene.Scene.ChatDialog.ReceiveChat(GameLanguage.ClientTextMap.GetLocalization(ClientTextKeys.HpMpMode2), ChatType.Hint);
-            };
-
             SoundBar = new MirImageControl
             {
                 Index = -1,
                 AutoSize = false,
-                Location = LayoutPoint(154, 168),
+                Location = LayoutPoint(154, 146),
                 Parent = this,
                 Size = LayoutSize(94, 20),
                 DrawImage = false,
@@ -3098,14 +3030,14 @@ namespace Client.MirScenes.Dialogs
             SoundBar.MouseMove += SoundBar_MouseMove;
             SoundBar.BeforeDraw += SoundBar_BeforeDraw;
 
-            SoundTrack = CreateSliderTrack(175);
+            SoundTrack = CreateSliderTrack(153);
             VolumeBar = CreateSliderFill(SoundTrack);
 
             MusicSoundBar = new MirImageControl
             {
                 Index = -1,
                 AutoSize = false,
-                Location = LayoutPoint(154, 190),
+                Location = LayoutPoint(154, 168),
                 Parent = this,
                 Size = LayoutSize(94, 20),
                 DrawImage = false
@@ -3114,13 +3046,13 @@ namespace Client.MirScenes.Dialogs
             MusicSoundBar.MouseMove += MusicSoundBar_MouseMove;
             MusicSoundBar.BeforeDraw += MusicSoundBar_BeforeDraw;
 
-            MusicSoundTrack = CreateSliderTrack(197);
+            MusicSoundTrack = CreateSliderTrack(175);
             MusicVolumeBar = CreateSliderFill(MusicSoundTrack);
 
             NewMoveOn = new MirButton
             {
                 Library = Libraries.Title,
-                Location = LayoutPoint(159, 241),
+                Location = LayoutPoint(159, 219),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3135,7 +3067,7 @@ namespace Client.MirScenes.Dialogs
             NewMoveOff = new MirButton
             {
                 Library = Libraries.Title,
-                Location = LayoutPoint(201, 241),
+                Location = LayoutPoint(201, 219),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3150,7 +3082,7 @@ namespace Client.MirScenes.Dialogs
             ObserveOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = LayoutPoint(159, 217),
+                Location = LayoutPoint(159, 195),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3161,7 +3093,7 @@ namespace Client.MirScenes.Dialogs
             ObserveOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = LayoutPoint(201, 217),
+                Location = LayoutPoint(201, 195),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3172,7 +3104,7 @@ namespace Client.MirScenes.Dialogs
             SmoothMoveOn = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = LayoutPoint(159, 264),
+                Location = LayoutPoint(159, 242),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3187,7 +3119,7 @@ namespace Client.MirScenes.Dialogs
             SmoothMoveOff = new MirButton
             {
                 Library = Libraries.Prguse2,
-                Location = LayoutPoint(201, 264),
+                Location = LayoutPoint(201, 242),
                 Parent = this,
                 Sound = SoundList.ButtonA,
                 Size = new Size(36, 17),
@@ -3207,8 +3139,6 @@ namespace Client.MirScenes.Dialogs
             ConfigureButton(EffectOff, "关");
             ConfigureButton(DropViewOn, "开");
             ConfigureButton(DropViewOff, "关");
-            ConfigureButton(HPViewOn, "1");
-            ConfigureButton(HPViewOff, "2");
             ConfigureButton(ObserveOn, "开");
             ConfigureButton(ObserveOff, "关");
             ConfigureButton(NewMoveOn, "新");
@@ -3425,17 +3355,6 @@ namespace Client.MirScenes.Dialogs
             {
                 DropViewOn.Index = SettingsButtonIndex(456);
                 DropViewOff.Index = SettingsButtonIndex(461);
-            }
-
-            if (Settings.HPView)
-            {
-                HPViewOn.Index = SettingsButtonIndex(464);
-                HPViewOff.Index = SettingsButtonIndex(465);
-            }
-            else
-            {
-                HPViewOn.Index = SettingsButtonIndex(462);
-                HPViewOff.Index = SettingsButtonIndex(467);
             }
 
             if (Settings.NewMove)

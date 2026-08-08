@@ -158,7 +158,6 @@ namespace Client
             LevelEffect = true,
             DropView = true,
             NameView = true,
-            HPView = true,
             TransparentChat = false,
             ModeView = false,
             DuraView = false,
@@ -305,7 +304,6 @@ namespace Client
             LevelEffect = Reader.ReadBoolean("Game", "LevelEffect", Effect);
             DropView = Reader.ReadBoolean("Game", "DropView", DropView);
             NameView = Reader.ReadBoolean("Game", "NameView", NameView);
-            HPView = Reader.ReadBoolean("Game", "HPMPView", HPView);
             ModeView = Reader.ReadBoolean("Game", "ModeView", ModeView);
             string configuredFontName = Reader.ReadString("Game", "FontName", FontName);
             if (string.Equals(configuredFontName, "Arial", StringComparison.OrdinalIgnoreCase) ||
@@ -485,7 +483,6 @@ namespace Client
             Reader.Write("Game", "LevelEffect", LevelEffect);
             Reader.Write("Game", "DropView", DropView);
             Reader.Write("Game", "NameView", NameView);
-            Reader.Write("Game", "HPMPView", HPView);
             Reader.Write("Game", "ModeView", ModeView);
             Reader.Write("Game", "FontName", FontName);
             Reader.Write("Game", "TransparentChat", TransparentChat);
