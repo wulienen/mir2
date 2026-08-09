@@ -2370,19 +2370,42 @@ namespace Server.MirObjects
 
                             ItemInfo iInfo;
                             int itemIndex = 0;
+                            ushort itemCount = 1;
+                            string requestedItem = parts[1];
+                            string itemName = requestedItem;
 
-                            if (Int32.TryParse(parts[1], out itemIndex))
+                            if (Int32.TryParse(itemName, out itemIndex))
                             {
                                 iInfo = Envir.GetItemInfo(itemIndex);
                             }
                             else
                             {
-                                iInfo = Envir.GetItemInfo(parts[1]);
+                                iInfo = Envir.GetItemInfo(itemName);
+
+                                // Also accept @MAKE ItemName1 when the count is attached to the name.
+                                if (iInfo == null && parts.Length < 3)
+                                {
+                                    Match countMatch = Regex.Match(itemName, @"^(?<name>.+?)(?<count>\d+)$");
+                                    if (countMatch.Success && ushort.TryParse(countMatch.Groups["count"].Value, out ushort attachedCount))
+                                    {
+                                        string attachedName = countMatch.Groups["name"].Value;
+                                        ItemInfo attachedInfo = Envir.GetItemInfo(attachedName);
+                                        if (attachedInfo != null)
+                                        {
+                                            itemName = attachedName;
+                                            itemCount = attachedCount;
+                                            iInfo = attachedInfo;
+                                        }
+                                    }
+                                }
                             }
 
-                            if (iInfo == null) return;
+                            if (iInfo == null)
+                            {
+                                ReceiveChat(GameLanguage.ServerTextMap.GetLocalization(ServerTextKeys.CouldNotFindItem, requestedItem), ChatType.System);
+                                return;
+                            }
 
-                            ushort itemCount = 1;
                             if (parts.Length >= 3 && !ushort.TryParse(parts[2], out itemCount))
                                 itemCount = 1;
 

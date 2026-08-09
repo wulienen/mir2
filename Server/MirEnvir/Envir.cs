@@ -4737,13 +4737,32 @@ namespace Server.MirEnvir
 
         public ItemInfo GetItemInfo(string name)
         {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+
+            string lookupName = name.Replace(" ", "");
+
+            // Keep internal names as the authoritative lookup key for existing scripts.
             for (var i = 0; i < ItemInfoList.Count; i++)
             {
                 var info = ItemInfoList[i];
-                if (string.Compare(info.Name.Replace(" ", ""), name, StringComparison.OrdinalIgnoreCase) != 0) continue;
+                if (string.Compare(info.Name.Replace(" ", ""), lookupName, StringComparison.OrdinalIgnoreCase) != 0) continue;
                 return info;
             }
-            return null;
+
+            // Display names are localized and may collide, so only accept an unambiguous match.
+            ItemInfo displayMatch = null;
+            for (var i = 0; i < ItemInfoList.Count; i++)
+            {
+                var info = ItemInfoList[i];
+                if (string.IsNullOrWhiteSpace(info.DisplayName) ||
+                    string.Compare(info.DisplayName.Replace(" ", ""), lookupName, StringComparison.OrdinalIgnoreCase) != 0)
+                    continue;
+
+                if (displayMatch != null) return null;
+                displayMatch = info;
+            }
+
+            return displayMatch;
         }
 
         public QuestInfo GetQuestInfo(int index)
