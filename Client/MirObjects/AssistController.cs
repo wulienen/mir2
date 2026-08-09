@@ -11,6 +11,10 @@ namespace Client.MirObjects
     {
         private const string AutoPickupExcludeFileName = "AutoPickupExclude.txt";
         private const int AutoTargetRange = 9;
+
+        // Slightly wider than the engage radius so a monster that steps one
+        // cell out of range is not dropped and re-acquired every tick.
+        private const int AutoTargetRetainRange = 12;
         private const int NearbyPatrolRange = 20;
         private const int CurrentMapPatrolSegmentRange = 18;
         private const int PatrolCandidateAttempts = 16;
@@ -603,6 +607,14 @@ namespace Client.MirObjects
                     continue;
 
                 int distance = Functions.MaxDistance(user.CurrentLocation, monster.CurrentLocation);
+
+                // The server sends objects up to Globals.DataRange (16) cells
+                // away. Only monsters inside the engage radius are picked up,
+                // otherwise a far away monster keeps a target selected forever
+                // and the hunting modes never get a chance to patrol.
+                if (distance > AutoTargetRange)
+                    continue;
+
                 if (distance > nearest || (distance == nearest && result != null && monster.ObjectID >= result.ObjectID))
                     continue;
 
@@ -627,6 +639,14 @@ namespace Client.MirObjects
             MonsterObject monster = (MonsterObject)mapObject;
             if (!MapControl.Objects.TryGetValue(monster.ObjectID, out MapObject loaded) ||
                 !ReferenceEquals(loaded, monster))
+                return false;
+
+            // Past the retain radius the monster is off screen. Leaving it
+            // selected keeps MapControl pursuing it, which blocks the automatic
+            // path and starves the patrol used by the hunting modes.
+            UserObject user = GameScene.User;
+            if (user != null &&
+                Functions.MaxDistance(user.CurrentLocation, monster.CurrentLocation) > AutoTargetRetainRange)
                 return false;
 
             if (Settings.AssistHuntMode != AssistSearchMode.Nearby || !_patrolAnchorSet ||
@@ -688,9 +708,12 @@ namespace Client.MirObjects
             int range = Settings.AssistHuntMode == AssistSearchMode.Nearby
                 ? NearbyPatrolRange
                 : CurrentMapPatrolSegmentRange;
+            // A patrol leg has to walk around walls, so the node budget needs
+            // slack over the straight line distance. Allowing only range + 2
+            // made almost every candidate fail on a map with obstacles.
             int maximumPathLength = Settings.AssistHuntMode == AssistSearchMode.Nearby
                 ? NearbyPatrolRange * 2 + 2
-                : CurrentMapPatrolSegmentRange + 2;
+                : CurrentMapPatrolSegmentRange * 2 + 2;
 
             for (int attempt = 0; attempt < PatrolCandidateAttempts; attempt++)
             {
