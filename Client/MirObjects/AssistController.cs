@@ -447,6 +447,13 @@ namespace Client.MirObjects
                 ProcessAutoPickup(user, map, true))
                 return;
 
+            // Similarly, when a pickup path completes, the final movement action
+            // may still be queued. Let the pickup execute before that action
+            // blocks the idle call below.
+            if (Settings.AssistAutoPickup && _pathOwner == AutomaticPathOwner.Pickup &&
+                ProcessAutoPickup(user, map, true))
+                return;
+
             if (user.QueuedAction != null)
                 return;
 
