@@ -328,8 +328,11 @@ namespace Client.MirObjects
             {
                 if (_pathOwner == AutomaticPathOwner.Patrol)
                     _nextPatrolProcess = Math.Max(_nextPatrolProcess, CMain.Time + 1000);
-                else if (_pathOwner == AutomaticPathOwner.Pickup && _pickupTargetId != 0)
-                    _pickupRetryAfter[_pickupTargetId] = CMain.Time + 1000;
+
+                // Pickup owner: do not add a retry cooldown here. The path
+                // completing means we reached the item's cell. Adding a cooldown
+                // would block the pickup from executing and cause the controller
+                // to cycle through other items indefinitely.
 
                 _pathOwner = AutomaticPathOwner.None;
             }
