@@ -15,6 +15,11 @@ namespace Client.MirObjects
         // Slightly wider than the engage radius so a monster that steps one
         // cell out of range is not dropped and re-acquired every tick.
         private const int AutoTargetRetainRange = 12;
+
+        // A drop lands within the server's DropRange (4) of the monster, and a
+        // ranged class kills from up to the engage radius away, so the loot can
+        // sit further out than a monster ever gets targeted.
+        private const int AutoPickupRange = 12;
         private const int NearbyPatrolRange = 20;
         private const int CurrentMapPatrolSegmentRange = 18;
         private const int PatrolCandidateAttempts = 16;
@@ -457,7 +462,7 @@ namespace Client.MirObjects
         }
 
         private bool ProcessAutoPickup(UserObject user, MapControl map, bool allowMovement,
-            int maximumDistance = AutoTargetRange)
+            int maximumDistance = AutoPickupRange)
         {
             if (maximumDistance >= AutoTargetRange && CMain.Time < _nextPickupProcess)
                 return _pickupTargetId != 0 || (_pathOwner == AutomaticPathOwner.Pickup && map.AutoPath);
@@ -531,7 +536,11 @@ namespace Client.MirObjects
             if (map.PathFinder == null)
                 return false;
 
-            List<Node> path = map.PathFinder.FindPath(user.CurrentLocation, item.CurrentLocation, maximumDistance);
+            // The node budget is not the search radius. FindPath counts both end
+            // cells and has to walk around obstacles, so reusing maximumDistance
+            // rejected any item that was not almost adjacent.
+            List<Node> path = map.PathFinder.FindPath(user.CurrentLocation, item.CurrentLocation,
+                maximumDistance * 2 + 2);
             if (path == null || path.Count == 0)
             {
                 _pickupRetryAfter[item.ObjectID] = CMain.Time + 2000;
@@ -555,7 +564,7 @@ namespace Client.MirObjects
             return null;
         }
 
-        private ItemObject FindNearestItem(UserObject user, int maximumDistance = AutoTargetRange)
+        private ItemObject FindNearestItem(UserObject user, int maximumDistance = AutoPickupRange)
         {
             ItemObject result = null;
             int nearest = int.MaxValue;
