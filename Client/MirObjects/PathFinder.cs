@@ -137,6 +137,8 @@ namespace Client.MirObjects
 
         private int _heapIndex;
 
+        internal int SearchId;
+
         public int HeapIndex
         {
             get { return _heapIndex; }
@@ -163,6 +165,7 @@ namespace Client.MirObjects
     public class PathFinder
     {
         private Node[,] Grid;
+        private int _searchId;
 
         public MapControl Map;
 
@@ -193,8 +196,25 @@ namespace Client.MirObjects
 
         public List<Node> FindPath(Point start, Point target, int MaxNodes = 0)
         {
+            if (Grid == null || start.X < 0 || start.Y < 0 || target.X < 0 || target.Y < 0 ||
+                start.X >= Grid.GetLength(0) || start.Y >= Grid.GetLength(1) ||
+                target.X >= Grid.GetLength(0) || target.Y >= Grid.GetLength(1))
+                return null;
+
             Node startNode = GetNode(start);
             Node targetNode = GetNode(target);
+            int searchId = ++_searchId;
+            if (searchId == int.MaxValue)
+            {
+                // Keep the sentinel unambiguous if a client stays open for an
+                // unusually large number of searches.
+                _searchId = searchId = 1;
+            }
+
+            PrepareNode(startNode, searchId);
+            PrepareNode(targetNode, searchId);
+            startNode.GCost = 0;
+            startNode.HCost = GetDistance(startNode, targetNode);
 
             Heap<Node> openSet = new Heap<Node>(MaxSize);
             HashSet<Node> closedSet = new HashSet<Node>();
@@ -215,6 +235,8 @@ namespace Client.MirObjects
 
                 foreach (Node neighbor in GetNeighbours(currentNode))
                 {
+                    PrepareNode(neighbor, searchId);
+
                     if (!neighbor.Walkable || closedSet.Contains(neighbor))
                         continue;
 
@@ -236,6 +258,17 @@ namespace Client.MirObjects
             }
 
             return null;
+        }
+
+        private static void PrepareNode(Node node, int searchId)
+        {
+            if (node.SearchId == searchId) return;
+
+            node.SearchId = searchId;
+            node.Parent = null;
+            node.GCost = 0;
+            node.HCost = 0;
+            node.HeapIndex = 0;
         }
 
         public List<Node> RetracePath(Node startNode, Node endNode)

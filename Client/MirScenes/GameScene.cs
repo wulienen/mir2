@@ -10470,6 +10470,12 @@ namespace Client.MirScenes
         public const int CellWidth = 48;
         public const int CellHeight = 32;
 
+        // Keep one cell of overscan around the cached floor so the camera can
+        // interpolate within a movement tick without exposing an unpainted edge.
+        private const int FloorPaddingX = CellWidth;
+        private const int FloorPaddingY = CellHeight;
+        private static Size FloorTextureSize;
+
         public static int OffSetX;
         public static int OffSetY;
 
@@ -10827,9 +10833,13 @@ namespace Client.MirScenes
 
             DrawBackground();
 
-            if (FloorValid)
+            if (FloorValid && DXManager.FloorTexture != null && !DXManager.FloorTexture.Disposed)
             {
-                DXManager.Draw(DXManager.FloorTexture, new Rectangle(0, 0, Settings.ScreenWidth, Settings.ScreenHeight), Vector3.Zero, Color.White);
+                Point floorLocation = new Point(User.OffSetMove.X - FloorPaddingX,
+                    User.OffSetMove.Y - FloorPaddingY);
+                DXManager.Draw(DXManager.FloorTexture,
+                    new Rectangle(floorLocation.X, floorLocation.Y, FloorTextureSize.Width, FloorTextureSize.Height),
+                    Vector3.Zero, Color.White);
             }
 
             DrawObjects();
@@ -10915,10 +10925,16 @@ namespace Client.MirScenes
 
         private void DrawFloor()
         {
-            if (DXManager.FloorTexture == null || DXManager.FloorTexture.Disposed)
+            Size requestedSize = new Size(Settings.ScreenWidth + FloorPaddingX * 2,
+                Settings.ScreenHeight + FloorPaddingY * 2);
+            if (DXManager.FloorTexture == null || DXManager.FloorTexture.Disposed ||
+                FloorTextureSize != requestedSize)
             {
-                DXManager.FloorTexture = new Texture(DXManager.Device, Settings.ScreenWidth, Settings.ScreenHeight, 1, Usage.RenderTarget, Format.A8R8G8B8, Pool.Default);
+                DXManager.FloorSurface?.Dispose();
+                DXManager.FloorTexture?.Dispose();
+                DXManager.FloorTexture = new Texture(DXManager.Device, requestedSize.Width, requestedSize.Height, 1, Usage.RenderTarget, Format.A8R8G8B8, Pool.Default);
                 DXManager.FloorSurface = DXManager.FloorTexture.GetSurfaceLevel(0);
+                FloorTextureSize = requestedSize;
             }
 
             Surface oldSurface = DXManager.CurrentSurface;
@@ -10935,11 +10951,11 @@ namespace Client.MirScenes
 
             int[] drawXCache = new int[endX - startX + 1];
             for (int xi = startX; xi <= endX; xi++)
-                drawXCache[xi - startX] = (xi - User.Movement.X + OffSetX) * CellWidth - OffSetX + User.OffSetMove.X;
+                drawXCache[xi - startX] = (xi - User.Movement.X + OffSetX) * CellWidth - OffSetX + FloorPaddingX;
 
             int[] drawYCache = new int[endYExtended - startY + 1];
             for (int yi = startY; yi <= endYExtended; yi++)
-                drawYCache[yi - startY] = (yi - User.Movement.Y + OffSetY) * CellHeight + User.OffSetMove.Y;
+                drawYCache[yi - startY] = (yi - User.Movement.Y + OffSetY) * CellHeight + FloorPaddingY;
 
 
             for (int y = startY; y <= endYExtended; y++)
@@ -12052,26 +12068,52 @@ namespace Client.MirScenes
                     return;
                 }
 
-                var path = GameScene.Scene.MapControl.PathFinder.FindPath(MapObject.User.CurrentLocation, CurrentPath.Last().Location);
-
-                if (path != null && path.Count > 0)
-                    GameScene.Scene.MapControl.CurrentPath = path;
-                else
+                // CurrentPath is calculated when the route is selected. Re-running
+                // A* from here on every render/update frame made long big-map routes
+                // consume the game thread and made movement appear to stutter. Remove
+                // nodes already passed (running can skip more than one cell), and
+                // replan only when the next node is no longer reachable.
+                int currentNodeIndex = CurrentPath.FindIndex(x => x.Location == User.CurrentLocation);
+                if (currentNodeIndex >= 0)
                 {
-                    AutoPath = false;
-                    return;
+                    CurrentPath.RemoveRange(0, currentNodeIndex + 1);
                 }
 
-                Node currentNode = CurrentPath.SingleOrDefault(x => User.CurrentLocation == x.Location);
-                if (currentNode != null)
+                if (currentNodeIndex < 0)
                 {
-                    while (true)
-                    {
-                        Node first = CurrentPath.First();
-                        CurrentPath.Remove(first);
+                    Point destination = CurrentPath.Last().Location;
+                    var path = GameScene.Scene.MapControl.PathFinder.FindPath(User.CurrentLocation, destination);
 
-                        if (first == currentNode)
-                            break;
+                    if (path == null || path.Count == 0)
+                    {
+                        AutoPath = false;
+                        return;
+                    }
+
+                    CurrentPath = path;
+                    currentNodeIndex = CurrentPath.FindIndex(x => x.Location == User.CurrentLocation);
+                    if (currentNodeIndex >= 0)
+                        CurrentPath.RemoveRange(0, currentNodeIndex + 1);
+                }
+
+                if (CurrentPath.Count > 0)
+                {
+                    MirDirection nextDirection = Functions.DirectionFromPoint(User.CurrentLocation, CurrentPath.First().Location);
+                    if (!CanWalk(nextDirection))
+                    {
+                        Point destination = CurrentPath.Last().Location;
+                        var path = GameScene.Scene.MapControl.PathFinder.FindPath(User.CurrentLocation, destination);
+
+                        if (path == null || path.Count == 0)
+                        {
+                            AutoPath = false;
+                            return;
+                        }
+
+                        CurrentPath = path;
+                        currentNodeIndex = CurrentPath.FindIndex(x => x.Location == User.CurrentLocation);
+                        if (currentNodeIndex >= 0)
+                            CurrentPath.RemoveRange(0, currentNodeIndex + 1);
                     }
                 }
 

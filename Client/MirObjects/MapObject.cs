@@ -171,7 +171,6 @@ namespace Client.MirObjects
             if (map == null || map.IsDisposed) return;
 
             map.TextureValid = false;
-            if (this == User) map.FloorValid = false;
         }
 
         protected MapObject() { }
