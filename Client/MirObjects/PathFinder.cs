@@ -194,7 +194,17 @@ namespace Client.MirObjects
             }
         }
 
-        public List<Node> FindPath(Point start, Point target, int MaxNodes = 0)
+        /// <summary>
+        /// Searches a walkable route between two cells.
+        /// </summary>
+        /// <param name="MaxNodes">Rejects a route longer than this many nodes. 0 disables the limit.</param>
+        /// <param name="maxSearchNodes">
+        /// Stops the search after expanding this many cells. A target that cannot
+        /// be reached otherwise makes A* scan every reachable cell before failing,
+        /// which is too expensive for a search that runs while pursuing a monster.
+        /// 0 disables the limit.
+        /// </param>
+        public List<Node> FindPath(Point start, Point target, int MaxNodes = 0, int maxSearchNodes = 0)
         {
             if (Grid == null || start.X < 0 || start.Y < 0 || target.X < 0 || target.Y < 0 ||
                 start.X >= Grid.GetLength(0) || start.Y >= Grid.GetLength(1) ||
@@ -226,6 +236,9 @@ namespace Client.MirObjects
                 Node currentNode = openSet.RemoveFirst();
 
                 closedSet.Add(currentNode);
+
+                if (maxSearchNodes > 0 && closedSet.Count > maxSearchNodes)
+                    return null;
 
                 if (currentNode == targetNode)
                 {

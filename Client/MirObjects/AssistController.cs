@@ -102,6 +102,11 @@ namespace Client.MirObjects
         private long _nextPatrolProcess;
         private long _nextRepositionProcess;
         private long _nextSummonProcess;
+
+        // Tracks when we started attacking each monster to detect immune/buried targets.
+        private readonly Dictionary<uint, long> _attackStartTime = new Dictionary<uint, long>();
+        private const int StuckTargetTimeout = 10000; // 10 seconds
+
         private byte _nextPoisonShape = 1;
         private uint _autoAttackTargetId;
         private uint _pickupTargetId;
@@ -154,6 +159,7 @@ namespace Client.MirObjects
             _resetAnchorAfterManualInput = false;
             _automaticSpellPending = false;
             _combatAI.Reset();
+            _attackStartTime.Clear();
 
             LoadExcludedItems();
         }
@@ -416,6 +422,25 @@ namespace Client.MirObjects
 
                 if (target != null)
                 {
+                    // Track how long we have been attacking this target to detect
+                    // immune or buried monsters that never take damage. Only time
+                    // spent inside attack range counts: walking a detour around a
+                    // wall can easily take longer than the timeout and must not be
+                    // mistaken for an immune monster.
+                    if (!_attackStartTime.ContainsKey(target.ObjectID) ||
+                        !Functions.InRange(user.CurrentLocation, target.CurrentLocation,
+                            GetAutoPursuitRange(user)))
+                        _attackStartTime[target.ObjectID] = CMain.Time;
+
+                    // Clean up old entries for monsters we are no longer targeting.
+                    List<uint> staleEntries = _attackStartTime.Keys
+                        .Where(id => id != target.ObjectID &&
+                                     (!MapControl.Objects.ContainsKey(id) ||
+                                      MapControl.Objects[id].Dead))
+                        .ToList();
+                    foreach (uint id in staleEntries)
+                        _attackStartTime.Remove(id);
+
                     bool ownedPath = _pathOwner != AutomaticPathOwner.None;
                     CancelOwnedPath(map);
                     _pickupTargetId = 0;
@@ -660,12 +685,31 @@ namespace Client.MirObjects
                 !ReferenceEquals(loaded, monster))
                 return false;
 
+            // Buried or hidden monsters (underground, not yet emerged) cannot be
+            // damaged and will keep the bot stuck in place.
+            if (monster.Hidden)
+                return false;
+
+            // Immune monsters (trees that resist magic, etc.) also cause the bot
+            // to loop indefinitely. If we have been attacking the same target for
+            // more than 10 seconds, assume it is immune and skip it.
+            if (_attackStartTime.TryGetValue(monster.ObjectID, out long startTime) &&
+                CMain.Time - startTime > StuckTargetTimeout)
+                return false;
+
             // Past the retain radius the monster is off screen. Leaving it
             // selected keeps MapControl pursuing it, which blocks the automatic
             // path and starves the patrol used by the hunting modes.
             UserObject user = GameScene.User;
             if (user != null &&
                 Functions.MaxDistance(user.CurrentLocation, monster.CurrentLocation) > AutoTargetRetainRange)
+                return false;
+
+            // Pursuit could not find any route to the monster, so it is walled
+            // off. Keeping it selected would leave the character standing at the
+            // obstacle instead of hunting something reachable.
+            MapControl map = GameScene.Scene?.MapControl;
+            if (map != null && map.PursuitTargetUnreachable(monster.ObjectID))
                 return false;
 
             if (Settings.AssistHuntMode != AssistSearchMode.Nearby || !_patrolAnchorSet ||

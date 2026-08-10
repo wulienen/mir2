@@ -4148,6 +4148,7 @@ namespace Client.MirScenes
 
             MapControl.NextAction = 0;
             Scene.MapControl.AutoPath = false;
+            Scene.MapControl.ClearPursuitState();
             User.CurrentLocation = p.Location;
             User.MapLocation = p.Location;
             MapControl.AddObject(User);
@@ -10502,6 +10503,45 @@ namespace Client.MirScenes
         public PathFinder PathFinder;
         public List<Node> CurrentPath = null;
 
+        // Pursuit detour. Walking straight at a target fails the moment a wall is
+        // in the way, so a route around the obstacle is calculated and followed.
+        // It is kept separate from AutoPath because AutoPath is skipped while an
+        // automatic target exists and is owned by AssistController.
+        private List<Node> _pursuitPath;
+        private uint _pursuitPathTargetId;
+        private Point _pursuitPathDestination;
+        private long _nextPursuitPathTime;
+        private uint _pursuitTrackedTargetId;
+        private int _pursuitBestDistance;
+        private long _pursuitProgressTime;
+
+        // Failed route searches per monster. A single counter would be reset every
+        // time the target changed, so two monsters walled off next to each other
+        // would keep clearing each other's failures and never be abandoned.
+        private readonly Dictionary<uint, PursuitFailure> _pursuitFailures =
+            new Dictionary<uint, PursuitFailure>();
+
+        private class PursuitFailure
+        {
+            public int Count;
+            public long Time;
+        }
+
+        /// <summary>Time without getting closer before a detour is calculated.</summary>
+        private const int PursuitStallTime = 1200;
+        /// <summary>Minimum delay between two pursuit route searches.</summary>
+        private const int PursuitPathInterval = 500;
+        /// <summary>Targets further away than this are not worth a route search.</summary>
+        private const int PursuitPathRange = 15;
+        /// <summary>Destination cells around the target that are tried per search.</summary>
+        private const int PursuitPathCandidates = 3;
+        /// <summary>Upper bound on cells A* expands for one pursuit search.</summary>
+        private const int PursuitSearchNodes = 400;
+        /// <summary>Failed searches before a target is treated as unreachable.</summary>
+        private const int PursuitMaxFailures = 4;
+        /// <summary>How long a target stays marked unreachable.</summary>
+        private const int PursuitUnreachableTime = 5000;
+
         public static Point MapLocation
         {
             get { return GameScene.User == null ? Point.Empty : new Point(MouseLocation.X / CellWidth - OffSetX, MouseLocation.Y / CellHeight - OffSetY).Add(GameScene.User.CurrentLocation); }
@@ -10662,6 +10702,7 @@ namespace Client.MirScenes
             }
 
             PathFinder = new PathFinder(this);
+            ClearPursuitState();
 
             try
             {
@@ -10769,6 +10810,7 @@ namespace Client.MirScenes
             Height = state.Height;
             M2CellInfo = state.CreatePlaceholderCells();
             PathFinder = new PathFinder(this);
+            ClearPursuitState();
             if (User != null) AddObject(User);
             state.EnsureVisibleChunks(this);
             FloorValid = false;
@@ -12135,22 +12177,50 @@ namespace Client.MirScenes
                 }
             }
 
-            if (MapObject.TargetObject == null || MapObject.TargetObject.Dead) return;
+            if (MapObject.TargetObject == null || MapObject.TargetObject.Dead)
+            {
+                ResetPursuitTracking();
+                return;
+            }
             bool automaticTarget = Settings.AssistAutoAttack &&
                 GameScene.Scene.AssistController.CanAutoAttackTarget(MapObject.TargetObject);
             bool manualPursuitTarget = !Settings.AssistAutoAttack &&
                 (((!MapObject.TargetObject.Name.EndsWith(")") && !(MapObject.TargetObject is PlayerObject)) || !(CMain.Shift || Settings.AssistFreeShift)) &&
                  (MapObject.TargetObject.Name.EndsWith(")") || !(MapObject.TargetObject is MonsterObject)));
-            if (!automaticTarget && (Settings.AssistAutoAttack || manualPursuitTarget)) return;
+            if (!automaticTarget && (Settings.AssistAutoAttack || manualPursuitTarget))
+            {
+                ResetPursuitTracking();
+                return;
+            }
             // Ranged classes stop as soon as the target is in casting range. They
             // must never walk in to swing at a monster.
             int pursuitRange = automaticTarget
                 ? GameScene.Scene.AssistController.GetAutoPursuitRange(User)
                 : 1;
-            if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, pursuitRange)) return;
+            if (Functions.InRange(MapObject.TargetObject.CurrentLocation, User.CurrentLocation, pursuitRange))
+            {
+                ResetPursuitTracking();
+                return;
+            }
             if (!automaticTarget && User.Class == MirClass.Archer && User.HasClassWeapon &&
                 (MapObject.TargetObject is MonsterObject || MapObject.TargetObject is PlayerObject)) return; //ArcherTest - stop walking
             direction = Functions.DirectionFromPoint(User.CurrentLocation, MapObject.TargetObject.CurrentLocation);
+
+            TrackPursuitProgress(MapObject.TargetObject);
+
+            // A detour is already being walked. Keep following it until it runs
+            // out or stops being usable.
+            if (FollowPursuitPath(MapObject.TargetObject)) return;
+
+            // A wall between us and the target makes the straight line unwalkable,
+            // and the small direction nudge in CanWalk only helps around a single
+            // blocked cell. Route around the obstacle instead of standing still.
+            if (!CanWalk(direction) || PursuitStalled)
+            {
+                if (BuildPursuitPath(MapObject.TargetObject, pursuitRange) &&
+                    FollowPursuitPath(MapObject.TargetObject))
+                    return;
+            }
 
             if (GameScene.CanRun && CanRun(direction) && CMain.Time > GameScene.NextRunTime && User.HP >= 10 &&
                 (!User.Sneaking || (User.Sneaking && User.Sprint)))
@@ -12179,6 +12249,270 @@ namespace Client.MirScenes
 
             User.QueuedAction = new QueuedAction { Action = MirAction.Walking, Direction = direction, Location = Functions.PointMove(User.CurrentLocation, direction, 1) };
         }
+
+        #region Pursuit obstacle avoidance
+
+        /// <summary>
+        /// True when no route to the given target could be found. AssistController
+        /// reads this so automatic combat can drop a target that is walled off
+        /// completely instead of standing next to the wall forever.
+        /// </summary>
+        public bool PursuitTargetUnreachable(uint objectId)
+        {
+            if (!_pursuitFailures.TryGetValue(objectId, out PursuitFailure failure))
+                return false;
+
+            if (CMain.Time - failure.Time >= PursuitUnreachableTime)
+            {
+                _pursuitFailures.Remove(objectId);
+                return false;
+            }
+
+            return failure.Count >= PursuitMaxFailures;
+        }
+
+        /// <summary>
+        /// True when pursuit has not reduced the distance to the target for a
+        /// while, which is what happens when the direction nudge in CanWalk keeps
+        /// sliding along an obstacle instead of getting past it.
+        /// </summary>
+        private bool PursuitStalled
+        {
+            get { return CMain.Time - _pursuitProgressTime > PursuitStallTime; }
+        }
+
+        private void TrackPursuitProgress(MapObject target)
+        {
+            int distance = Functions.MaxDistance(User.CurrentLocation, target.CurrentLocation);
+
+            if (_pursuitTrackedTargetId != target.ObjectID)
+            {
+                _pursuitTrackedTargetId = target.ObjectID;
+                _pursuitBestDistance = distance;
+                _pursuitProgressTime = CMain.Time;
+                return;
+            }
+
+            if (distance < _pursuitBestDistance)
+            {
+                _pursuitBestDistance = distance;
+                _pursuitProgressTime = CMain.Time;
+            }
+        }
+
+        private void ResetPursuitTracking()
+        {
+            ClearPursuitPath();
+            _pursuitTrackedTargetId = 0;
+            _pursuitBestDistance = 0;
+            _pursuitProgressTime = CMain.Time;
+        }
+
+        /// <summary>
+        /// Drops the pursuit detour. A new map rebuilds the PathFinder grid, so
+        /// the cached nodes would belong to a grid that no longer exists.
+        /// </summary>
+        public void ClearPursuitState()
+        {
+            ResetPursuitTracking();
+            _pursuitFailures.Clear();
+        }
+
+        private void ClearPursuitPath()
+        {
+            _pursuitPath = null;
+            _pursuitPathTargetId = 0;
+        }
+
+        /// <summary>
+        /// Walks the next step of the pursuit detour. Returns false when there is
+        /// no usable detour, so the caller falls back to straight line pursuit.
+        /// </summary>
+        private bool FollowPursuitPath(MapObject target)
+        {
+            if (_pursuitPath == null || _pursuitPathTargetId != target.ObjectID)
+                return false;
+
+            // Manual map input always wins over an automatic detour.
+            if (MapButtons != MouseButtons.None)
+            {
+                ClearPursuitPath();
+                return false;
+            }
+
+            // The target moved away from the cell the detour was aimed at, so the
+            // route no longer leads anywhere useful.
+            if (Functions.MaxDistance(target.CurrentLocation, _pursuitPathDestination) > 3)
+            {
+                ClearPursuitPath();
+                return false;
+            }
+
+            int currentNodeIndex = _pursuitPath.FindIndex(x => x.Location == User.CurrentLocation);
+            if (currentNodeIndex >= 0)
+                _pursuitPath.RemoveRange(0, currentNodeIndex + 1);
+
+            if (_pursuitPath.Count == 0)
+            {
+                ClearPursuitPath();
+                return false;
+            }
+
+            // Knockback, teleport or a queued manual step can move us off the
+            // route. Recalculating from here is handled by the caller.
+            if (Functions.MaxDistance(User.CurrentLocation, _pursuitPath[0].Location) > 1)
+            {
+                ClearPursuitPath();
+                return false;
+            }
+
+            MirDirection dir = Functions.DirectionFromPoint(User.CurrentLocation, _pursuitPath[0].Location);
+
+            if (GameScene.CanRun && CanRun(dir) && CMain.Time > GameScene.NextRunTime && User.HP >= 10 &&
+                (!User.Sneaking || (User.Sneaking && User.Sprint)))
+            {
+                int distance = User.RidingMount || (User.Sprint && !User.Sneaking) ? 3 : 2;
+                if (_pursuitPath.Count > distance && PursuitPathIsStraight(dir, distance) &&
+                    PursuitDoorsOpen(dir, distance))
+                {
+                    User.QueuedAction = new QueuedAction
+                    {
+                        Action = MirAction.Running,
+                        Direction = dir,
+                        Location = Functions.PointMove(User.CurrentLocation, dir, distance)
+                    };
+                    return true;
+                }
+            }
+
+            if (!CanWalk(dir) || !CheckDoorOpen(Functions.PointMove(User.CurrentLocation, dir, 1)))
+            {
+                ClearPursuitPath();
+                return false;
+            }
+
+            User.QueuedAction = new QueuedAction
+            {
+                Action = MirAction.Walking,
+                Direction = dir,
+                Location = Functions.PointMove(User.CurrentLocation, dir, 1)
+            };
+            return true;
+        }
+
+        /// <summary>Running only skips cells that the route actually passes through.</summary>
+        private bool PursuitPathIsStraight(MirDirection dir, int distance)
+        {
+            for (int i = 1; i <= distance; i++)
+                if (_pursuitPath[i - 1].Location != Functions.PointMove(User.CurrentLocation, dir, i))
+                    return false;
+
+            return true;
+        }
+
+        private bool PursuitDoorsOpen(MirDirection dir, int distance)
+        {
+            for (int i = 0; i <= distance; i++)
+                if (!CheckDoorOpen(Functions.PointMove(User.CurrentLocation, dir, i)))
+                    return false;
+
+            return true;
+        }
+
+        /// <summary>
+        /// Calculates a route to a cell the target can be attacked from. The
+        /// target cell itself is blocked by the target, so the search aims at the
+        /// closest free cell inside attack range instead.
+        /// </summary>
+        private bool BuildPursuitPath(MapObject target, int pursuitRange)
+        {
+            // No QueuedAction check here on purpose: the stall this exists to break
+            // out of happens while CanWalk keeps nudging the character sideways
+            // along a wall, which queues an action on every frame.
+            if (PathFinder == null || CMain.Time < _nextPursuitPathTime || User.InTrapRock ||
+                MapButtons != MouseButtons.None)
+                return false;
+
+            int distance = Functions.MaxDistance(User.CurrentLocation, target.CurrentLocation);
+            if (distance > PursuitPathRange)
+                return false;
+
+            _nextPursuitPathTime = CMain.Time + PursuitPathInterval;
+
+            List<Point> candidates = new List<Point>();
+            for (MirDirection dir = MirDirection.Up; dir <= MirDirection.UpLeft; dir++)
+            {
+                Point candidate = Functions.PointMove(target.CurrentLocation, dir, pursuitRange);
+                if (candidate == User.CurrentLocation || candidates.Contains(candidate))
+                    continue;
+                if (!EmptyCell(candidate))
+                    continue;
+
+                candidates.Add(candidate);
+            }
+
+            candidates.Sort((a, b) => Functions.MaxDistance(User.CurrentLocation, a)
+                .CompareTo(Functions.MaxDistance(User.CurrentLocation, b)));
+
+            int attempts = Math.Min(PursuitPathCandidates, candidates.Count);
+            for (int i = 0; i < attempts; i++)
+            {
+                // The third argument is a node budget rather than a radius, and a
+                // detour is longer than the straight line by definition, so it
+                // needs generous slack over the distance to the target.
+                List<Node> path = PathFinder.FindPath(User.CurrentLocation, candidates[i],
+                    distance * 3 + 6, PursuitSearchNodes);
+
+                if (path == null || path.Count == 0)
+                    continue;
+
+                int currentNodeIndex = path.FindIndex(x => x.Location == User.CurrentLocation);
+                if (currentNodeIndex >= 0)
+                    path.RemoveRange(0, currentNodeIndex + 1);
+
+                if (path.Count == 0)
+                    continue;
+
+                _pursuitPath = path;
+                _pursuitPathTargetId = target.ObjectID;
+                _pursuitPathDestination = target.CurrentLocation;
+                _pursuitFailures.Remove(target.ObjectID);
+
+                // Give the new route a chance to make progress before the stall
+                // detection triggers another search.
+                _pursuitProgressTime = CMain.Time;
+                _pursuitBestDistance = distance;
+                return true;
+            }
+
+            // Nothing was reachable. Count the failure so a fully walled off
+            // target can be abandoned instead of retried forever.
+            if (!_pursuitFailures.TryGetValue(target.ObjectID, out PursuitFailure failure))
+            {
+                failure = new PursuitFailure();
+                _pursuitFailures[target.ObjectID] = failure;
+            }
+            else if (CMain.Time - failure.Time >= PursuitUnreachableTime)
+                failure.Count = 0;
+
+            failure.Count++;
+            failure.Time = CMain.Time;
+
+            // Monsters that left the map would otherwise accumulate here.
+            if (_pursuitFailures.Count > 32)
+            {
+                List<uint> expired = _pursuitFailures
+                    .Where(x => CMain.Time - x.Value.Time >= PursuitUnreachableTime)
+                    .Select(x => x.Key)
+                    .ToList();
+                foreach (uint id in expired)
+                    _pursuitFailures.Remove(id);
+            }
+
+            return false;
+        }
+
+        #endregion
 
         public void UseMagic(ClientMagic magic, UserObject actor)
         {
